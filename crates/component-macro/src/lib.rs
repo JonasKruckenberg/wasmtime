@@ -971,6 +971,7 @@ fn expand_flags(flags: &Flags) -> Result<TokenStream> {
 
     let count;
     let mut as_array;
+    let mut from_array;
     let mut bitor;
     let mut bitor_assign;
     let mut bitand;
@@ -983,6 +984,7 @@ fn expand_flags(flags: &Flags) -> Result<TokenStream> {
         FlagsSize::Size0 => {
             count = 0;
             as_array = quote!([]);
+            from_array = quote!(Self {});
             bitor = quote!(Self {});
             bitor_assign = quote!();
             bitand = quote!(Self {});
@@ -994,6 +996,9 @@ fn expand_flags(flags: &Flags) -> Result<TokenStream> {
         FlagsSize::Size1 | FlagsSize::Size2 => {
             count = 1;
             as_array = quote!([self.__inner0 as u32]);
+            from_array = quote!(Self {
+                __inner0: arr
+            });
             bitor = quote!(Self {
                 __inner0: self.__inner0.bitor(rhs.__inner0)
             });
@@ -1013,6 +1018,7 @@ fn expand_flags(flags: &Flags) -> Result<TokenStream> {
         FlagsSize::Size4Plus(n) => {
             count = usize::from(n);
             as_array = TokenStream::new();
+            from_array = TokenStream::new();
             bitor = TokenStream::new();
             bitor_assign = TokenStream::new();
             bitand = TokenStream::new();
@@ -1025,6 +1031,7 @@ fn expand_flags(flags: &Flags) -> Result<TokenStream> {
                 let field = format_ident!("__inner{}", index);
 
                 as_array.extend(quote!(self.#field,));
+                from_array.extend(quote!(#field: arr[index]));
                 bitor.extend(quote!(#field: self.#field.bitor(rhs.#field),));
                 bitor_assign.extend(quote!(self.#field.bitor_assign(rhs.#field);));
                 bitand.extend(quote!(#field: self.#field.bitand(rhs.#field),));
@@ -1035,6 +1042,7 @@ fn expand_flags(flags: &Flags) -> Result<TokenStream> {
             }
 
             as_array = quote!([#as_array]);
+            from_array = quote!(Self { #from_array });
             bitor = quote!(Self { #bitor });
             bitand = quote!(Self { #bitand });
             bitxor = quote!(Self { #bitxor });
@@ -1144,6 +1152,12 @@ fn expand_flags(flags: &Flags) -> Result<TokenStream> {
             pub fn all() -> Self {
                 use std::ops::Not;
                 Self::default().not()
+            }
+        }
+        
+        impl From<[u32; #count]> for #name {
+            fn from(arr: [u32; #count]) -> Self {
+                #from_array
             }
         }
 
