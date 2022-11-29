@@ -997,7 +997,7 @@ fn expand_flags(flags: &Flags) -> Result<TokenStream> {
             count = 1;
             as_array = quote!([self.__inner0 as u32]);
             from_array = quote!(Self {
-                __inner0: arr
+                __inner0: arr[0]
             });
             bitor = quote!(Self {
                 __inner0: self.__inner0.bitor(rhs.__inner0)
@@ -1031,7 +1031,7 @@ fn expand_flags(flags: &Flags) -> Result<TokenStream> {
                 let field = format_ident!("__inner{}", index);
 
                 as_array.extend(quote!(self.#field,));
-                from_array.extend(quote!(#field: arr[index]));
+                from_array.extend(quote!(#field: arr[#index as usize],));
                 bitor.extend(quote!(#field: self.#field.bitor(rhs.#field),));
                 bitor_assign.extend(quote!(self.#field.bitor_assign(rhs.#field);));
                 bitand.extend(quote!(#field: self.#field.bitand(rhs.#field),));
@@ -1155,8 +1155,8 @@ fn expand_flags(flags: &Flags) -> Result<TokenStream> {
             }
         }
         
-        impl From<[u32; #count]> for #name {
-            fn from(arr: [u32; #count]) -> Self {
+        impl From<[#ty; #count]> for #name {
+            fn from(arr: [#ty; #count]) -> Self {
                 #from_array
             }
         }
