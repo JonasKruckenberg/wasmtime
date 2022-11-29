@@ -1,0 +1,1218 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/fuzzing/src/generators/single_inst_module.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>single_inst_module.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../../normalize.css"><link rel="stylesheet" href="../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../../ayu.css" disabled><link rel="stylesheet" href="../../../dark.css" disabled><link rel="stylesheet" href="../../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../../storage.js"></script><script defer src="../../../source-script.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../main.js"></script><noscript><link rel="stylesheet" href="../../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../../wasmtime_fuzzing/index.html"><div class="logo-container"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../../wasmtime_fuzzing/index.html"><div class="logo-container"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../../wasmtime_fuzzing/index.html"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
+<span id="217">217</span>
+<span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
+<span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
+<span id="322">322</span>
+<span id="323">323</span>
+<span id="324">324</span>
+<span id="325">325</span>
+<span id="326">326</span>
+<span id="327">327</span>
+<span id="328">328</span>
+<span id="329">329</span>
+<span id="330">330</span>
+<span id="331">331</span>
+<span id="332">332</span>
+<span id="333">333</span>
+<span id="334">334</span>
+<span id="335">335</span>
+<span id="336">336</span>
+<span id="337">337</span>
+<span id="338">338</span>
+<span id="339">339</span>
+<span id="340">340</span>
+<span id="341">341</span>
+<span id="342">342</span>
+<span id="343">343</span>
+<span id="344">344</span>
+<span id="345">345</span>
+<span id="346">346</span>
+<span id="347">347</span>
+<span id="348">348</span>
+<span id="349">349</span>
+<span id="350">350</span>
+<span id="351">351</span>
+<span id="352">352</span>
+<span id="353">353</span>
+<span id="354">354</span>
+<span id="355">355</span>
+<span id="356">356</span>
+<span id="357">357</span>
+<span id="358">358</span>
+<span id="359">359</span>
+<span id="360">360</span>
+<span id="361">361</span>
+<span id="362">362</span>
+<span id="363">363</span>
+<span id="364">364</span>
+<span id="365">365</span>
+<span id="366">366</span>
+<span id="367">367</span>
+<span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
+<span id="373">373</span>
+<span id="374">374</span>
+<span id="375">375</span>
+<span id="376">376</span>
+<span id="377">377</span>
+<span id="378">378</span>
+<span id="379">379</span>
+<span id="380">380</span>
+<span id="381">381</span>
+<span id="382">382</span>
+<span id="383">383</span>
+<span id="384">384</span>
+<span id="385">385</span>
+<span id="386">386</span>
+<span id="387">387</span>
+<span id="388">388</span>
+<span id="389">389</span>
+<span id="390">390</span>
+<span id="391">391</span>
+<span id="392">392</span>
+<span id="393">393</span>
+<span id="394">394</span>
+<span id="395">395</span>
+<span id="396">396</span>
+<span id="397">397</span>
+<span id="398">398</span>
+<span id="399">399</span>
+<span id="400">400</span>
+<span id="401">401</span>
+<span id="402">402</span>
+<span id="403">403</span>
+<span id="404">404</span>
+<span id="405">405</span>
+<span id="406">406</span>
+<span id="407">407</span>
+<span id="408">408</span>
+<span id="409">409</span>
+<span id="410">410</span>
+<span id="411">411</span>
+<span id="412">412</span>
+<span id="413">413</span>
+<span id="414">414</span>
+<span id="415">415</span>
+<span id="416">416</span>
+<span id="417">417</span>
+<span id="418">418</span>
+<span id="419">419</span>
+<span id="420">420</span>
+<span id="421">421</span>
+<span id="422">422</span>
+<span id="423">423</span>
+<span id="424">424</span>
+<span id="425">425</span>
+<span id="426">426</span>
+<span id="427">427</span>
+<span id="428">428</span>
+<span id="429">429</span>
+<span id="430">430</span>
+<span id="431">431</span>
+<span id="432">432</span>
+<span id="433">433</span>
+<span id="434">434</span>
+<span id="435">435</span>
+<span id="436">436</span>
+<span id="437">437</span>
+<span id="438">438</span>
+<span id="439">439</span>
+<span id="440">440</span>
+<span id="441">441</span>
+<span id="442">442</span>
+<span id="443">443</span>
+<span id="444">444</span>
+<span id="445">445</span>
+<span id="446">446</span>
+<span id="447">447</span>
+<span id="448">448</span>
+<span id="449">449</span>
+<span id="450">450</span>
+<span id="451">451</span>
+<span id="452">452</span>
+<span id="453">453</span>
+<span id="454">454</span>
+<span id="455">455</span>
+<span id="456">456</span>
+<span id="457">457</span>
+<span id="458">458</span>
+<span id="459">459</span>
+<span id="460">460</span>
+<span id="461">461</span>
+<span id="462">462</span>
+<span id="463">463</span>
+<span id="464">464</span>
+<span id="465">465</span>
+<span id="466">466</span>
+<span id="467">467</span>
+<span id="468">468</span>
+<span id="469">469</span>
+<span id="470">470</span>
+<span id="471">471</span>
+<span id="472">472</span>
+<span id="473">473</span>
+<span id="474">474</span>
+<span id="475">475</span>
+<span id="476">476</span>
+<span id="477">477</span>
+<span id="478">478</span>
+<span id="479">479</span>
+<span id="480">480</span>
+<span id="481">481</span>
+<span id="482">482</span>
+<span id="483">483</span>
+<span id="484">484</span>
+<span id="485">485</span>
+<span id="486">486</span>
+<span id="487">487</span>
+<span id="488">488</span>
+<span id="489">489</span>
+<span id="490">490</span>
+<span id="491">491</span>
+<span id="492">492</span>
+<span id="493">493</span>
+<span id="494">494</span>
+<span id="495">495</span>
+<span id="496">496</span>
+<span id="497">497</span>
+<span id="498">498</span>
+<span id="499">499</span>
+<span id="500">500</span>
+<span id="501">501</span>
+<span id="502">502</span>
+<span id="503">503</span>
+<span id="504">504</span>
+<span id="505">505</span>
+<span id="506">506</span>
+<span id="507">507</span>
+<span id="508">508</span>
+<span id="509">509</span>
+<span id="510">510</span>
+<span id="511">511</span>
+<span id="512">512</span>
+<span id="513">513</span>
+<span id="514">514</span>
+<span id="515">515</span>
+<span id="516">516</span>
+<span id="517">517</span>
+<span id="518">518</span>
+<span id="519">519</span>
+<span id="520">520</span>
+<span id="521">521</span>
+<span id="522">522</span>
+<span id="523">523</span>
+<span id="524">524</span>
+<span id="525">525</span>
+<span id="526">526</span>
+<span id="527">527</span>
+<span id="528">528</span>
+<span id="529">529</span>
+<span id="530">530</span>
+<span id="531">531</span>
+<span id="532">532</span>
+<span id="533">533</span>
+<span id="534">534</span>
+<span id="535">535</span>
+<span id="536">536</span>
+<span id="537">537</span>
+<span id="538">538</span>
+<span id="539">539</span>
+<span id="540">540</span>
+<span id="541">541</span>
+<span id="542">542</span>
+<span id="543">543</span>
+<span id="544">544</span>
+<span id="545">545</span>
+<span id="546">546</span>
+<span id="547">547</span>
+<span id="548">548</span>
+<span id="549">549</span>
+<span id="550">550</span>
+<span id="551">551</span>
+<span id="552">552</span>
+<span id="553">553</span>
+<span id="554">554</span>
+<span id="555">555</span>
+<span id="556">556</span>
+<span id="557">557</span>
+<span id="558">558</span>
+<span id="559">559</span>
+<span id="560">560</span>
+<span id="561">561</span>
+<span id="562">562</span>
+<span id="563">563</span>
+<span id="564">564</span>
+<span id="565">565</span>
+<span id="566">566</span>
+<span id="567">567</span>
+<span id="568">568</span>
+<span id="569">569</span>
+<span id="570">570</span>
+<span id="571">571</span>
+<span id="572">572</span>
+<span id="573">573</span>
+<span id="574">574</span>
+<span id="575">575</span>
+<span id="576">576</span>
+<span id="577">577</span>
+<span id="578">578</span>
+<span id="579">579</span>
+<span id="580">580</span>
+<span id="581">581</span>
+<span id="582">582</span>
+<span id="583">583</span>
+<span id="584">584</span>
+<span id="585">585</span>
+<span id="586">586</span>
+<span id="587">587</span>
+<span id="588">588</span>
+<span id="589">589</span>
+<span id="590">590</span>
+<span id="591">591</span>
+<span id="592">592</span>
+<span id="593">593</span>
+<span id="594">594</span>
+<span id="595">595</span>
+<span id="596">596</span>
+<span id="597">597</span>
+<span id="598">598</span>
+<span id="599">599</span>
+<span id="600">600</span>
+<span id="601">601</span>
+<span id="602">602</span>
+<span id="603">603</span>
+<span id="604">604</span>
+<span id="605">605</span>
+<span id="606">606</span>
+<span id="607">607</span>
+<span id="608">608</span>
+</pre><pre class="rust"><code><span class="doccomment">//! Generate Wasm modules that contain a single instruction.
+
+</span><span class="kw">use </span><span class="kw">super</span>::ModuleConfig;
+<span class="kw">use </span>arbitrary::Unstructured;
+<span class="kw">use </span>wasm_encoder::{
+    CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction, Module,
+    TypeSection, ValType,
+};
+
+<span class="doccomment">/// The name of the function generated by this module.
+</span><span class="kw">const </span>FUNCTION_NAME: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static </span>str = <span class="string">&quot;test&quot;</span>;
+
+<span class="doccomment">/// Configure a single instruction module.
+///
+/// By explicitly defining the parameter and result types (versus generating the
+/// module directly), we can more easily generate values of the right type.
+</span><span class="attribute">#[derive(Clone)]
+</span><span class="kw">pub struct </span>SingleInstModule&lt;<span class="lifetime">&#39;a</span>&gt; {
+    instruction: Instruction&lt;<span class="lifetime">&#39;a</span>&gt;,
+    parameters: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>[ValType],
+    results: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>[ValType],
+    feature: <span class="kw">fn</span>(<span class="kw-2">&amp;</span>ModuleConfig) -&gt; bool,
+    canonicalize_nan: <span class="prelude-ty">Option</span>&lt;NanType&gt;,
+}
+
+<span class="doccomment">/// Valid types for NaN canonicalization.
+///
+/// When fuzzing floating point values, a NaN result can have non-deterministic
+/// bits in the payload. In order to compare these results, [`SingleInstModule`]
+/// can convert any NaN values (or NaN lanes) to a canonical NaN value for any
+/// of these types.
+</span><span class="attribute">#[derive(Clone)]
+</span><span class="kw">enum </span>NanType {
+    <span class="attribute">#[allow(dead_code)]
+    </span>F32,
+    <span class="attribute">#[allow(dead_code)]
+    </span>F64,
+    F32x4,
+    F64x2,
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;a</span>&gt; SingleInstModule&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="doccomment">/// Choose a single-instruction module that matches `config`.
+    </span><span class="kw">pub fn </span>new(u: <span class="kw-2">&amp;mut </span>Unstructured&lt;<span class="lifetime">&#39;a</span>&gt;, config: <span class="kw-2">&amp;</span>ModuleConfig) -&gt; arbitrary::Result&lt;<span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span><span class="self">Self</span>&gt; {
+        <span class="comment">// Only select instructions that match the `ModuleConfig`.
+        </span><span class="kw">let </span>instructions = <span class="kw-2">&amp;</span>INSTRUCTIONS
+            .iter()
+            .filter(|i| (i.feature)(config))
+            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+        u.choose(<span class="kw-2">&amp;</span>instructions[..]).copied()
+    }
+
+    <span class="doccomment">/// Encode a binary Wasm module with a single exported function, `test`,
+    /// that executes the single instruction.
+    </span><span class="kw">pub fn </span>to_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;u8&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>module = Module::new();
+
+        <span class="comment">// Encode the type section.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>types = TypeSection::new();
+        types.function(
+            <span class="self">self</span>.parameters.iter().cloned(),
+            <span class="self">self</span>.results.iter().cloned(),
+        );
+        module.section(<span class="kw-2">&amp;</span>types);
+
+        <span class="comment">// Encode the function section.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>functions = FunctionSection::new();
+        <span class="kw">let </span>type_index = <span class="number">0</span>;
+        functions.function(type_index);
+        module.section(<span class="kw-2">&amp;</span>functions);
+
+        <span class="comment">// Encode the export section.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>exports = ExportSection::new();
+        exports.export(FUNCTION_NAME, ExportKind::Func, <span class="number">0</span>);
+        module.section(<span class="kw-2">&amp;</span>exports);
+
+        <span class="comment">// Encode the code section.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>codes = CodeSection::new();
+
+        <span class="comment">// Set up the single-instruction function. Note that if we have chosen
+        // to canonicalize NaNs, this function will contain more than one
+        // instruction and the function will need a scratch local.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>f = <span class="kw">if let </span><span class="prelude-val">Some</span>(ty) = <span class="kw-2">&amp;</span><span class="self">self</span>.canonicalize_nan {
+            Function::new(<span class="kw">match </span>ty {
+                NanType::F32 =&gt; <span class="macro">vec!</span>[(<span class="number">1</span>, ValType::F32)],
+                NanType::F64 =&gt; <span class="macro">vec!</span>[(<span class="number">1</span>, ValType::F64)],
+                NanType::F32x4 | NanType::F64x2 =&gt; <span class="macro">vec!</span>[(<span class="number">1</span>, ValType::V128)],
+            })
+        } <span class="kw">else </span>{
+            Function::new([])
+        };
+
+        <span class="comment">// Retrieve the input values and execute the chosen instruction.
+        </span><span class="kw">for </span>(index, <span class="kw">_</span>) <span class="kw">in </span><span class="self">self</span>.parameters.iter().enumerate() {
+            f.instruction(<span class="kw-2">&amp;</span>Instruction::LocalGet(index <span class="kw">as </span>u32));
+        }
+        f.instruction(<span class="kw-2">&amp;</span><span class="self">self</span>.instruction);
+
+        <span class="comment">// If we have configured to canonicalize NaNs, we add a sequence that
+        // masks off the NaN payload bits to make them 0s (i.e., a canonical
+        // NaN). This sequence is adapted from wasm-smiths version; see
+        // https://github.com/bytecodealliance/wasm-tools/blob/6c127a6/crates/wasm-smith/src/core/code_builder.rs#L927.
+        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(ty) = <span class="kw-2">&amp;</span><span class="self">self</span>.canonicalize_nan {
+            <span class="comment">// Save the previous instruction&#39;s result into the scratch local.
+            // This also leaves a value on the stack as for the `select`
+            // instruction.
+            </span><span class="kw">let </span>local = <span class="self">self</span>.parameters.len() <span class="kw">as </span>u32;
+            f.instruction(<span class="kw-2">&amp;</span>Instruction::LocalTee(local));
+
+            <span class="comment">// The other input to the `select` below--a canonical NaN. Note how
+            // the payload bits of the NaN are cleared.
+            </span><span class="kw">const </span>CANON_32BIT_NAN: u32 = <span class="number">0b01111111110000000000000000000000</span>;
+            <span class="kw">const </span>CANON_64BIT_NAN: u64 =
+                <span class="number">0b0111111111111000000000000000000000000000000000000000000000000000</span>;
+            <span class="kw">let </span>mask = <span class="kw">match </span>ty {
+                NanType::F32 =&gt; Instruction::F32Const(f32::from_bits(CANON_32BIT_NAN)),
+                NanType::F64 =&gt; Instruction::F64Const(f64::from_bits(CANON_64BIT_NAN)),
+                NanType::F32x4 =&gt; {
+                    <span class="kw">let </span>nan = CANON_32BIT_NAN <span class="kw">as </span>i128;
+                    Instruction::V128Const(nan | (nan &lt;&lt; <span class="number">32</span>) | (nan &lt;&lt; <span class="number">64</span>) | (nan &lt;&lt; <span class="number">96</span>))
+                }
+                NanType::F64x2 =&gt; {
+                    <span class="kw">let </span>nan = CANON_64BIT_NAN <span class="kw">as </span>i128;
+                    Instruction::V128Const(nan | (nan &lt;&lt; <span class="number">64</span>))
+                }
+            };
+            f.instruction(<span class="kw-2">&amp;</span>mask);
+
+            <span class="comment">// The `select` condition. NaNs never equal each other, so here the
+            // result value is compared against itself.
+            </span>f.instruction(<span class="kw-2">&amp;</span>Instruction::LocalGet(local));
+            f.instruction(<span class="kw-2">&amp;</span>Instruction::LocalGet(local));
+            f.instruction(<span class="kw">match </span>ty {
+                NanType::F32 =&gt; <span class="kw-2">&amp;</span>Instruction::F32Eq,
+                NanType::F64 =&gt; <span class="kw-2">&amp;</span>Instruction::F64Eq,
+                NanType::F32x4 =&gt; <span class="kw-2">&amp;</span>Instruction::F32x4Eq,
+                NanType::F64x2 =&gt; <span class="kw-2">&amp;</span>Instruction::F64x2Eq,
+            });
+
+            <span class="comment">// Select the result. If the condition is nonzero (i.e., the float
+            // is equal to itself) it picks the original value; otherwise, if
+            // zero (i.e., the float is a NaN) it picks the canonical NaN value.
+            </span>f.instruction(<span class="kw">match </span>ty {
+                NanType::F32 | NanType::F64 =&gt; <span class="kw-2">&amp;</span>Instruction::Select,
+                NanType::F32x4 | NanType::F64x2 =&gt; <span class="kw-2">&amp;</span>Instruction::V128Bitselect,
+            });
+        }
+
+        <span class="comment">// Wrap up the function and section.
+        </span>f.instruction(<span class="kw-2">&amp;</span>Instruction::End);
+        codes.function(<span class="kw-2">&amp;</span>f);
+        module.section(<span class="kw-2">&amp;</span>codes);
+
+        <span class="comment">// Extract the encoded Wasm bytes for this module.
+        </span>module.finish()
+    }
+}
+
+<span class="comment">// MACROS
+//
+// These macros make it a bit easier to define the instructions available for
+// generation. The idea is that, with these macros, we can define the list of
+// instructions compactly and allow for easier changes to the Rust code (e.g.,
+// `SingleInstModule`).
+
+</span><span class="macro">macro_rules! </span>valtype {
+    (i32) =&gt; {
+        ValType::I32
+    };
+    (i64) =&gt; {
+        ValType::I64
+    };
+    (f32) =&gt; {
+        ValType::F32
+    };
+    (f64) =&gt; {
+        ValType::F64
+    };
+    (v128) =&gt; {
+        ValType::V128
+    };
+}
+
+<span class="macro">macro_rules! </span>inst {
+    (<span class="macro-nonterminal">$inst</span>:ident, ($(<span class="macro-nonterminal">$arguments_ty</span>:tt),<span class="kw-2">*</span>) -&gt; <span class="macro-nonterminal">$result_ty</span>:tt) =&gt; {
+        <span class="macro">inst! </span>{ <span class="macro-nonterminal">$inst</span>, ($(<span class="macro-nonterminal">$arguments_ty</span>),<span class="kw-2">*</span>) -&gt; <span class="macro-nonterminal">$result_ty</span>, |<span class="kw">_</span>| <span class="bool-val">true </span>}
+    };
+    (<span class="macro-nonterminal">$inst</span>:ident, ($(<span class="macro-nonterminal">$arguments_ty</span>:tt),<span class="kw-2">*</span>) -&gt; <span class="macro-nonterminal">$result_ty</span>:tt, <span class="macro-nonterminal">$feature</span>:expr) =&gt; {
+        <span class="macro">inst! </span>{ <span class="macro-nonterminal">$inst</span>, ($(<span class="macro-nonterminal">$arguments_ty</span>),<span class="kw-2">*</span>) -&gt; <span class="macro-nonterminal">$result_ty</span>, <span class="macro-nonterminal">$feature</span>, <span class="prelude-val">None </span>}
+    };
+    (<span class="macro-nonterminal">$inst</span>:ident, ($(<span class="macro-nonterminal">$arguments_ty</span>:tt),<span class="kw-2">*</span>) -&gt; <span class="macro-nonterminal">$result_ty</span>:tt, <span class="macro-nonterminal">$feature</span>:expr, <span class="macro-nonterminal">$nan</span>:expr) =&gt; {
+        SingleInstModule {
+            instruction: Instruction::<span class="macro-nonterminal">$inst</span>,
+            parameters: <span class="kw-2">&amp;</span>[$(<span class="macro">valtype!</span>(<span class="macro-nonterminal">$arguments_ty</span>)),<span class="kw-2">*</span>],
+            results: <span class="kw-2">&amp;</span>[<span class="macro">valtype!</span>(<span class="macro-nonterminal">$result_ty</span>)],
+            feature: <span class="macro-nonterminal">$feature</span>,
+            canonicalize_nan: <span class="macro-nonterminal">$nan</span>,
+        }
+    };
+}
+
+<span class="comment">// INSTRUCTIONS
+//
+// This list of WebAssembly instructions attempts to roughly follow the
+// structure of the W3C specification:
+// https://webassembly.github.io/spec/core/appendix/index-instructions.html#index-instr.
+// Certain kinds of instructions (e.g., memory access) are skipped for now.
+</span><span class="kw">static </span>INSTRUCTIONS: <span class="kw-2">&amp;</span>[SingleInstModule] = <span class="kw-2">&amp;</span>[
+    <span class="comment">// Integer arithmetic.
+    // I32Const
+    // I64Const
+    // F32Const
+    // F64Const
+    </span><span class="macro">inst!</span>(I32Clz, (i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Clz, (i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32Ctz, (i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Ctz, (i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32Popcnt, (i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Popcnt, (i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32Add, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Add, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32Sub, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Sub, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32Mul, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Mul, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32DivS, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64DivS, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32DivU, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64DivU, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32RemS, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64RemS, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32RemU, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64RemU, (i64, i64) -&gt; i64),
+    <span class="comment">// Integer bitwise.
+    </span><span class="macro">inst!</span>(I32And, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64And, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32Or, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Or, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32Xor, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Xor, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32Shl, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Shl, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32ShrS, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64ShrS, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32ShrU, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64ShrU, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32Rotl, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Rotl, (i64, i64) -&gt; i64),
+    <span class="macro">inst!</span>(I32Rotr, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Rotr, (i64, i64) -&gt; i64),
+    <span class="comment">// Integer comparison.
+    </span><span class="macro">inst!</span>(I32Eqz, (i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Eqz, (i64) -&gt; i32),
+    <span class="macro">inst!</span>(I32Eq, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Eq, (i64, i64) -&gt; i32),
+    <span class="macro">inst!</span>(I32Ne, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64Ne, (i64, i64) -&gt; i32),
+    <span class="macro">inst!</span>(I32LtS, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64LtS, (i64, i64) -&gt; i32),
+    <span class="macro">inst!</span>(I32LtU, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64LtU, (i64, i64) -&gt; i32),
+    <span class="macro">inst!</span>(I32GtS, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64GtS, (i64, i64) -&gt; i32),
+    <span class="macro">inst!</span>(I32GtU, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64GtU, (i64, i64) -&gt; i32),
+    <span class="macro">inst!</span>(I32LeS, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64LeS, (i64, i64) -&gt; i32),
+    <span class="macro">inst!</span>(I32LeU, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64LeU, (i64, i64) -&gt; i32),
+    <span class="macro">inst!</span>(I32GeS, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64GeS, (i64, i64) -&gt; i32),
+    <span class="macro">inst!</span>(I32GeU, (i32, i32) -&gt; i32),
+    <span class="macro">inst!</span>(I64GeU, (i64, i64) -&gt; i32),
+    <span class="comment">// Floating-point arithmetic.
+    </span><span class="macro">inst!</span>(F32Abs, (f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Abs, (f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Sqrt, (f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Sqrt, (f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Ceil, (f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Ceil, (f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Floor, (f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Floor, (f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Trunc, (f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Trunc, (f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Nearest, (f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Nearest, (f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Neg, (f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Neg, (f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Add, (f32, f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Add, (f64, f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Sub, (f32, f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Sub, (f64, f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Mul, (f32, f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Mul, (f64, f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Div, (f32, f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Div, (f64, f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Min, (f32, f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Min, (f64, f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Max, (f32, f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Max, (f64, f64) -&gt; f64),
+    <span class="macro">inst!</span>(F32Copysign, (f32, f32) -&gt; f32),
+    <span class="macro">inst!</span>(F64Copysign, (f64, f64) -&gt; f64),
+    <span class="comment">// Floating-point comparison.
+    </span><span class="macro">inst!</span>(F32Eq, (f32, f32) -&gt; i32),
+    <span class="macro">inst!</span>(F64Eq, (f64, f64) -&gt; i32),
+    <span class="macro">inst!</span>(F32Ne, (f32, f32) -&gt; i32),
+    <span class="macro">inst!</span>(F64Ne, (f64, f64) -&gt; i32),
+    <span class="macro">inst!</span>(F32Lt, (f32, f32) -&gt; i32),
+    <span class="macro">inst!</span>(F64Lt, (f64, f64) -&gt; i32),
+    <span class="macro">inst!</span>(F32Gt, (f32, f32) -&gt; i32),
+    <span class="macro">inst!</span>(F64Gt, (f64, f64) -&gt; i32),
+    <span class="macro">inst!</span>(F32Le, (f32, f32) -&gt; i32),
+    <span class="macro">inst!</span>(F64Le, (f64, f64) -&gt; i32),
+    <span class="macro">inst!</span>(F32Ge, (f32, f32) -&gt; i32),
+    <span class="macro">inst!</span>(F64Ge, (f64, f64) -&gt; i32),
+    <span class="comment">// Integer conversions (&quot;to integer&quot;).
+    </span><span class="macro">inst!</span>(I32Extend8S, (i32) -&gt; i32, |c| c.config.sign_extension_enabled),
+    <span class="macro">inst!</span>(I32Extend16S, (i32) -&gt; i32, |c| c.config.sign_extension_enabled),
+    <span class="macro">inst!</span>(I64Extend8S, (i64) -&gt; i64, |c| c.config.sign_extension_enabled),
+    <span class="macro">inst!</span>(I64Extend16S, (i64) -&gt; i64, |c| c.config.sign_extension_enabled),
+    <span class="macro">inst!</span>(I64Extend32S, (i64) -&gt; i64, |c| c.config.sign_extension_enabled),
+    <span class="macro">inst!</span>(I32WrapI64, (i64) -&gt; i32),
+    <span class="macro">inst!</span>(I64ExtendI32S, (i32) -&gt; i64),
+    <span class="macro">inst!</span>(I64ExtendI32U, (i32) -&gt; i64),
+    <span class="macro">inst!</span>(I32TruncF32S, (f32) -&gt; i32),
+    <span class="macro">inst!</span>(I32TruncF32U, (f32) -&gt; i32),
+    <span class="macro">inst!</span>(I32TruncF64S, (f64) -&gt; i32),
+    <span class="macro">inst!</span>(I32TruncF64U, (f64) -&gt; i32),
+    <span class="macro">inst!</span>(I64TruncF32S, (f32) -&gt; i64),
+    <span class="macro">inst!</span>(I64TruncF32U, (f32) -&gt; i64),
+    <span class="macro">inst!</span>(I64TruncF64S, (f64) -&gt; i64),
+    <span class="macro">inst!</span>(I64TruncF64U, (f64) -&gt; i64),
+    <span class="macro">inst!</span>(I32TruncSatF32S, (f32) -&gt; i32, |c| c.config.saturating_float_to_int_enabled),
+    <span class="macro">inst!</span>(I32TruncSatF32U, (f32) -&gt; i32, |c| c.config.saturating_float_to_int_enabled),
+    <span class="macro">inst!</span>(I32TruncSatF64S, (f64) -&gt; i32, |c| c.config.saturating_float_to_int_enabled),
+    <span class="macro">inst!</span>(I32TruncSatF64U, (f64) -&gt; i32, |c| c.config.saturating_float_to_int_enabled),
+    <span class="macro">inst!</span>(I64TruncSatF32S, (f32) -&gt; i64, |c| c.config.saturating_float_to_int_enabled),
+    <span class="macro">inst!</span>(I64TruncSatF32U, (f32) -&gt; i64, |c| c.config.saturating_float_to_int_enabled),
+    <span class="macro">inst!</span>(I64TruncSatF64S, (f64) -&gt; i64, |c| c.config.saturating_float_to_int_enabled),
+    <span class="macro">inst!</span>(I64TruncSatF64U, (f64) -&gt; i64, |c| c.config.saturating_float_to_int_enabled),
+    <span class="macro">inst!</span>(I32ReinterpretF32, (f32) -&gt; i32),
+    <span class="macro">inst!</span>(I64ReinterpretF64, (f64) -&gt; i64),
+    <span class="comment">// Floating-point conversions (&quot;to float&quot;).
+    </span><span class="macro">inst!</span>(F32DemoteF64, (f64) -&gt; f32),
+    <span class="macro">inst!</span>(F64PromoteF32, (f32) -&gt; f64),
+    <span class="macro">inst!</span>(F32ConvertI32S, (i32) -&gt; f32),
+    <span class="macro">inst!</span>(F32ConvertI32U, (i32) -&gt; f32),
+    <span class="macro">inst!</span>(F32ConvertI64S, (i64) -&gt; f32),
+    <span class="macro">inst!</span>(F32ConvertI64U, (i64) -&gt; f32),
+    <span class="macro">inst!</span>(F64ConvertI32S, (i32) -&gt; f64),
+    <span class="macro">inst!</span>(F64ConvertI32U, (i32) -&gt; f64),
+    <span class="macro">inst!</span>(F64ConvertI64S, (i64) -&gt; f64),
+    <span class="macro">inst!</span>(F64ConvertI64U, (i64) -&gt; f64),
+    <span class="macro">inst!</span>(F32ReinterpretI32, (i32) -&gt; f32),
+    <span class="macro">inst!</span>(F64ReinterpretI64, (i64) -&gt; f64),
+    <span class="comment">// SIMD instructions.
+    // V128Const
+    // I8x16Shuffle
+    </span><span class="macro">inst!</span>(I8x16Swizzle, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16Splat, (i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Splat, (i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4Splat, (i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2Splat, (i64) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4Splat, (f32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2Splat, (f64) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="comment">// I8x16ExtractLaneS
+    // I8x16ExtractLaneU
+    // I8x16ReplaceLane
+    // I16x8ExtractLaneS
+    // I16x8ExtractLaneU
+    // I16x8ReplaceLane
+    // I32x4ExtractLane
+    // I32x4ReplaceLane
+    // I64x2ExtractLane
+    // I64x2ReplaceLane
+    // F32x4ExtractLane
+    // F32x4ReplaceLane
+    // F64x2ExtractLane
+    // F64x2ReplaceLane
+    </span><span class="macro">inst!</span>(I8x16Eq, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16Ne, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16LtS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16LtU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16GtS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16GtU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16LeS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16LeU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16GeS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16GeU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Eq, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Ne, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8LtS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8LtU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8GtS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8GtU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8LeS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8LeU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8GeS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8GeU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4Eq, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4Ne, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4LtS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4LtU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4GtS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4GtU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4LeS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4LeU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4GeS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4GeU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2Eq, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2Ne, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2LtS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2GtS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2LeS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2GeS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4Eq, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4Ne, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4Lt, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4Gt, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4Le, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4Ge, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2Eq, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2Ne, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2Lt, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2Gt, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2Le, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2Ge, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(V128Not, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(V128And, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(V128AndNot, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(V128Or, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(V128Xor, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(V128Bitselect, (v128, v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(V128AnyTrue, (v128) -&gt; i32, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16Abs, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16Neg, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16Popcnt, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16AllTrue, (v128) -&gt; i32, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16Bitmask, (v128) -&gt; i32, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16NarrowI16x8S, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16NarrowI16x8U, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16Shl, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16ShrS, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16ShrU, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16Add, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16AddSatS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16AddSatU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16Sub, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16SubSatS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16SubSatU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16MinS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16MinU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16MaxS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16MaxU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I8x16AvgrU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ExtAddPairwiseI8x16S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ExtAddPairwiseI8x16U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Abs, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Neg, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Q15MulrSatS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8AllTrue, (v128) -&gt; i32, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Bitmask, (v128) -&gt; i32, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8NarrowI32x4S, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8NarrowI32x4U, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ExtendLowI8x16S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ExtendHighI8x16S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ExtendLowI8x16U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ExtendHighI8x16U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Shl, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ShrS, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ShrU, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Add, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8AddSatS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8AddSatU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Sub, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8SubSatS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8SubSatU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8Mul, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8MinS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8MinU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8MaxS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8MaxU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8AvgrU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ExtMulLowI8x16S, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ExtMulHighI8x16S, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ExtMulLowI8x16U, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I16x8ExtMulHighI8x16U, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ExtAddPairwiseI16x8S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ExtAddPairwiseI16x8U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4Abs, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4Neg, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4AllTrue, (v128) -&gt; i32, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4Bitmask, (v128) -&gt; i32, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ExtendLowI16x8S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ExtendHighI16x8S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ExtendLowI16x8U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ExtendHighI16x8U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4Shl, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ShrS, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ShrU, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4Add, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4Sub, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4Mul, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4MinS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4MinU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4MaxS, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4MaxU, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4DotI16x8S, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ExtMulLowI16x8S, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ExtMulHighI16x8S, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ExtMulLowI16x8U, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4ExtMulHighI16x8U, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2Abs, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2Neg, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2AllTrue, (v128) -&gt; i32, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2Bitmask, (v128) -&gt; i32, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2ExtendLowI32x4S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2ExtendHighI32x4S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2ExtendLowI32x4U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2ExtendHighI32x4U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2Shl, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2ShrS, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2ShrU, (v128, i32) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2Add, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2Sub, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2Mul, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2ExtMulLowI32x4S, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2ExtMulHighI32x4S, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2ExtMulLowI32x4U, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I64x2ExtMulHighI32x4U, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4Ceil, (v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4Floor, (v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4Trunc, (v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4Nearest, (v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4Abs, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4Neg, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4Sqrt, (v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4Add, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4Sub, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4Mul, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4Div, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4Min, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4Max, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F32x4)),
+    <span class="macro">inst!</span>(F32x4PMin, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4PMax, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2Ceil, (v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2Floor, (v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2Trunc, (v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2Nearest, (v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2Abs, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2Neg, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2Sqrt, (v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2Add, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2Sub, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2Mul, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2Div, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2Min, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2Max, (v128, v128) -&gt; v128, |c| c.config.simd_enabled, <span class="prelude-val">Some</span>(NanType::F64x2)),
+    <span class="macro">inst!</span>(F64x2PMin, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2PMax, (v128, v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4TruncSatF32x4S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4TruncSatF32x4U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4ConvertI32x4S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4ConvertI32x4U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4TruncSatF64x2SZero, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(I32x4TruncSatF64x2UZero, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2ConvertLowI32x4S, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2ConvertLowI32x4U, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F32x4DemoteF64x2Zero, (v128) -&gt; v128, |c| c.config.simd_enabled),
+    <span class="macro">inst!</span>(F64x2PromoteLowF32x4, (v128) -&gt; v128, |c| c.config.simd_enabled),
+];
+
+<span class="attribute">#[cfg(test)]
+</span><span class="kw">mod </span>test {
+    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+
+    <span class="attribute">#[test]
+    </span><span class="kw">fn </span>sanity() {
+        <span class="kw">let </span>sut = SingleInstModule {
+            instruction: Instruction::I32Add,
+            parameters: <span class="kw-2">&amp;</span>[ValType::I32, ValType::I32],
+            results: <span class="kw-2">&amp;</span>[ValType::I32],
+            feature: |<span class="kw">_</span>| <span class="bool-val">true</span>,
+            canonicalize_nan: <span class="prelude-val">None</span>,
+        };
+        <span class="kw">let </span>wasm = sut.to_bytes();
+        <span class="kw">let </span>wat = wasmprinter::print_bytes(wasm).unwrap();
+        <span class="macro">assert_eq!</span>(
+            wat,
+            <span class="string">r#&quot;(module
+  (type (;0;) (func (param i32 i32) (result i32)))
+  (func (;0;) (type 0) (param i32 i32) (result i32)
+    local.get 0
+    local.get 1
+    i32.add
+  )
+  (export &quot;test&quot; (func 0))
+)&quot;#
+        </span>)
+    }
+
+    <span class="attribute">#[test]
+    </span><span class="kw">fn </span>instructions_encode_to_valid_modules() {
+        <span class="kw">for </span>inst <span class="kw">in </span>INSTRUCTIONS {
+            <span class="macro">assert!</span>(wat::parse_bytes(<span class="kw-2">&amp;</span>inst.to_bytes()).is_ok());
+        }
+    }
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="wasmtime_fuzzing" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

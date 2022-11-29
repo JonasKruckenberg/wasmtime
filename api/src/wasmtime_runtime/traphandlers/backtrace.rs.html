@@ -1,0 +1,552 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/runtime/src/traphandlers/backtrace.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>backtrace.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../../normalize.css"><link rel="stylesheet" href="../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../../ayu.css" disabled><link rel="stylesheet" href="../../../dark.css" disabled><link rel="stylesheet" href="../../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../../storage.js"></script><script defer src="../../../source-script.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../main.js"></script><noscript><link rel="stylesheet" href="../../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../../wasmtime_runtime/index.html"><div class="logo-container"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../../wasmtime_runtime/index.html"><div class="logo-container"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../../wasmtime_runtime/index.html"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
+<span id="217">217</span>
+<span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
+<span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+</pre><pre class="rust"><code><span class="doccomment">//! Backtrace and stack walking functionality for Wasm.
+//!
+//! Walking the Wasm stack is comprised of
+//!
+//! 1. identifying sequences of contiguous Wasm frames on the stack
+//!    (i.e. skipping over native host frames), and
+//!
+//! 2. walking the Wasm frames within such a sequence.
+//!
+//! To perform (1) we maintain the entry stack pointer (SP) and exit frame
+//! pointer (FP) and program counter (PC) each time we call into Wasm and Wasm
+//! calls into the host via trampolines (see
+//! `crates/runtime/src/trampolines`). The most recent entry is stored in
+//! `VMRuntimeLimits` and older entries are saved in `CallThreadState`. This
+//! lets us identify ranges of contiguous Wasm frames on the stack.
+//!
+//! To solve (2) and walk the Wasm frames within a region of contiguous Wasm
+//! frames on the stack, we configure Cranelift&#39;s `preserve_frame_pointers =
+//! true` setting. Then we can do simple frame pointer traversal starting at the
+//! exit FP and stopping once we reach the entry SP (meaning that the next older
+//! frame is a host frame).
+
+</span><span class="kw">use </span><span class="kw">crate</span>::traphandlers::{tls, CallThreadState};
+<span class="kw">use </span>cfg_if::cfg_if;
+<span class="kw">use </span>std::ops::ControlFlow;
+
+<span class="comment">// Architecture-specific bits for stack walking. Each of these modules should
+// define and export the following functions:
+//
+// * `unsafe fn get_next_older_pc_from_fp(fp: usize) -&gt; usize`
+// * `unsafe fn get_next_older_fp_from_fp(fp: usize) -&gt; usize`
+// * `fn reached_entry_sp(fp: usize, first_wasm_sp: usize) -&gt; bool`
+// * `fn assert_entry_sp_is_aligned(sp: usize)`
+// * `fn assert_fp_is_aligned(fp: usize)`
+</span><span class="macro">cfg_if! </span>{
+    <span class="kw">if </span><span class="attribute">#[cfg(target_arch = <span class="string">&quot;x86_64&quot;</span>)] </span>{
+        <span class="kw">mod </span>x86_64;
+        <span class="kw">use </span>x86_64 <span class="kw">as </span>arch;
+    } <span class="kw">else if </span><span class="attribute">#[cfg(target_arch = <span class="string">&quot;aarch64&quot;</span>)] </span>{
+        <span class="kw">mod </span>aarch64;
+        <span class="kw">use </span>aarch64 <span class="kw">as </span>arch;
+    } <span class="kw">else if </span><span class="attribute">#[cfg(target_arch = <span class="string">&quot;s390x&quot;</span>)] </span>{
+        <span class="kw">mod </span>s390x;
+        <span class="kw">use </span>s390x <span class="kw">as </span>arch;
+    } <span class="kw">else if </span><span class="attribute">#[cfg(target_arch = <span class="string">&quot;riscv64&quot;</span>)] </span>{
+        <span class="kw">mod </span>riscv64;
+        <span class="kw">use </span>riscv64 <span class="kw">as </span>arch;
+    } <span class="kw">else </span>{
+        <span class="macro">compile_error!</span>(<span class="string">&quot;unsupported architecture&quot;</span>);
+    }
+}
+
+<span class="doccomment">/// A WebAssembly stack trace.
+</span><span class="attribute">#[derive(Debug)]
+</span><span class="kw">pub struct </span>Backtrace(Vec&lt;Frame&gt;);
+
+<span class="doccomment">/// A stack frame within a Wasm stack trace.
+</span><span class="attribute">#[derive(Debug)]
+</span><span class="kw">pub struct </span>Frame {
+    pc: usize,
+    fp: usize,
+}
+
+<span class="kw">impl </span>Frame {
+    <span class="doccomment">/// Get this frame&#39;s program counter.
+    </span><span class="kw">pub fn </span>pc(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+        <span class="self">self</span>.pc
+    }
+
+    <span class="doccomment">/// Get this frame&#39;s frame pointer.
+    </span><span class="kw">pub fn </span>fp(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+        <span class="self">self</span>.fp
+    }
+}
+
+<span class="kw">impl </span>Backtrace {
+    <span class="doccomment">/// Capture the current Wasm stack in a backtrace.
+    </span><span class="kw">pub fn </span>new() -&gt; Backtrace {
+        tls::with(|state| <span class="kw">match </span>state {
+            <span class="prelude-val">Some</span>(state) =&gt; <span class="kw">unsafe </span>{ <span class="self">Self</span>::new_with_trap_state(state, <span class="prelude-val">None</span>) },
+            <span class="prelude-val">None </span>=&gt; Backtrace(<span class="macro">vec!</span>[]),
+        })
+    }
+
+    <span class="doccomment">/// Capture the current Wasm stack trace.
+    ///
+    /// If Wasm hit a trap, and we calling this from the trap handler, then the
+    /// Wasm exit trampoline didn&#39;t run, and we use the provided PC and FP
+    /// instead of looking them up in `VMRuntimeLimits`.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe fn </span>new_with_trap_state(
+        state: <span class="kw-2">&amp;</span>CallThreadState,
+        trap_pc_and_fp: <span class="prelude-ty">Option</span>&lt;(usize, usize)&gt;,
+    ) -&gt; Backtrace {
+        <span class="kw">let </span><span class="kw-2">mut </span>frames = <span class="macro">vec!</span>[];
+        <span class="self">Self</span>::trace_with_trap_state(state, trap_pc_and_fp, |frame| {
+            frames.push(frame);
+            ControlFlow::Continue(())
+        });
+        Backtrace(frames)
+    }
+
+    <span class="doccomment">/// Walk the current Wasm stack, calling `f` for each frame we walk.
+    </span><span class="kw">pub fn </span>trace(f: <span class="kw">impl </span>FnMut(Frame) -&gt; ControlFlow&lt;()&gt;) {
+        tls::with(|state| <span class="kw">match </span>state {
+            <span class="prelude-val">Some</span>(state) =&gt; <span class="kw">unsafe </span>{ <span class="self">Self</span>::trace_with_trap_state(state, <span class="prelude-val">None</span>, f) },
+            <span class="prelude-val">None </span>=&gt; {}
+        });
+    }
+
+    <span class="doccomment">/// Walk the current Wasm stack, calling `f` for each frame we walk.
+    ///
+    /// If Wasm hit a trap, and we calling this from the trap handler, then the
+    /// Wasm exit trampoline didn&#39;t run, and we use the provided PC and FP
+    /// instead of looking them up in `VMRuntimeLimits`.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe fn </span>trace_with_trap_state(
+        state: <span class="kw-2">&amp;</span>CallThreadState,
+        trap_pc_and_fp: <span class="prelude-ty">Option</span>&lt;(usize, usize)&gt;,
+        <span class="kw-2">mut </span>f: <span class="kw">impl </span>FnMut(Frame) -&gt; ControlFlow&lt;()&gt;,
+    ) {
+        <span class="macro">log::trace!</span>(<span class="string">&quot;====== Capturing Backtrace ======&quot;</span>);
+        <span class="kw">let </span>(last_wasm_exit_pc, last_wasm_exit_fp) = <span class="kw">match </span>trap_pc_and_fp {
+            <span class="comment">// If we exited Wasm by catching a trap, then the Wasm-to-host
+            // trampoline did not get a chance to save the last Wasm PC and FP,
+            // and we need to use the plumbed-through values instead.
+            </span><span class="prelude-val">Some</span>((pc, fp)) =&gt; (pc, fp),
+            <span class="comment">// Either there is no Wasm currently on the stack, or we exited Wasm
+            // through the Wasm-to-host trampoline.
+            </span><span class="prelude-val">None </span>=&gt; {
+                <span class="kw">let </span>pc = <span class="kw-2">*</span>(<span class="kw-2">*</span>state.limits).last_wasm_exit_pc.get();
+                <span class="kw">let </span>fp = <span class="kw-2">*</span>(<span class="kw-2">*</span>state.limits).last_wasm_exit_fp.get();
+                <span class="macro">assert_ne!</span>(pc, <span class="number">0</span>);
+                (pc, fp)
+            }
+        };
+
+        <span class="comment">// Trace through the first contiguous sequence of Wasm frames on the
+        // stack.
+        </span><span class="kw">if let </span>ControlFlow::Break(()) = <span class="self">Self</span>::trace_through_wasm(
+            last_wasm_exit_pc,
+            last_wasm_exit_fp,
+            <span class="kw-2">*</span>(<span class="kw-2">*</span>state.limits).last_wasm_entry_sp.get(),
+            <span class="kw-2">&amp;mut </span>f,
+        ) {
+            <span class="macro">log::trace!</span>(<span class="string">&quot;====== Done Capturing Backtrace ======&quot;</span>);
+            <span class="kw">return</span>;
+        }
+
+        <span class="comment">// And then trace through each of the older contiguous sequences of Wasm
+        // frames on the stack.
+        </span><span class="kw">for </span>state <span class="kw">in </span>state.iter() {
+            <span class="comment">// If there is no previous call state, then there is nothing more to
+            // trace through (since each `CallTheadState` saves the *previous*
+            // call into Wasm&#39;s saved registers, and the youngest call into
+            // Wasm&#39;s registers are saved in the `VMRuntimeLimits`)
+            </span><span class="kw">if </span>state.prev().is_null() {
+                <span class="macro">debug_assert_eq!</span>(state.old_last_wasm_exit_pc(), <span class="number">0</span>);
+                <span class="macro">debug_assert_eq!</span>(state.old_last_wasm_exit_fp(), <span class="number">0</span>);
+                <span class="macro">debug_assert_eq!</span>(state.old_last_wasm_entry_sp(), <span class="number">0</span>);
+                <span class="macro">log::trace!</span>(<span class="string">&quot;====== Done Capturing Backtrace ======&quot;</span>);
+                <span class="kw">return</span>;
+            }
+
+            <span class="kw">if let </span>ControlFlow::Break(()) = <span class="self">Self</span>::trace_through_wasm(
+                state.old_last_wasm_exit_pc(),
+                state.old_last_wasm_exit_fp(),
+                state.old_last_wasm_entry_sp(),
+                <span class="kw-2">&amp;mut </span>f,
+            ) {
+                <span class="macro">log::trace!</span>(<span class="string">&quot;====== Done Capturing Backtrace ======&quot;</span>);
+                <span class="kw">return</span>;
+            }
+        }
+
+        <span class="macro">unreachable!</span>()
+    }
+
+    <span class="doccomment">/// Walk through a contiguous sequence of Wasm frames starting with the
+    /// frame at the given PC and FP and ending at `first_wasm_sp`.
+    </span><span class="kw">unsafe fn </span>trace_through_wasm(
+        <span class="kw-2">mut </span>pc: usize,
+        <span class="kw-2">mut </span>fp: usize,
+        first_wasm_sp: usize,
+        <span class="kw-2">mut </span>f: <span class="kw">impl </span>FnMut(Frame) -&gt; ControlFlow&lt;()&gt;,
+    ) -&gt; ControlFlow&lt;()&gt; {
+        <span class="macro">log::trace!</span>(<span class="string">&quot;=== Tracing through contiguous sequence of Wasm frames ===&quot;</span>);
+        <span class="macro">log::trace!</span>(<span class="string">&quot;first_wasm_sp = 0x{:016x}&quot;</span>, first_wasm_sp);
+        <span class="macro">log::trace!</span>(<span class="string">&quot;   initial pc = 0x{:016x}&quot;</span>, pc);
+        <span class="macro">log::trace!</span>(<span class="string">&quot;   initial fp = 0x{:016x}&quot;</span>, fp);
+
+        <span class="comment">// In our host-to-Wasm trampoline, we save `-1` as a sentinal SP
+        // value for when the callee is not actually a core Wasm
+        // function (as determined by looking at the callee `vmctx`). If
+        // we encounter `-1`, this is an empty sequence of Wasm frames
+        // where a host called a host function so the following
+        // happened:
+        //
+        // * We entered the host-to-wasm-trampoline, saved (an invalid
+        //   sentinal for) entry SP, and tail called to the &quot;Wasm&quot;
+        //   callee,
+        //
+        // * entered the Wasm-to-host trampoline, saved the exit FP and
+        //   PC, and tail called to the host callee,
+        //
+        // * and are now in host code.
+        //
+        // Ultimately, this means that there are 0 Wasm frames in this
+        // contiguous sequence of Wasm frames, and we have nothing to
+        // walk through here.
+        </span><span class="kw">if </span>first_wasm_sp == -<span class="number">1_isize </span><span class="kw">as </span>usize {
+            <span class="macro">log::trace!</span>(<span class="string">&quot;=== Done tracing (empty sequence of Wasm frames) ===&quot;</span>);
+            <span class="kw">return </span>ControlFlow::Continue(());
+        }
+
+        <span class="comment">// We use `0` as a sentinal value for when there is not any Wasm
+        // on the stack and these values are non-existant. If we
+        // actually entered Wasm (see above guard for `-1`) then, then
+        // by the time we got here we should have either exited Wasm
+        // through the Wasm-to-host trampoline and properly set these
+        // values, or we should have caught a trap in a signal handler
+        // and also properly recovered these values in that case.
+        </span><span class="macro">assert_ne!</span>(pc, <span class="number">0</span>);
+        <span class="macro">assert_ne!</span>(fp, <span class="number">0</span>);
+        <span class="macro">assert_ne!</span>(first_wasm_sp, <span class="number">0</span>);
+
+        <span class="comment">// The stack grows down, and therefore any frame pointer we are
+        // dealing with should be less than the stack pointer on entry
+        // to Wasm.
+        </span><span class="macro">assert!</span>(first_wasm_sp &gt;= fp, <span class="string">&quot;{first_wasm_sp:#x} &gt;= {fp:#x}&quot;</span>);
+
+        arch::assert_entry_sp_is_aligned(first_wasm_sp);
+
+        <span class="kw">loop </span>{
+            arch::assert_fp_is_aligned(fp);
+
+            <span class="macro">log::trace!</span>(<span class="string">&quot;--- Tracing through one Wasm frame ---&quot;</span>);
+            <span class="macro">log::trace!</span>(<span class="string">&quot;pc = {:p}&quot;</span>, pc <span class="kw">as </span><span class="kw-2">*const </span>());
+            <span class="macro">log::trace!</span>(<span class="string">&quot;fp = {:p}&quot;</span>, fp <span class="kw">as </span><span class="kw-2">*const </span>());
+
+            f(Frame { pc, fp })<span class="question-mark">?</span>;
+
+            <span class="comment">// If our FP has reached the SP upon entry to Wasm from the
+            // host, then we&#39;ve successfully walked all the Wasm frames,
+            // and have now reached a host frame. We&#39;re done iterating
+            // through this contiguous sequence of Wasm frames.
+            </span><span class="kw">if </span>arch::reached_entry_sp(fp, first_wasm_sp) {
+                <span class="macro">log::trace!</span>(<span class="string">&quot;=== Done tracing contiguous sequence of Wasm frames ===&quot;</span>);
+                <span class="kw">return </span>ControlFlow::Continue(());
+            }
+
+            <span class="comment">// If we didn&#39;t return above, then we know we are still in a
+            // Wasm frame, and since Cranelift maintains frame pointers,
+            // we know that the FP isn&#39;t an arbitrary value and it is
+            // safe to dereference it to read the next PC/FP.
+
+            </span>pc = arch::get_next_older_pc_from_fp(fp);
+
+            <span class="comment">// We rely on this offset being zero for all supported architectures
+            // in `crates/cranelift/src/component/compiler.rs` when we set the
+            // Wasm exit FP. If this ever changes, we will need to update that
+            // code as well!
+            </span><span class="macro">assert_eq!</span>(arch::NEXT_OLDER_FP_FROM_FP_OFFSET, <span class="number">0</span>);
+
+            <span class="kw">let </span>next_older_fp = <span class="kw-2">*</span>(fp <span class="kw">as </span><span class="kw-2">*mut </span>usize).add(arch::NEXT_OLDER_FP_FROM_FP_OFFSET);
+            <span class="comment">// Because the stack always grows down, the older FP must be greater
+            // than the current FP.
+            </span><span class="macro">assert!</span>(next_older_fp &gt; fp, <span class="string">&quot;{next_older_fp:#x} &gt; {fp:#x}&quot;</span>);
+            fp = next_older_fp;
+        }
+    }
+
+    <span class="doccomment">/// Iterate over the frames inside this backtrace.
+    </span><span class="kw">pub fn </span>frames&lt;<span class="lifetime">&#39;a</span>&gt;(<span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span><span class="self">self</span>) -&gt; <span class="kw">impl </span>ExactSizeIterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>Frame&gt; + <span class="lifetime">&#39;a </span>{
+        <span class="self">self</span>.<span class="number">0</span>.iter()
+    }
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="wasmtime_runtime" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

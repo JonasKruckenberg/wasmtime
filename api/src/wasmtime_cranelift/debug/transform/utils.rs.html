@@ -1,0 +1,376 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/cranelift/src/debug/transform/utils.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>utils.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../../../normalize.css"><link rel="stylesheet" href="../../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../../../ayu.css" disabled><link rel="stylesheet" href="../../../../dark.css" disabled><link rel="stylesheet" href="../../../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../../../storage.js"></script><script defer src="../../../../source-script.js"></script><script defer src="../../../../source-files.js"></script><script defer src="../../../../main.js"></script><noscript><link rel="stylesheet" href="../../../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../../../wasmtime_cranelift/index.html"><div class="logo-container"><img class="rust-logo" src="../../../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../../../wasmtime_cranelift/index.html"><div class="logo-container"><img class="rust-logo" src="../../../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../../../wasmtime_cranelift/index.html"><img class="rust-logo" src="../../../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+</pre><pre class="rust"><code><span class="kw">use </span><span class="kw">super</span>::address_transform::AddressTransform;
+<span class="kw">use </span><span class="kw">super</span>::expression::{CompiledExpression, FunctionFrameInfo};
+<span class="kw">use </span><span class="kw">crate</span>::debug::ModuleMemoryOffset;
+<span class="kw">use </span><span class="kw">crate</span>::CompiledFunctions;
+<span class="kw">use </span>anyhow::Error;
+<span class="kw">use </span>cranelift_codegen::isa::TargetIsa;
+<span class="kw">use </span>gimli::write;
+<span class="kw">use </span>wasmtime_environ::DefinedFuncIndex;
+
+<span class="doccomment">/// Adds internal Wasm utility types DIEs such as WebAssemblyPtr and
+/// WasmtimeVMContext.
+///
+/// For unwrapping Wasm pointer, the WasmtimeVMContext has the `set()` method
+/// that allows to control current Wasm memory to inspect.
+/// Notice that &quot;set_vmctx_memory&quot; is an external/builtin subprogram that
+/// is not part of Wasm code.
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>add_internal_types(
+    comp_unit: <span class="kw-2">&amp;mut </span>write::Unit,
+    root_id: write::UnitEntryId,
+    out_strings: <span class="kw-2">&amp;mut </span>write::StringTable,
+    memory_offset: <span class="kw-2">&amp;</span>ModuleMemoryOffset,
+) -&gt; (write::UnitEntryId, write::UnitEntryId) {
+    <span class="kw">const </span>WASM_PTR_LEN: u8 = <span class="number">4</span>;
+
+    <span class="macro">macro_rules! </span>add_tag {
+        (<span class="macro-nonterminal">$parent_id</span>:ident, <span class="macro-nonterminal">$tag</span>:expr =&gt; <span class="macro-nonterminal">$die</span>:ident <span class="kw">as </span><span class="macro-nonterminal">$die_id</span>:ident { $(<span class="macro-nonterminal">$a</span>:path = <span class="macro-nonterminal">$v</span>:expr),* }) =&gt; {
+            <span class="kw">let </span><span class="macro-nonterminal">$die_id </span>= comp_unit.add(<span class="macro-nonterminal">$parent_id</span>, <span class="macro-nonterminal">$tag</span>);
+            <span class="kw">let </span><span class="macro-nonterminal">$die </span>= comp_unit.get_mut(<span class="macro-nonterminal">$die_id</span>);
+            $( <span class="macro-nonterminal">$die</span>.set(<span class="macro-nonterminal">$a</span>, <span class="macro-nonterminal">$v</span>); )*
+        };
+    }
+
+    <span class="comment">// Build DW_TAG_base_type for generic `WebAssemblyPtr`.
+    //  .. DW_AT_name = &quot;WebAssemblyPtr&quot;
+    //  .. DW_AT_byte_size = 4
+    //  .. DW_AT_encoding = DW_ATE_unsigned
+    // let wp_die_id = comp_unit.add(root_id, gimli::DW_TAG_base_type);
+    // let wp_die = comp_unit.get_mut(wp_die_id);
+    </span><span class="macro">add_tag!</span>(root_id, gimli::DW_TAG_base_type =&gt; wp_die <span class="kw">as </span>wp_die_id {
+        gimli::DW_AT_name = write::AttributeValue::StringRef(out_strings.add(<span class="string">&quot;WebAssemblyPtr&quot;</span>)),
+        gimli::DW_AT_byte_size = write::AttributeValue::Data1(WASM_PTR_LEN),
+        gimli::DW_AT_encoding = write::AttributeValue::Encoding(gimli::DW_ATE_unsigned)
+    });
+
+    <span class="comment">// Build DW_TAG_base_type for Wasm byte:
+    //  .. DW_AT_name = u8
+    //  .. DW_AT_encoding = DW_ATE_unsigned
+    //  .. DW_AT_byte_size = 1
+    </span><span class="macro">add_tag!</span>(root_id, gimli::DW_TAG_base_type =&gt; memory_byte_die <span class="kw">as </span>memory_byte_die_id {
+        gimli::DW_AT_name = write::AttributeValue::StringRef(out_strings.add(<span class="string">&quot;u8&quot;</span>)),
+        gimli::DW_AT_encoding = write::AttributeValue::Encoding(gimli::DW_ATE_unsigned),
+        gimli::DW_AT_byte_size = write::AttributeValue::Data1(<span class="number">1</span>)
+    });
+
+    <span class="comment">// Build DW_TAG_pointer_type that references Wasm bytes:
+    //  .. DW_AT_name = &quot;u8*&quot;
+    //  .. DW_AT_type = &lt;memory_byte_die&gt;
+    </span><span class="macro">add_tag!</span>(root_id, gimli::DW_TAG_pointer_type =&gt; memory_bytes_die <span class="kw">as </span>memory_bytes_die_id {
+        gimli::DW_AT_name = write::AttributeValue::StringRef(out_strings.add(<span class="string">&quot;u8*&quot;</span>)),
+        gimli::DW_AT_type = write::AttributeValue::UnitRef(memory_byte_die_id)
+    });
+
+    <span class="comment">// Create artificial VMContext type and its reference for convinience viewing
+    // its fields (such as memory ref) in a debugger. Build DW_TAG_structure_type:
+    //   .. DW_AT_name = &quot;WasmtimeVMContext&quot;
+    </span><span class="kw">let </span>vmctx_die_id = comp_unit.add(root_id, gimli::DW_TAG_structure_type);
+    <span class="kw">let </span>vmctx_die = comp_unit.get_mut(vmctx_die_id);
+    vmctx_die.set(
+        gimli::DW_AT_name,
+        write::AttributeValue::StringRef(out_strings.add(<span class="string">&quot;WasmtimeVMContext&quot;</span>)),
+    );
+
+    <span class="comment">// TODO multiple memories
+    </span><span class="kw">match </span><span class="kw-2">*</span>memory_offset {
+        ModuleMemoryOffset::Defined(memory_offset) =&gt; {
+            <span class="comment">// The context has defined memory: extend the WasmtimeVMContext size
+            // past the &quot;memory&quot; field.
+            </span><span class="kw">const </span>MEMORY_FIELD_SIZE_PLUS_PADDING: u32 = <span class="number">8</span>;
+            vmctx_die.set(
+                gimli::DW_AT_byte_size,
+                write::AttributeValue::Data4(memory_offset + MEMORY_FIELD_SIZE_PLUS_PADDING),
+            );
+
+            <span class="comment">// Define the &quot;memory&quot; field which is a direct pointer to allocated Wasm memory.
+            // Build DW_TAG_member:
+            //  .. DW_AT_name = &quot;memory&quot;
+            //  .. DW_AT_type = &lt;memory_bytes_die&gt;
+            //  .. DW_AT_data_member_location = `memory_offset`
+            </span><span class="macro">add_tag!</span>(vmctx_die_id, gimli::DW_TAG_member =&gt; m_die <span class="kw">as </span>m_die_id {
+                gimli::DW_AT_name = write::AttributeValue::StringRef(out_strings.add(<span class="string">&quot;memory&quot;</span>)),
+                gimli::DW_AT_type = write::AttributeValue::UnitRef(memory_bytes_die_id),
+                gimli::DW_AT_data_member_location = write::AttributeValue::Udata(memory_offset <span class="kw">as </span>u64)
+            });
+        }
+        ModuleMemoryOffset::Imported(<span class="kw">_</span>) =&gt; {
+            <span class="comment">// TODO implement convinience pointer to and additional types for VMMemoryImport.
+        </span>}
+        ModuleMemoryOffset::None =&gt; (),
+    }
+
+    <span class="comment">// Build DW_TAG_pointer_type for `WasmtimeVMContext*`:
+    //  .. DW_AT_name = &quot;WasmtimeVMContext*&quot;
+    //  .. DW_AT_type = &lt;vmctx_die&gt;
+    </span><span class="macro">add_tag!</span>(root_id, gimli::DW_TAG_pointer_type =&gt; vmctx_ptr_die <span class="kw">as </span>vmctx_ptr_die_id {
+        gimli::DW_AT_name = write::AttributeValue::StringRef(out_strings.add(<span class="string">&quot;WasmtimeVMContext*&quot;</span>)),
+        gimli::DW_AT_type = write::AttributeValue::UnitRef(vmctx_die_id)
+    });
+
+    <span class="comment">// Build vmctx_die&#39;s DW_TAG_subprogram for `set` method:
+    //  .. DW_AT_linkage_name = &quot;set_vmctx_memory&quot;
+    //  .. DW_AT_name = &quot;set&quot;
+    //  .. DW_TAG_formal_parameter
+    //  ..  .. DW_AT_type = &lt;vmctx_ptr_die&gt;
+    //  ..  .. DW_AT_artificial = 1
+    </span><span class="macro">add_tag!</span>(vmctx_die_id, gimli::DW_TAG_subprogram =&gt; vmctx_set <span class="kw">as </span>vmctx_set_id {
+        gimli::DW_AT_linkage_name = write::AttributeValue::StringRef(out_strings.add(<span class="string">&quot;set_vmctx_memory&quot;</span>)),
+        gimli::DW_AT_name = write::AttributeValue::StringRef(out_strings.add(<span class="string">&quot;set&quot;</span>))
+    });
+    <span class="macro">add_tag!</span>(vmctx_set_id, gimli::DW_TAG_formal_parameter =&gt; vmctx_set_this_param <span class="kw">as </span>vmctx_set_this_param_id {
+        gimli::DW_AT_type = write::AttributeValue::UnitRef(vmctx_ptr_die_id),
+        gimli::DW_AT_artificial = write::AttributeValue::Flag(<span class="bool-val">true</span>)
+    });
+
+    (wp_die_id, vmctx_ptr_die_id)
+}
+
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>append_vmctx_info(
+    comp_unit: <span class="kw-2">&amp;mut </span>write::Unit,
+    parent_id: write::UnitEntryId,
+    vmctx_die_id: write::UnitEntryId,
+    addr_tr: <span class="kw-2">&amp;</span>AddressTransform,
+    frame_info: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>FunctionFrameInfo&gt;,
+    scope_ranges: <span class="kw-2">&amp;</span>[(u64, u64)],
+    out_strings: <span class="kw-2">&amp;mut </span>write::StringTable,
+    isa: <span class="kw-2">&amp;</span><span class="kw">dyn </span>TargetIsa,
+) -&gt; <span class="prelude-ty">Result</span>&lt;(), Error&gt; {
+    <span class="kw">let </span>loc = {
+        <span class="kw">let </span>expr = CompiledExpression::vmctx();
+        <span class="kw">let </span>locs = expr
+            .build_with_locals(scope_ranges, addr_tr, frame_info, isa)
+            .map(|i| {
+                i.map(|(begin, length, data)| write::Location::StartLength {
+                    begin,
+                    length,
+                    data,
+                })
+            })
+            .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;, <span class="kw">_</span>&gt;&gt;()<span class="question-mark">?</span>;
+        <span class="kw">let </span>list_id = comp_unit.locations.add(write::LocationList(locs));
+        write::AttributeValue::LocationListRef(list_id)
+    };
+
+    <span class="kw">let </span>var_die_id = comp_unit.add(parent_id, gimli::DW_TAG_variable);
+    <span class="kw">let </span>var_die = comp_unit.get_mut(var_die_id);
+    var_die.set(
+        gimli::DW_AT_name,
+        write::AttributeValue::StringRef(out_strings.add(<span class="string">&quot;__vmctx&quot;</span>)),
+    );
+    var_die.set(
+        gimli::DW_AT_type,
+        write::AttributeValue::UnitRef(vmctx_die_id),
+    );
+    var_die.set(gimli::DW_AT_location, loc);
+
+    <span class="prelude-val">Ok</span>(())
+}
+
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>get_function_frame_info&lt;<span class="lifetime">&#39;a</span>, <span class="lifetime">&#39;b</span>, <span class="lifetime">&#39;c</span>&gt;(
+    memory_offset: <span class="kw-2">&amp;</span>ModuleMemoryOffset,
+    funcs: <span class="kw-2">&amp;</span><span class="lifetime">&#39;b </span>CompiledFunctions,
+    func_index: DefinedFuncIndex,
+) -&gt; <span class="prelude-ty">Option</span>&lt;FunctionFrameInfo&lt;<span class="lifetime">&#39;a</span>&gt;&gt;
+<span class="kw">where
+    </span><span class="lifetime">&#39;b</span>: <span class="lifetime">&#39;a</span>,
+    <span class="lifetime">&#39;c</span>: <span class="lifetime">&#39;a</span>,
+{
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(func) = funcs.get(func_index) {
+        <span class="kw">let </span>frame_info = FunctionFrameInfo {
+            value_ranges: <span class="kw-2">&amp;</span>func.value_labels_ranges,
+            memory_offset: memory_offset.clone(),
+            sized_stack_slots: <span class="kw-2">&amp;</span>func.sized_stack_slots,
+        };
+        <span class="prelude-val">Some</span>(frame_info)
+    } <span class="kw">else </span>{
+        <span class="prelude-val">None
+    </span>}
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../../../" data-current-crate="wasmtime_cranelift" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

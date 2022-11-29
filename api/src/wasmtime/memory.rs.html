@@ -1,0 +1,1892 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/wasmtime/src/memory.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>memory.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../normalize.css"><link rel="stylesheet" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../ayu.css" disabled><link rel="stylesheet" href="../../dark.css" disabled><link rel="stylesheet" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../wasmtime/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../wasmtime/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../wasmtime/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
+<span id="217">217</span>
+<span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
+<span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
+<span id="322">322</span>
+<span id="323">323</span>
+<span id="324">324</span>
+<span id="325">325</span>
+<span id="326">326</span>
+<span id="327">327</span>
+<span id="328">328</span>
+<span id="329">329</span>
+<span id="330">330</span>
+<span id="331">331</span>
+<span id="332">332</span>
+<span id="333">333</span>
+<span id="334">334</span>
+<span id="335">335</span>
+<span id="336">336</span>
+<span id="337">337</span>
+<span id="338">338</span>
+<span id="339">339</span>
+<span id="340">340</span>
+<span id="341">341</span>
+<span id="342">342</span>
+<span id="343">343</span>
+<span id="344">344</span>
+<span id="345">345</span>
+<span id="346">346</span>
+<span id="347">347</span>
+<span id="348">348</span>
+<span id="349">349</span>
+<span id="350">350</span>
+<span id="351">351</span>
+<span id="352">352</span>
+<span id="353">353</span>
+<span id="354">354</span>
+<span id="355">355</span>
+<span id="356">356</span>
+<span id="357">357</span>
+<span id="358">358</span>
+<span id="359">359</span>
+<span id="360">360</span>
+<span id="361">361</span>
+<span id="362">362</span>
+<span id="363">363</span>
+<span id="364">364</span>
+<span id="365">365</span>
+<span id="366">366</span>
+<span id="367">367</span>
+<span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
+<span id="373">373</span>
+<span id="374">374</span>
+<span id="375">375</span>
+<span id="376">376</span>
+<span id="377">377</span>
+<span id="378">378</span>
+<span id="379">379</span>
+<span id="380">380</span>
+<span id="381">381</span>
+<span id="382">382</span>
+<span id="383">383</span>
+<span id="384">384</span>
+<span id="385">385</span>
+<span id="386">386</span>
+<span id="387">387</span>
+<span id="388">388</span>
+<span id="389">389</span>
+<span id="390">390</span>
+<span id="391">391</span>
+<span id="392">392</span>
+<span id="393">393</span>
+<span id="394">394</span>
+<span id="395">395</span>
+<span id="396">396</span>
+<span id="397">397</span>
+<span id="398">398</span>
+<span id="399">399</span>
+<span id="400">400</span>
+<span id="401">401</span>
+<span id="402">402</span>
+<span id="403">403</span>
+<span id="404">404</span>
+<span id="405">405</span>
+<span id="406">406</span>
+<span id="407">407</span>
+<span id="408">408</span>
+<span id="409">409</span>
+<span id="410">410</span>
+<span id="411">411</span>
+<span id="412">412</span>
+<span id="413">413</span>
+<span id="414">414</span>
+<span id="415">415</span>
+<span id="416">416</span>
+<span id="417">417</span>
+<span id="418">418</span>
+<span id="419">419</span>
+<span id="420">420</span>
+<span id="421">421</span>
+<span id="422">422</span>
+<span id="423">423</span>
+<span id="424">424</span>
+<span id="425">425</span>
+<span id="426">426</span>
+<span id="427">427</span>
+<span id="428">428</span>
+<span id="429">429</span>
+<span id="430">430</span>
+<span id="431">431</span>
+<span id="432">432</span>
+<span id="433">433</span>
+<span id="434">434</span>
+<span id="435">435</span>
+<span id="436">436</span>
+<span id="437">437</span>
+<span id="438">438</span>
+<span id="439">439</span>
+<span id="440">440</span>
+<span id="441">441</span>
+<span id="442">442</span>
+<span id="443">443</span>
+<span id="444">444</span>
+<span id="445">445</span>
+<span id="446">446</span>
+<span id="447">447</span>
+<span id="448">448</span>
+<span id="449">449</span>
+<span id="450">450</span>
+<span id="451">451</span>
+<span id="452">452</span>
+<span id="453">453</span>
+<span id="454">454</span>
+<span id="455">455</span>
+<span id="456">456</span>
+<span id="457">457</span>
+<span id="458">458</span>
+<span id="459">459</span>
+<span id="460">460</span>
+<span id="461">461</span>
+<span id="462">462</span>
+<span id="463">463</span>
+<span id="464">464</span>
+<span id="465">465</span>
+<span id="466">466</span>
+<span id="467">467</span>
+<span id="468">468</span>
+<span id="469">469</span>
+<span id="470">470</span>
+<span id="471">471</span>
+<span id="472">472</span>
+<span id="473">473</span>
+<span id="474">474</span>
+<span id="475">475</span>
+<span id="476">476</span>
+<span id="477">477</span>
+<span id="478">478</span>
+<span id="479">479</span>
+<span id="480">480</span>
+<span id="481">481</span>
+<span id="482">482</span>
+<span id="483">483</span>
+<span id="484">484</span>
+<span id="485">485</span>
+<span id="486">486</span>
+<span id="487">487</span>
+<span id="488">488</span>
+<span id="489">489</span>
+<span id="490">490</span>
+<span id="491">491</span>
+<span id="492">492</span>
+<span id="493">493</span>
+<span id="494">494</span>
+<span id="495">495</span>
+<span id="496">496</span>
+<span id="497">497</span>
+<span id="498">498</span>
+<span id="499">499</span>
+<span id="500">500</span>
+<span id="501">501</span>
+<span id="502">502</span>
+<span id="503">503</span>
+<span id="504">504</span>
+<span id="505">505</span>
+<span id="506">506</span>
+<span id="507">507</span>
+<span id="508">508</span>
+<span id="509">509</span>
+<span id="510">510</span>
+<span id="511">511</span>
+<span id="512">512</span>
+<span id="513">513</span>
+<span id="514">514</span>
+<span id="515">515</span>
+<span id="516">516</span>
+<span id="517">517</span>
+<span id="518">518</span>
+<span id="519">519</span>
+<span id="520">520</span>
+<span id="521">521</span>
+<span id="522">522</span>
+<span id="523">523</span>
+<span id="524">524</span>
+<span id="525">525</span>
+<span id="526">526</span>
+<span id="527">527</span>
+<span id="528">528</span>
+<span id="529">529</span>
+<span id="530">530</span>
+<span id="531">531</span>
+<span id="532">532</span>
+<span id="533">533</span>
+<span id="534">534</span>
+<span id="535">535</span>
+<span id="536">536</span>
+<span id="537">537</span>
+<span id="538">538</span>
+<span id="539">539</span>
+<span id="540">540</span>
+<span id="541">541</span>
+<span id="542">542</span>
+<span id="543">543</span>
+<span id="544">544</span>
+<span id="545">545</span>
+<span id="546">546</span>
+<span id="547">547</span>
+<span id="548">548</span>
+<span id="549">549</span>
+<span id="550">550</span>
+<span id="551">551</span>
+<span id="552">552</span>
+<span id="553">553</span>
+<span id="554">554</span>
+<span id="555">555</span>
+<span id="556">556</span>
+<span id="557">557</span>
+<span id="558">558</span>
+<span id="559">559</span>
+<span id="560">560</span>
+<span id="561">561</span>
+<span id="562">562</span>
+<span id="563">563</span>
+<span id="564">564</span>
+<span id="565">565</span>
+<span id="566">566</span>
+<span id="567">567</span>
+<span id="568">568</span>
+<span id="569">569</span>
+<span id="570">570</span>
+<span id="571">571</span>
+<span id="572">572</span>
+<span id="573">573</span>
+<span id="574">574</span>
+<span id="575">575</span>
+<span id="576">576</span>
+<span id="577">577</span>
+<span id="578">578</span>
+<span id="579">579</span>
+<span id="580">580</span>
+<span id="581">581</span>
+<span id="582">582</span>
+<span id="583">583</span>
+<span id="584">584</span>
+<span id="585">585</span>
+<span id="586">586</span>
+<span id="587">587</span>
+<span id="588">588</span>
+<span id="589">589</span>
+<span id="590">590</span>
+<span id="591">591</span>
+<span id="592">592</span>
+<span id="593">593</span>
+<span id="594">594</span>
+<span id="595">595</span>
+<span id="596">596</span>
+<span id="597">597</span>
+<span id="598">598</span>
+<span id="599">599</span>
+<span id="600">600</span>
+<span id="601">601</span>
+<span id="602">602</span>
+<span id="603">603</span>
+<span id="604">604</span>
+<span id="605">605</span>
+<span id="606">606</span>
+<span id="607">607</span>
+<span id="608">608</span>
+<span id="609">609</span>
+<span id="610">610</span>
+<span id="611">611</span>
+<span id="612">612</span>
+<span id="613">613</span>
+<span id="614">614</span>
+<span id="615">615</span>
+<span id="616">616</span>
+<span id="617">617</span>
+<span id="618">618</span>
+<span id="619">619</span>
+<span id="620">620</span>
+<span id="621">621</span>
+<span id="622">622</span>
+<span id="623">623</span>
+<span id="624">624</span>
+<span id="625">625</span>
+<span id="626">626</span>
+<span id="627">627</span>
+<span id="628">628</span>
+<span id="629">629</span>
+<span id="630">630</span>
+<span id="631">631</span>
+<span id="632">632</span>
+<span id="633">633</span>
+<span id="634">634</span>
+<span id="635">635</span>
+<span id="636">636</span>
+<span id="637">637</span>
+<span id="638">638</span>
+<span id="639">639</span>
+<span id="640">640</span>
+<span id="641">641</span>
+<span id="642">642</span>
+<span id="643">643</span>
+<span id="644">644</span>
+<span id="645">645</span>
+<span id="646">646</span>
+<span id="647">647</span>
+<span id="648">648</span>
+<span id="649">649</span>
+<span id="650">650</span>
+<span id="651">651</span>
+<span id="652">652</span>
+<span id="653">653</span>
+<span id="654">654</span>
+<span id="655">655</span>
+<span id="656">656</span>
+<span id="657">657</span>
+<span id="658">658</span>
+<span id="659">659</span>
+<span id="660">660</span>
+<span id="661">661</span>
+<span id="662">662</span>
+<span id="663">663</span>
+<span id="664">664</span>
+<span id="665">665</span>
+<span id="666">666</span>
+<span id="667">667</span>
+<span id="668">668</span>
+<span id="669">669</span>
+<span id="670">670</span>
+<span id="671">671</span>
+<span id="672">672</span>
+<span id="673">673</span>
+<span id="674">674</span>
+<span id="675">675</span>
+<span id="676">676</span>
+<span id="677">677</span>
+<span id="678">678</span>
+<span id="679">679</span>
+<span id="680">680</span>
+<span id="681">681</span>
+<span id="682">682</span>
+<span id="683">683</span>
+<span id="684">684</span>
+<span id="685">685</span>
+<span id="686">686</span>
+<span id="687">687</span>
+<span id="688">688</span>
+<span id="689">689</span>
+<span id="690">690</span>
+<span id="691">691</span>
+<span id="692">692</span>
+<span id="693">693</span>
+<span id="694">694</span>
+<span id="695">695</span>
+<span id="696">696</span>
+<span id="697">697</span>
+<span id="698">698</span>
+<span id="699">699</span>
+<span id="700">700</span>
+<span id="701">701</span>
+<span id="702">702</span>
+<span id="703">703</span>
+<span id="704">704</span>
+<span id="705">705</span>
+<span id="706">706</span>
+<span id="707">707</span>
+<span id="708">708</span>
+<span id="709">709</span>
+<span id="710">710</span>
+<span id="711">711</span>
+<span id="712">712</span>
+<span id="713">713</span>
+<span id="714">714</span>
+<span id="715">715</span>
+<span id="716">716</span>
+<span id="717">717</span>
+<span id="718">718</span>
+<span id="719">719</span>
+<span id="720">720</span>
+<span id="721">721</span>
+<span id="722">722</span>
+<span id="723">723</span>
+<span id="724">724</span>
+<span id="725">725</span>
+<span id="726">726</span>
+<span id="727">727</span>
+<span id="728">728</span>
+<span id="729">729</span>
+<span id="730">730</span>
+<span id="731">731</span>
+<span id="732">732</span>
+<span id="733">733</span>
+<span id="734">734</span>
+<span id="735">735</span>
+<span id="736">736</span>
+<span id="737">737</span>
+<span id="738">738</span>
+<span id="739">739</span>
+<span id="740">740</span>
+<span id="741">741</span>
+<span id="742">742</span>
+<span id="743">743</span>
+<span id="744">744</span>
+<span id="745">745</span>
+<span id="746">746</span>
+<span id="747">747</span>
+<span id="748">748</span>
+<span id="749">749</span>
+<span id="750">750</span>
+<span id="751">751</span>
+<span id="752">752</span>
+<span id="753">753</span>
+<span id="754">754</span>
+<span id="755">755</span>
+<span id="756">756</span>
+<span id="757">757</span>
+<span id="758">758</span>
+<span id="759">759</span>
+<span id="760">760</span>
+<span id="761">761</span>
+<span id="762">762</span>
+<span id="763">763</span>
+<span id="764">764</span>
+<span id="765">765</span>
+<span id="766">766</span>
+<span id="767">767</span>
+<span id="768">768</span>
+<span id="769">769</span>
+<span id="770">770</span>
+<span id="771">771</span>
+<span id="772">772</span>
+<span id="773">773</span>
+<span id="774">774</span>
+<span id="775">775</span>
+<span id="776">776</span>
+<span id="777">777</span>
+<span id="778">778</span>
+<span id="779">779</span>
+<span id="780">780</span>
+<span id="781">781</span>
+<span id="782">782</span>
+<span id="783">783</span>
+<span id="784">784</span>
+<span id="785">785</span>
+<span id="786">786</span>
+<span id="787">787</span>
+<span id="788">788</span>
+<span id="789">789</span>
+<span id="790">790</span>
+<span id="791">791</span>
+<span id="792">792</span>
+<span id="793">793</span>
+<span id="794">794</span>
+<span id="795">795</span>
+<span id="796">796</span>
+<span id="797">797</span>
+<span id="798">798</span>
+<span id="799">799</span>
+<span id="800">800</span>
+<span id="801">801</span>
+<span id="802">802</span>
+<span id="803">803</span>
+<span id="804">804</span>
+<span id="805">805</span>
+<span id="806">806</span>
+<span id="807">807</span>
+<span id="808">808</span>
+<span id="809">809</span>
+<span id="810">810</span>
+<span id="811">811</span>
+<span id="812">812</span>
+<span id="813">813</span>
+<span id="814">814</span>
+<span id="815">815</span>
+<span id="816">816</span>
+<span id="817">817</span>
+<span id="818">818</span>
+<span id="819">819</span>
+<span id="820">820</span>
+<span id="821">821</span>
+<span id="822">822</span>
+<span id="823">823</span>
+<span id="824">824</span>
+<span id="825">825</span>
+<span id="826">826</span>
+<span id="827">827</span>
+<span id="828">828</span>
+<span id="829">829</span>
+<span id="830">830</span>
+<span id="831">831</span>
+<span id="832">832</span>
+<span id="833">833</span>
+<span id="834">834</span>
+<span id="835">835</span>
+<span id="836">836</span>
+<span id="837">837</span>
+<span id="838">838</span>
+<span id="839">839</span>
+<span id="840">840</span>
+<span id="841">841</span>
+<span id="842">842</span>
+<span id="843">843</span>
+<span id="844">844</span>
+<span id="845">845</span>
+<span id="846">846</span>
+<span id="847">847</span>
+<span id="848">848</span>
+<span id="849">849</span>
+<span id="850">850</span>
+<span id="851">851</span>
+<span id="852">852</span>
+<span id="853">853</span>
+<span id="854">854</span>
+<span id="855">855</span>
+<span id="856">856</span>
+<span id="857">857</span>
+<span id="858">858</span>
+<span id="859">859</span>
+<span id="860">860</span>
+<span id="861">861</span>
+<span id="862">862</span>
+<span id="863">863</span>
+<span id="864">864</span>
+<span id="865">865</span>
+<span id="866">866</span>
+<span id="867">867</span>
+<span id="868">868</span>
+<span id="869">869</span>
+<span id="870">870</span>
+<span id="871">871</span>
+<span id="872">872</span>
+<span id="873">873</span>
+<span id="874">874</span>
+<span id="875">875</span>
+<span id="876">876</span>
+<span id="877">877</span>
+<span id="878">878</span>
+<span id="879">879</span>
+<span id="880">880</span>
+<span id="881">881</span>
+<span id="882">882</span>
+<span id="883">883</span>
+<span id="884">884</span>
+<span id="885">885</span>
+<span id="886">886</span>
+<span id="887">887</span>
+<span id="888">888</span>
+<span id="889">889</span>
+<span id="890">890</span>
+<span id="891">891</span>
+<span id="892">892</span>
+<span id="893">893</span>
+<span id="894">894</span>
+<span id="895">895</span>
+<span id="896">896</span>
+<span id="897">897</span>
+<span id="898">898</span>
+<span id="899">899</span>
+<span id="900">900</span>
+<span id="901">901</span>
+<span id="902">902</span>
+<span id="903">903</span>
+<span id="904">904</span>
+<span id="905">905</span>
+<span id="906">906</span>
+<span id="907">907</span>
+<span id="908">908</span>
+<span id="909">909</span>
+<span id="910">910</span>
+<span id="911">911</span>
+<span id="912">912</span>
+<span id="913">913</span>
+<span id="914">914</span>
+<span id="915">915</span>
+<span id="916">916</span>
+<span id="917">917</span>
+<span id="918">918</span>
+<span id="919">919</span>
+<span id="920">920</span>
+<span id="921">921</span>
+<span id="922">922</span>
+<span id="923">923</span>
+<span id="924">924</span>
+<span id="925">925</span>
+<span id="926">926</span>
+<span id="927">927</span>
+<span id="928">928</span>
+<span id="929">929</span>
+<span id="930">930</span>
+<span id="931">931</span>
+<span id="932">932</span>
+<span id="933">933</span>
+<span id="934">934</span>
+<span id="935">935</span>
+<span id="936">936</span>
+<span id="937">937</span>
+<span id="938">938</span>
+<span id="939">939</span>
+<span id="940">940</span>
+<span id="941">941</span>
+<span id="942">942</span>
+<span id="943">943</span>
+<span id="944">944</span>
+<span id="945">945</span>
+</pre><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::store::{StoreData, StoreOpaque, Stored};
+<span class="kw">use </span><span class="kw">crate</span>::trampoline::generate_memory_export;
+<span class="kw">use </span><span class="kw">crate</span>::Trap;
+<span class="kw">use crate</span>::{AsContext, AsContextMut, Engine, MemoryType, StoreContext, StoreContextMut};
+<span class="kw">use </span>anyhow::{bail, <span class="prelude-ty">Result</span>};
+<span class="kw">use </span>std::cell::UnsafeCell;
+<span class="kw">use </span>std::convert::TryFrom;
+<span class="kw">use </span>std::slice;
+<span class="kw">use </span>std::time::Instant;
+<span class="kw">use </span>wasmtime_environ::MemoryPlan;
+<span class="kw">use </span>wasmtime_runtime::{RuntimeLinearMemory, VMMemoryImport};
+
+<span class="kw">pub use </span>wasmtime_runtime::WaitResult;
+
+<span class="doccomment">/// Error for out of bounds [`Memory`] access.
+</span><span class="attribute">#[derive(Debug)]
+#[non_exhaustive]
+</span><span class="kw">pub struct </span>MemoryAccessError {
+    <span class="comment">// Keep struct internals private for future extensibility.
+    </span>_private: (),
+}
+
+<span class="kw">impl </span>std::fmt::Display <span class="kw">for </span>MemoryAccessError {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">&#39;_</span>&gt;) -&gt; std::fmt::Result {
+        <span class="macro">write!</span>(f, <span class="string">&quot;out of bounds memory access&quot;</span>)
+    }
+}
+
+<span class="kw">impl </span>std::error::Error <span class="kw">for </span>MemoryAccessError {}
+
+<span class="doccomment">/// A WebAssembly linear memory.
+///
+/// WebAssembly memories represent a contiguous array of bytes that have a size
+/// that is always a multiple of the WebAssembly page size, currently 64
+/// kilobytes.
+///
+/// WebAssembly memory is used for global data (not to be confused with wasm
+/// `global` items), statics in C/C++/Rust, shadow stack memory, etc. Accessing
+/// wasm memory is generally quite fast.
+///
+/// Memories, like other wasm items, are owned by a [`Store`](crate::Store).
+///
+/// # `Memory` and Safety
+///
+/// Linear memory is a lynchpin of safety for WebAssembly. In Wasmtime there are
+/// safe methods of interacting with a [`Memory`]:
+///
+/// * [`Memory::read`]
+/// * [`Memory::write`]
+/// * [`Memory::data`]
+/// * [`Memory::data_mut`]
+///
+/// Note that all of these consider the entire store context as borrowed for the
+/// duration of the call or the duration of the returned slice. This largely
+/// means that while the function is running you&#39;ll be unable to borrow anything
+/// else from the store. This includes getting access to the `T` on
+/// [`Store&lt;T&gt;`](crate::Store), but it also means that you can&#39;t recursively
+/// call into WebAssembly for instance.
+///
+/// If you&#39;d like to dip your toes into handling [`Memory`] in a more raw
+/// fashion (e.g. by using raw pointers or raw slices), then there&#39;s a few
+/// important points to consider when doing so:
+///
+/// * Any recursive calls into WebAssembly can possibly modify any byte of the
+///   entire memory. This means that whenever wasm is called Rust can&#39;t have any
+///   long-lived borrows live across the wasm function call. Slices like `&amp;mut
+///   [u8]` will be violated because they&#39;re not actually exclusive at that
+///   point, and slices like `&amp;[u8]` are also violated because their contents
+///   may be mutated.
+///
+/// * WebAssembly memories can grow, and growth may change the base pointer.
+///   This means that even holding a raw pointer to memory over a wasm function
+///   call is also incorrect. Anywhere in the function call the base address of
+///   memory may change. Note that growth can also be requested from the
+///   embedding API as well.
+///
+/// As a general rule of thumb it&#39;s recommended to stick to the safe methods of
+/// [`Memory`] if you can. It&#39;s not advised to use raw pointers or `unsafe`
+/// operations because of how easy it is to accidentally get things wrong.
+///
+/// Some examples of safely interacting with memory are:
+///
+/// ```rust
+/// use wasmtime::{Memory, Store, MemoryAccessError};
+///
+/// // Memory can be read and written safely with the `Memory::read` and
+/// // `Memory::write` methods.
+/// // An error is returned if the copy did not succeed.
+/// fn safe_examples(mem: Memory, store: &amp;mut Store&lt;()&gt;) -&gt; Result&lt;(), MemoryAccessError&gt; {
+///     let offset = 5;
+///     mem.write(&amp;mut *store, offset, b&quot;hello&quot;)?;
+///     let mut buffer = [0u8; 5];
+///     mem.read(&amp;store, offset, &amp;mut buffer)?;
+///     assert_eq!(b&quot;hello&quot;, &amp;buffer);
+///
+///     // Note that while this is safe care must be taken because the indexing
+///     // here may panic if the memory isn&#39;t large enough.
+///     assert_eq!(&amp;mem.data(&amp;store)[offset..offset + 5], b&quot;hello&quot;);
+///     mem.data_mut(&amp;mut *store)[offset..offset + 5].copy_from_slice(b&quot;bye!!&quot;);
+///
+///     Ok(())
+/// }
+/// ```
+///
+/// It&#39;s worth also, however, covering some examples of **incorrect**,
+/// **unsafe** usages of `Memory`. Do not do these things!
+///
+/// ```rust
+/// # use anyhow::Result;
+/// use wasmtime::{Memory, Store};
+///
+/// // NOTE: All code in this function is not safe to execute and may cause
+/// // segfaults/undefined behavior at runtime. Do not copy/paste these examples
+/// // into production code!
+/// unsafe fn unsafe_examples(mem: Memory, store: &amp;mut Store&lt;()&gt;) -&gt; Result&lt;()&gt; {
+///     // First and foremost, any borrow can be invalidated at any time via the
+///     // `Memory::grow` function. This can relocate memory which causes any
+///     // previous pointer to be possibly invalid now.
+///     let pointer: &amp;u8 = &amp;*mem.data_ptr(&amp;store);
+///     mem.grow(&amp;mut *store, 1)?; // invalidates `pointer`!
+///     // println!(&quot;{}&quot;, *pointer); // FATAL: use-after-free
+///
+///     // Note that the use-after-free also applies to slices, whether they&#39;re
+///     // slices of bytes or strings.
+///     let mem_slice = std::slice::from_raw_parts(
+///         mem.data_ptr(&amp;store),
+///         mem.data_size(&amp;store),
+///     );
+///     let slice: &amp;[u8] = &amp;mem_slice[0x100..0x102];
+///     mem.grow(&amp;mut *store, 1)?; // invalidates `slice`!
+///     // println!(&quot;{:?}&quot;, slice); // FATAL: use-after-free
+///
+///     // The `Memory` type may be stored in other locations, so if you hand
+///     // off access to the `Store` then those locations may also call
+///     // `Memory::grow` or similar, so it&#39;s not enough to just audit code for
+///     // calls to `Memory::grow`.
+///     let pointer: &amp;u8 = &amp;*mem.data_ptr(&amp;store);
+///     some_other_function(store); // may invalidate `pointer` through use of `store`
+///     // println!(&quot;{:?}&quot;, pointer); // FATAL: maybe a use-after-free
+///
+///     // An especially subtle aspect of accessing a wasm instance&#39;s memory is
+///     // that you need to be extremely careful about aliasing. Anyone at any
+///     // time can call `data_unchecked()` or `data_unchecked_mut()`, which
+///     // means you can easily have aliasing mutable references:
+///     let ref1: &amp;u8 = &amp;*mem.data_ptr(&amp;store).add(0x100);
+///     let ref2: &amp;mut u8 = &amp;mut *mem.data_ptr(&amp;store).add(0x100);
+///     // *ref2 = *ref1; // FATAL: violates Rust&#39;s aliasing rules
+///
+///     Ok(())
+/// }
+/// # fn some_other_function(store: &amp;mut Store&lt;()&gt;) {}
+/// ```
+///
+/// Overall there&#39;s some general rules of thumb when unsafely working with
+/// `Memory` and getting raw pointers inside of it:
+///
+/// * If you never have a &quot;long lived&quot; pointer into memory, you&#39;re likely in the
+///   clear. Care still needs to be taken in threaded scenarios or when/where
+///   data is read, but you&#39;ll be shielded from many classes of issues.
+/// * Long-lived pointers must always respect Rust&#39;a aliasing rules. It&#39;s ok for
+///   shared borrows to overlap with each other, but mutable borrows must
+///   overlap with nothing.
+/// * Long-lived pointers are only valid if they&#39;re not invalidated for their
+///   lifetime. This means that [`Store`](crate::Store) isn&#39;t used to reenter
+///   wasm or the memory itself is never grown or otherwise modified/aliased.
+///
+/// At this point it&#39;s worth reiterating again that unsafely working with
+/// `Memory` is pretty tricky and not recommended! It&#39;s highly recommended to
+/// use the safe methods to interact with [`Memory`] whenever possible.
+///
+/// ## `Memory` Safety and Threads
+///
+/// Currently the `wasmtime` crate does not implement the wasm threads proposal,
+/// but it is planned to do so. It may be interesting to readers to see how this
+/// affects memory safety and what was previously just discussed as well.
+///
+/// Once threads are added into the mix, all of the above rules still apply.
+/// There&#39;s an additional consideration that all reads and writes can happen
+/// concurrently, though. This effectively means that any borrow into wasm
+/// memory are virtually never safe to have.
+///
+/// Mutable pointers are fundamentally unsafe to have in a concurrent scenario
+/// in the face of arbitrary wasm code. Only if you dynamically know for sure
+/// that wasm won&#39;t access a region would it be safe to construct a mutable
+/// pointer. Additionally even shared pointers are largely unsafe because their
+/// underlying contents may change, so unless `UnsafeCell` in one form or
+/// another is used everywhere there&#39;s no safety.
+///
+/// One important point about concurrency is that while [`Memory::grow`] can
+/// happen concurrently it will never relocate the base pointer. Shared
+/// memories must always have a maximum size and they will be preallocated such
+/// that growth will never relocate the base pointer. The current size of the
+/// memory may still change over time though.
+///
+/// Overall the general rule of thumb for shared memories is that you must
+/// atomically read and write everything. Nothing can be borrowed and everything
+/// must be eagerly copied out. This means that [`Memory::data`] and
+/// [`Memory::data_mut`] won&#39;t work in the future (they&#39;ll probably return an
+/// error) for shared memories when they&#39;re implemented. When possible it&#39;s
+/// recommended to use [`Memory::read`] and [`Memory::write`] which will still
+/// be provided.
+</span><span class="attribute">#[derive(Copy, Clone, Debug)]
+#[repr(transparent)] </span><span class="comment">// here for the C API
+</span><span class="kw">pub struct </span>Memory(Stored&lt;wasmtime_runtime::ExportMemory&gt;);
+
+<span class="kw">impl </span>Memory {
+    <span class="doccomment">/// Creates a new WebAssembly memory given the configuration of `ty`.
+    ///
+    /// The `store` argument will be the owner of the returned [`Memory`]. All
+    /// WebAssembly memory is initialized to zero.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the [`Store`](`crate::Store`) has a
+    /// [`ResourceLimiterAsync`](`crate::ResourceLimiterAsync`) (see also:
+    /// [`Store::limiter_async`](`crate::Store::limiter_async`)). When
+    /// using an async resource limiter, use [`Memory::new_async`] instead.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wasmtime::*;
+    /// # fn main() -&gt; anyhow::Result&lt;()&gt; {
+    /// let engine = Engine::default();
+    /// let mut store = Store::new(&amp;engine, ());
+    ///
+    /// let memory_ty = MemoryType::new(1, None);
+    /// let memory = Memory::new(&amp;mut store, memory_ty)?;
+    ///
+    /// let module = Module::new(&amp;engine, &quot;(module (memory (import \&quot;\&quot; \&quot;\&quot;) 1))&quot;)?;
+    /// let instance = Instance::new(&amp;mut store, &amp;module, &amp;[memory.into()])?;
+    /// // ...
+    /// # Ok(())
+    /// # }
+    /// ```
+    </span><span class="kw">pub fn </span>new(<span class="kw-2">mut </span>store: <span class="kw">impl </span>AsContextMut, ty: MemoryType) -&gt; <span class="prelude-ty">Result</span>&lt;Memory&gt; {
+        <span class="self">Self</span>::_new(store.as_context_mut().<span class="number">0</span>, ty)
+    }
+
+    <span class="attribute">#[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;async&quot;</span>)))]
+    </span><span class="doccomment">/// Async variant of [`Memory::new`]. You must use this variant with
+    /// [`Store`](`crate::Store`)s which have a
+    /// [`ResourceLimiterAsync`](`crate::ResourceLimiterAsync`).
+    ///
+    /// # Panics
+    ///
+    /// This function will panic when used with a non-async
+    /// [`Store`](`crate::Store`).
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;async&quot;</span>)]
+    </span><span class="kw">pub async fn </span>new_async&lt;T&gt;(
+        <span class="kw-2">mut </span>store: <span class="kw">impl </span>AsContextMut&lt;Data = T&gt;,
+        ty: MemoryType,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;Memory&gt;
+    <span class="kw">where
+        </span>T: Send,
+    {
+        <span class="kw">let </span><span class="kw-2">mut </span>store = store.as_context_mut();
+        <span class="macro">assert!</span>(
+            store.<span class="number">0</span>.async_support(),
+            <span class="string">&quot;cannot use `new_async` without enabling async support on the config&quot;
+        </span>);
+        store.on_fiber(|store| <span class="self">Self</span>::_new(store.<span class="number">0</span>, ty)).<span class="kw">await</span><span class="question-mark">?
+    </span>}
+
+    <span class="doccomment">/// Helper function for attaching the memory to a &quot;frankenstein&quot; instance
+    </span><span class="kw">fn </span>_new(store: <span class="kw-2">&amp;mut </span>StoreOpaque, ty: MemoryType) -&gt; <span class="prelude-ty">Result</span>&lt;Memory&gt; {
+        <span class="kw">unsafe </span>{
+            <span class="kw">let </span>export = generate_memory_export(store, <span class="kw-2">&amp;</span>ty, <span class="prelude-val">None</span>)<span class="question-mark">?</span>;
+            <span class="prelude-val">Ok</span>(Memory::from_wasmtime_memory(export, store))
+        }
+    }
+
+    <span class="doccomment">/// Returns the underlying type of this memory.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this memory doesn&#39;t belong to `store`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wasmtime::*;
+    /// # fn main() -&gt; anyhow::Result&lt;()&gt; {
+    /// let engine = Engine::default();
+    /// let mut store = Store::new(&amp;engine, ());
+    /// let module = Module::new(&amp;engine, &quot;(module (memory (export \&quot;mem\&quot;) 1))&quot;)?;
+    /// let instance = Instance::new(&amp;mut store, &amp;module, &amp;[])?;
+    /// let memory = instance.get_memory(&amp;mut store, &quot;mem&quot;).unwrap();
+    /// let ty = memory.ty(&amp;store);
+    /// assert_eq!(ty.minimum(), 1);
+    /// # Ok(())
+    /// # }
+    /// ```
+    </span><span class="kw">pub fn </span>ty(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw">impl </span>AsContext) -&gt; MemoryType {
+        <span class="kw">let </span>store = store.as_context();
+        <span class="kw">let </span>ty = <span class="kw-2">&amp;</span>store[<span class="self">self</span>.<span class="number">0</span>].memory.memory;
+        MemoryType::from_wasmtime_memory(<span class="kw-2">&amp;</span>ty)
+    }
+
+    <span class="doccomment">/// Safely reads memory contents at the given offset into a buffer.
+    ///
+    /// The entire buffer will be filled.
+    ///
+    /// If `offset + buffer.len()` exceed the current memory capacity, then the
+    /// buffer is left untouched and a [`MemoryAccessError`] is returned.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this memory doesn&#39;t belong to `store`.
+    </span><span class="kw">pub fn </span>read(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        store: <span class="kw">impl </span>AsContext,
+        offset: usize,
+        buffer: <span class="kw-2">&amp;mut </span>[u8],
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), MemoryAccessError&gt; {
+        <span class="kw">let </span>store = store.as_context();
+        <span class="kw">let </span>slice = <span class="self">self
+            </span>.data(<span class="kw-2">&amp;</span>store)
+            .get(offset..)
+            .and_then(|s| s.get(..buffer.len()))
+            .ok_or(MemoryAccessError { _private: () })<span class="question-mark">?</span>;
+        buffer.copy_from_slice(slice);
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="doccomment">/// Safely writes contents of a buffer to this memory at the given offset.
+    ///
+    /// If the `offset + buffer.len()` exceeds the current memory capacity, then
+    /// none of the buffer is written to memory and a [`MemoryAccessError`] is
+    /// returned.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this memory doesn&#39;t belong to `store`.
+    </span><span class="kw">pub fn </span>write(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        <span class="kw-2">mut </span>store: <span class="kw">impl </span>AsContextMut,
+        offset: usize,
+        buffer: <span class="kw-2">&amp;</span>[u8],
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), MemoryAccessError&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>context = store.as_context_mut();
+        <span class="self">self</span>.data_mut(<span class="kw-2">&amp;mut </span>context)
+            .get_mut(offset..)
+            .and_then(|s| s.get_mut(..buffer.len()))
+            .ok_or(MemoryAccessError { _private: () })<span class="question-mark">?
+            </span>.copy_from_slice(buffer);
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="doccomment">/// Returns this memory as a native Rust slice.
+    ///
+    /// Note that this method will consider the entire store context provided as
+    /// borrowed for the duration of the lifetime of the returned slice.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this memory doesn&#39;t belong to `store`.
+    </span><span class="kw">pub fn </span>data&lt;<span class="lifetime">&#39;a</span>, T: <span class="lifetime">&#39;a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw">impl </span>Into&lt;StoreContext&lt;<span class="lifetime">&#39;a</span>, T&gt;&gt;) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>[u8] {
+        <span class="kw">unsafe </span>{
+            <span class="kw">let </span>store = store.into();
+            <span class="kw">let </span>definition = <span class="kw-2">&amp;*</span>store[<span class="self">self</span>.<span class="number">0</span>].definition;
+            <span class="macro">debug_assert!</span>(!<span class="self">self</span>.ty(store).is_shared());
+            slice::from_raw_parts(definition.base, definition.current_length())
+        }
+    }
+
+    <span class="doccomment">/// Returns this memory as a native Rust mutable slice.
+    ///
+    /// Note that this method will consider the entire store context provided as
+    /// borrowed for the duration of the lifetime of the returned slice.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this memory doesn&#39;t belong to `store`.
+    </span><span class="kw">pub fn </span>data_mut&lt;<span class="lifetime">&#39;a</span>, T: <span class="lifetime">&#39;a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw">impl </span>Into&lt;StoreContextMut&lt;<span class="lifetime">&#39;a</span>, T&gt;&gt;) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span><span class="kw-2">mut </span>[u8] {
+        <span class="kw">unsafe </span>{
+            <span class="kw">let </span>store = store.into();
+            <span class="kw">let </span>definition = <span class="kw-2">&amp;*</span>store[<span class="self">self</span>.<span class="number">0</span>].definition;
+            <span class="macro">debug_assert!</span>(!<span class="self">self</span>.ty(store).is_shared());
+            slice::from_raw_parts_mut(definition.base, definition.current_length())
+        }
+    }
+
+    <span class="doccomment">/// Same as [`Memory::data_mut`], but also returns the `T` from the
+    /// [`StoreContextMut`].
+    ///
+    /// This method can be used when you want to simultaneously work with the
+    /// `T` in the store as well as the memory behind this [`Memory`]. Using
+    /// [`Memory::data_mut`] would consider the entire store borrowed, whereas
+    /// this method allows the Rust compiler to see that the borrow of this
+    /// memory and the borrow of `T` are disjoint.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this memory doesn&#39;t belong to `store`.
+    </span><span class="kw">pub fn </span>data_and_store_mut&lt;<span class="lifetime">&#39;a</span>, T: <span class="lifetime">&#39;a</span>&gt;(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        store: <span class="kw">impl </span>Into&lt;StoreContextMut&lt;<span class="lifetime">&#39;a</span>, T&gt;&gt;,
+    ) -&gt; (<span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span><span class="kw-2">mut </span>[u8], <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span><span class="kw-2">mut </span>T) {
+        <span class="comment">// Note the unsafety here. Our goal is to simultaneously borrow the
+        // memory and custom data from `store`, and the store it&#39;s connected
+        // to. Rust will not let us do that, however, because we must call two
+        // separate methods (both of which borrow the whole `store`) and one of
+        // our borrows is mutable (the custom data).
+        //
+        // This operation, however, is safe because these borrows do not overlap
+        // and in the process of borrowing them mutability doesn&#39;t actually
+        // touch anything. This is akin to mutably borrowing two indices in an
+        // array, which is safe so long as the indices are separate.
+        </span><span class="kw">unsafe </span>{
+            <span class="kw">let </span><span class="kw-2">mut </span>store = store.into();
+            <span class="kw">let </span>data = <span class="kw-2">&amp;mut *</span>(store.data_mut() <span class="kw">as </span><span class="kw-2">*mut </span>T);
+            (<span class="self">self</span>.data_mut(store), data)
+        }
+    }
+
+    <span class="doccomment">/// Returns the base pointer, in the host&#39;s address space, that the memory
+    /// is located at.
+    ///
+    /// For more information and examples see the documentation on the
+    /// [`Memory`] type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this memory doesn&#39;t belong to `store`.
+    </span><span class="kw">pub fn </span>data_ptr(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw">impl </span>AsContext) -&gt; <span class="kw-2">*mut </span>u8 {
+        <span class="kw">unsafe </span>{ (<span class="kw-2">*</span>store.as_context()[<span class="self">self</span>.<span class="number">0</span>].definition).base }
+    }
+
+    <span class="doccomment">/// Returns the byte length of this memory.
+    ///
+    /// The returned value will be a multiple of the wasm page size, 64k.
+    ///
+    /// For more information and examples see the documentation on the
+    /// [`Memory`] type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this memory doesn&#39;t belong to `store`.
+    </span><span class="kw">pub fn </span>data_size(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw">impl </span>AsContext) -&gt; usize {
+        <span class="self">self</span>.internal_data_size(store.as_context().<span class="number">0</span>)
+    }
+
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>internal_data_size(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw-2">&amp;</span>StoreOpaque) -&gt; usize {
+        <span class="kw">unsafe </span>{ (<span class="kw-2">*</span>store[<span class="self">self</span>.<span class="number">0</span>].definition).current_length() }
+    }
+
+    <span class="doccomment">/// Returns the size, in WebAssembly pages, of this wasm memory.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this memory doesn&#39;t belong to `store`.
+    </span><span class="kw">pub fn </span>size(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw">impl </span>AsContext) -&gt; u64 {
+        <span class="self">self</span>.internal_size(store.as_context().<span class="number">0</span>)
+    }
+
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>internal_size(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw-2">&amp;</span>StoreOpaque) -&gt; u64 {
+        (<span class="self">self</span>.internal_data_size(store) / wasmtime_environ::WASM_PAGE_SIZE <span class="kw">as </span>usize) <span class="kw">as </span>u64
+    }
+
+    <span class="doccomment">/// Grows this WebAssembly memory by `delta` pages.
+    ///
+    /// This will attempt to add `delta` more pages of memory on to the end of
+    /// this `Memory` instance. If successful this may relocate the memory and
+    /// cause [`Memory::data_ptr`] to return a new value. Additionally any
+    /// unsafely constructed slices into this memory may no longer be valid.
+    ///
+    /// On success returns the number of pages this memory previously had
+    /// before the growth succeeded.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if memory could not be grown, for example if it exceeds
+    /// the maximum limits of this memory. A
+    /// [`ResourceLimiter`](crate::ResourceLimiter) is another example of
+    /// preventing a memory to grow.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this memory doesn&#39;t belong to `store`.
+    ///
+    /// This function will panic if the [`Store`](`crate::Store`) has a
+    /// [`ResourceLimiterAsync`](`crate::ResourceLimiterAsync`) (see also:
+    /// [`Store::limiter_async`](`crate::Store::limiter_async`). When using an
+    /// async resource limiter, use [`Memory::grow_async`] instead.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use wasmtime::*;
+    /// # fn main() -&gt; anyhow::Result&lt;()&gt; {
+    /// let engine = Engine::default();
+    /// let mut store = Store::new(&amp;engine, ());
+    /// let module = Module::new(&amp;engine, &quot;(module (memory (export \&quot;mem\&quot;) 1 2))&quot;)?;
+    /// let instance = Instance::new(&amp;mut store, &amp;module, &amp;[])?;
+    /// let memory = instance.get_memory(&amp;mut store, &quot;mem&quot;).unwrap();
+    ///
+    /// assert_eq!(memory.size(&amp;store), 1);
+    /// assert_eq!(memory.grow(&amp;mut store, 1)?, 1);
+    /// assert_eq!(memory.size(&amp;store), 2);
+    /// assert!(memory.grow(&amp;mut store, 1).is_err());
+    /// assert_eq!(memory.size(&amp;store), 2);
+    /// assert_eq!(memory.grow(&amp;mut store, 0)?, 2);
+    /// # Ok(())
+    /// # }
+    /// ```
+    </span><span class="kw">pub fn </span>grow(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="kw-2">mut </span>store: <span class="kw">impl </span>AsContextMut, delta: u64) -&gt; <span class="prelude-ty">Result</span>&lt;u64&gt; {
+        <span class="kw">let </span>store = store.as_context_mut().<span class="number">0</span>;
+        <span class="kw">let </span>mem = <span class="self">self</span>.wasmtime_memory(store);
+        <span class="kw">unsafe </span>{
+            <span class="kw">match </span>(<span class="kw-2">*</span>mem).grow(delta, <span class="prelude-val">Some</span>(store))<span class="question-mark">? </span>{
+                <span class="prelude-val">Some</span>(size) =&gt; {
+                    <span class="kw">let </span>vm = (<span class="kw-2">*</span>mem).vmmemory();
+                    <span class="kw-2">*</span>store[<span class="self">self</span>.<span class="number">0</span>].definition = vm;
+                    <span class="prelude-val">Ok</span>(u64::try_from(size).unwrap() / u64::from(wasmtime_environ::WASM_PAGE_SIZE))
+                }
+                <span class="prelude-val">None </span>=&gt; <span class="macro">bail!</span>(<span class="string">&quot;failed to grow memory by `{}`&quot;</span>, delta),
+            }
+        }
+    }
+
+    <span class="attribute">#[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;async&quot;</span>)))]
+    </span><span class="doccomment">/// Async variant of [`Memory::grow`]. Required when using a
+    /// [`ResourceLimiterAsync`](`crate::ResourceLimiterAsync`).
+    ///
+    /// # Panics
+    ///
+    /// This function will panic when used with a non-async
+    /// [`Store`](`crate::Store`).
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;async&quot;</span>)]
+    </span><span class="kw">pub async fn </span>grow_async&lt;T&gt;(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        <span class="kw-2">mut </span>store: <span class="kw">impl </span>AsContextMut&lt;Data = T&gt;,
+        delta: u64,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;u64&gt;
+    <span class="kw">where
+        </span>T: Send,
+    {
+        <span class="kw">let </span><span class="kw-2">mut </span>store = store.as_context_mut();
+        <span class="macro">assert!</span>(
+            store.<span class="number">0</span>.async_support(),
+            <span class="string">&quot;cannot use `grow_async` without enabling async support on the config&quot;
+        </span>);
+        store.on_fiber(|store| <span class="self">self</span>.grow(store, delta)).<span class="kw">await</span><span class="question-mark">?
+    </span>}
+
+    <span class="kw">fn </span>wasmtime_memory(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw-2">&amp;mut </span>StoreOpaque) -&gt; <span class="kw-2">*mut </span>wasmtime_runtime::Memory {
+        <span class="kw">unsafe </span>{
+            <span class="kw">let </span>export = <span class="kw-2">&amp;</span>store[<span class="self">self</span>.<span class="number">0</span>];
+            <span class="kw">let </span><span class="kw-2">mut </span>handle = wasmtime_runtime::InstanceHandle::from_vmctx(export.vmctx);
+            handle.get_defined_memory(export.index)
+        }
+    }
+
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe fn </span>from_wasmtime_memory(
+        wasmtime_export: wasmtime_runtime::ExportMemory,
+        store: <span class="kw-2">&amp;mut </span>StoreOpaque,
+    ) -&gt; Memory {
+        Memory(store.store_data_mut().insert(wasmtime_export))
+    }
+
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>wasmtime_ty&lt;<span class="lifetime">&#39;a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>StoreData) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>wasmtime_environ::Memory {
+        <span class="kw-2">&amp;</span>store[<span class="self">self</span>.<span class="number">0</span>].memory.memory
+    }
+
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>vmimport(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw-2">&amp;</span>StoreOpaque) -&gt; wasmtime_runtime::VMMemoryImport {
+        <span class="kw">let </span>export = <span class="kw-2">&amp;</span>store[<span class="self">self</span>.<span class="number">0</span>];
+        wasmtime_runtime::VMMemoryImport {
+            from: export.definition,
+            vmctx: export.vmctx,
+            index: export.index,
+        }
+    }
+
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>comes_from_same_store(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw-2">&amp;</span>StoreOpaque) -&gt; bool {
+        store.store_data().contains(<span class="self">self</span>.<span class="number">0</span>)
+    }
+}
+
+<span class="doccomment">/// A linear memory. This trait provides an interface for raw memory buffers
+/// which are used by wasmtime, e.g. inside [&#39;Memory&#39;]. Such buffers are in
+/// principle not thread safe. By implementing this trait together with
+/// MemoryCreator, one can supply wasmtime with custom allocated host managed
+/// memory.
+///
+/// # Safety
+///
+/// The memory should be page aligned and a multiple of page size.
+/// To prevent possible silent overflows, the memory should be protected by a
+/// guard page.  Additionally the safety concerns explained in [&#39;Memory&#39;], for
+/// accessing the memory apply here as well.
+///
+/// Note that this is a relatively new and experimental feature and it is
+/// recommended to be familiar with wasmtime runtime code to use it.
+</span><span class="kw">pub unsafe trait </span>LinearMemory: Send + Sync + <span class="lifetime">&#39;static </span>{
+    <span class="doccomment">/// Returns the number of allocated bytes which are accessible at this time.
+    </span><span class="kw">fn </span>byte_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize;
+
+    <span class="doccomment">/// Returns the maximum number of bytes the memory can grow to.
+    ///
+    /// Returns `None` if the memory is unbounded, or `Some` if memory cannot
+    /// grow beyond a specified limit.
+    </span><span class="kw">fn </span>maximum_byte_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt;;
+
+    <span class="doccomment">/// Grows this memory to have the `new_size`, in bytes, specified.
+    ///
+    /// Returns `Err` if memory can&#39;t be grown by the specified amount
+    /// of bytes. The error may be downcastable to `std::io::Error`.
+    /// Returns `Ok` if memory was grown successfully.
+    </span><span class="kw">fn </span>grow_to(<span class="kw-2">&amp;mut </span><span class="self">self</span>, new_size: usize) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt;;
+
+    <span class="doccomment">/// Return the allocated memory as a mutable pointer to u8.
+    </span><span class="kw">fn </span>as_ptr(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">*mut </span>u8;
+}
+
+<span class="doccomment">/// A memory creator. Can be used to provide a memory creator
+/// to wasmtime which supplies host managed memory.
+///
+/// # Safety
+///
+/// This trait is unsafe, as the memory safety depends on proper implementation
+/// of memory management. Memories created by the MemoryCreator should always be
+/// treated as owned by wasmtime instance, and any modification of them outside
+/// of wasmtime invoked routines is unsafe and may lead to corruption.
+///
+/// Note that this is a relatively new and experimental feature and it is
+/// recommended to be familiar with wasmtime runtime code to use it.
+</span><span class="kw">pub unsafe trait </span>MemoryCreator: Send + Sync {
+    <span class="doccomment">/// Create a new `LinearMemory` object from the specified parameters.
+    ///
+    /// The type of memory being created is specified by `ty` which indicates
+    /// both the minimum and maximum size, in wasm pages. The minimum and
+    /// maximum sizes, in bytes, are also specified as parameters to avoid
+    /// integer conversion if desired.
+    ///
+    /// The `reserved_size_in_bytes` value indicates the expected size of the
+    /// reservation that is to be made for this memory. If this value is `None`
+    /// than the implementation is free to allocate memory as it sees fit. If
+    /// the value is `Some`, however, then the implementation is expected to
+    /// reserve that many bytes for the memory&#39;s allocation, plus the guard
+    /// size at the end. Note that this reservation need only be a virtual
+    /// memory reservation, physical memory does not need to be allocated
+    /// immediately. In this case `grow` should never move the base pointer and
+    /// the maximum size of `ty` is guaranteed to fit within
+    /// `reserved_size_in_bytes`.
+    ///
+    /// The `guard_size_in_bytes` parameter indicates how many bytes of space,
+    /// after the memory allocation, is expected to be unmapped. JIT code will
+    /// elide bounds checks based on the `guard_size_in_bytes` provided, so for
+    /// JIT code to work correctly the memory returned will need to be properly
+    /// guarded with `guard_size_in_bytes` bytes left unmapped after the base
+    /// allocation.
+    ///
+    /// Note that the `reserved_size_in_bytes` and `guard_size_in_bytes` options
+    /// are tuned from the various [`Config`](crate::Config) methods about
+    /// memory sizes/guards. Additionally these two values are guaranteed to be
+    /// multiples of the system page size.
+    </span><span class="kw">fn </span>new_memory(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        ty: MemoryType,
+        minimum: usize,
+        maximum: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+        reserved_size_in_bytes: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+        guard_size_in_bytes: usize,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;<span class="kw">dyn </span>LinearMemory&gt;, String&gt;;
+}
+
+<span class="doccomment">/// A constructor for externally-created shared memory.
+///
+/// The [threads proposal] adds the concept of &quot;shared memory&quot; to WebAssembly.
+/// This is much the same as a Wasm linear memory (i.e., [`Memory`]), but can be
+/// used concurrently by multiple agents. Because these agents may execute in
+/// different threads, [`SharedMemory`] must be thread-safe.
+///
+/// When the threads proposal is enabled, there are multiple ways to construct
+/// shared memory:
+///  1. for imported shared memory, e.g., `(import &quot;env&quot; &quot;memory&quot; (memory 1 1
+///     shared))`, the user must supply a [`SharedMemory`] with the
+///     externally-created memory as an import to the instance--e.g.,
+///     `shared_memory.into()`.
+///  2. for private or exported shared memory, e.g., `(export &quot;env&quot; &quot;memory&quot;
+///     (memory 1 1 shared))`, Wasmtime will create the memory internally during
+///     instantiation--access using `Instance::get_shared_memory()`.
+///
+/// [threads proposal]:
+///     https://github.com/WebAssembly/threads/blob/master/proposals/threads/Overview.md
+///
+/// # Examples
+///
+/// ```
+/// # use wasmtime::*;
+/// # fn main() -&gt; anyhow::Result&lt;()&gt; {
+/// let mut config = Config::new();
+/// config.wasm_threads(true);
+/// let engine = Engine::new(&amp;config)?;
+/// let mut store = Store::new(&amp;engine, ());
+///
+/// let shared_memory = SharedMemory::new(&amp;engine, MemoryType::shared(1, 2))?;
+/// let module = Module::new(&amp;engine, r#&quot;(module (memory (import &quot;&quot; &quot;&quot;) 1 2 shared))&quot;#)?;
+/// let instance = Instance::new(&amp;mut store, &amp;module, &amp;[shared_memory.into()])?;
+/// // ...
+/// # Ok(())
+/// # }
+/// ```
+</span><span class="attribute">#[derive(Clone)]
+</span><span class="kw">pub struct </span>SharedMemory(wasmtime_runtime::SharedMemory, Engine);
+
+<span class="kw">impl </span>SharedMemory {
+    <span class="doccomment">/// Construct a [`SharedMemory`] by providing both the `minimum` and
+    /// `maximum` number of 64K-sized pages. This call allocates the necessary
+    /// pages on the system.
+    </span><span class="kw">pub fn </span>new(engine: <span class="kw-2">&amp;</span>Engine, ty: MemoryType) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>&gt; {
+        <span class="kw">if </span>!ty.is_shared() {
+            <span class="macro">bail!</span>(<span class="string">&quot;shared memory must have the `shared` flag enabled on its memory type&quot;</span>)
+        }
+        <span class="macro">debug_assert!</span>(ty.maximum().is_some());
+
+        <span class="kw">let </span>tunables = <span class="kw-2">&amp;</span>engine.config().tunables;
+        <span class="kw">let </span>plan = MemoryPlan::for_memory(ty.wasmtime_memory().clone(), tunables);
+        <span class="kw">let </span>memory = wasmtime_runtime::SharedMemory::new(plan)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>(memory, engine.clone()))
+    }
+
+    <span class="doccomment">/// Return the type of the shared memory.
+    </span><span class="kw">pub fn </span>ty(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; MemoryType {
+        MemoryType::from_wasmtime_memory(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>.ty())
+    }
+
+    <span class="doccomment">/// Returns the size, in WebAssembly pages, of this wasm memory.
+    </span><span class="kw">pub fn </span>size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+        (<span class="self">self</span>.data_size() / wasmtime_environ::WASM_PAGE_SIZE <span class="kw">as </span>usize) <span class="kw">as </span>u64
+    }
+
+    <span class="doccomment">/// Returns the byte length of this memory.
+    ///
+    /// The returned value will be a multiple of the wasm page size, 64k.
+    ///
+    /// For more information and examples see the documentation on the
+    /// [`Memory`] type.
+    </span><span class="kw">pub fn </span>data_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+        <span class="self">self</span>.<span class="number">0</span>.byte_size()
+    }
+
+    <span class="doccomment">/// Return access to the available portion of the shared memory.
+    ///
+    /// The slice returned represents the region of accessible memory at the
+    /// time that this function was called. The contents of the returned slice
+    /// will reflect concurrent modifications happening on other threads.
+    ///
+    /// # Safety
+    ///
+    /// The returned slice is valid for the entire duration of the lifetime of
+    /// this instance of [`SharedMemory`]. The base pointer of a shared memory
+    /// does not change. This [`SharedMemory`] may grow further after this
+    /// function has been called, but the slice returned will not grow.
+    ///
+    /// Concurrent modifications may be happening to the data returned on other
+    /// threads. The `UnsafeCell&lt;u8&gt;` represents that safe access to the
+    /// contents of the slice is not possible through normal loads and stores.
+    ///
+    /// The memory returned must be accessed safely through the `Atomic*` types
+    /// in the [`std::sync::atomic`] module. Casting to those types must
+    /// currently be done unsafely.
+    </span><span class="kw">pub fn </span>data(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[UnsafeCell&lt;u8&gt;] {
+        <span class="kw">unsafe </span>{
+            <span class="kw">let </span>definition = <span class="kw-2">&amp;*</span><span class="self">self</span>.<span class="number">0</span>.vmmemory_ptr();
+            slice::from_raw_parts_mut(definition.base.cast(), definition.current_length())
+        }
+    }
+
+    <span class="doccomment">/// Grows this WebAssembly memory by `delta` pages.
+    ///
+    /// This will attempt to add `delta` more pages of memory on to the end of
+    /// this `Memory` instance. If successful this may relocate the memory and
+    /// cause [`Memory::data_ptr`] to return a new value. Additionally any
+    /// unsafely constructed slices into this memory may no longer be valid.
+    ///
+    /// On success returns the number of pages this memory previously had
+    /// before the growth succeeded.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if memory could not be grown, for example if it exceeds
+    /// the maximum limits of this memory. A
+    /// [`ResourceLimiter`](crate::ResourceLimiter) is another example of
+    /// preventing a memory to grow.
+    </span><span class="kw">pub fn </span>grow(<span class="kw-2">&amp;</span><span class="self">self</span>, delta: u64) -&gt; <span class="prelude-ty">Result</span>&lt;u64&gt; {
+        <span class="kw">match </span><span class="self">self</span>.<span class="number">0</span>.grow(delta, <span class="prelude-val">None</span>)<span class="question-mark">? </span>{
+            <span class="prelude-val">Some</span>((old_size, _new_size)) =&gt; {
+                <span class="comment">// For shared memory, the `VMMemoryDefinition` is updated inside
+                // the locked region.
+                </span><span class="prelude-val">Ok</span>(u64::try_from(old_size).unwrap() / u64::from(wasmtime_environ::WASM_PAGE_SIZE))
+            }
+            <span class="prelude-val">None </span>=&gt; <span class="macro">bail!</span>(<span class="string">&quot;failed to grow memory by `{}`&quot;</span>, delta),
+        }
+    }
+
+    <span class="doccomment">/// Equivalent of the WebAssembly `memory.atomic.notify` instruction for
+    /// this shared memory.
+    ///
+    /// This method allows embedders to notify threads blocked on the specified
+    /// `addr`, an index into wasm linear memory. Threads could include
+    /// wasm threads blocked on a `memory.atomic.wait*` instruction or embedder
+    /// threads blocked on [`SharedMemory::atomic_wait32`], for example.
+    ///
+    /// The `count` argument is the number of threads to wake up.
+    ///
+    /// This function returns the number of threads awoken.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if `addr` is not within bounds or
+    /// not aligned to a 4-byte boundary.
+    </span><span class="kw">pub fn </span>atomic_notify(<span class="kw-2">&amp;</span><span class="self">self</span>, addr: u64, count: u32) -&gt; <span class="prelude-ty">Result</span>&lt;u32, Trap&gt; {
+        <span class="self">self</span>.<span class="number">0</span>.atomic_notify(addr, count)
+    }
+
+    <span class="doccomment">/// Equivalent of the WebAssembly `memory.atomic.wait32` instruction for
+    /// this shared memory.
+    ///
+    /// This method allows embedders to block the current thread until notified
+    /// via the `memory.atomic.notify` instruction or the
+    /// [`SharedMemory::atomic_notify`] method, enabling synchronization with
+    /// the wasm guest as desired.
+    ///
+    /// The `expected` argument is the expected 32-bit value to be stored at
+    /// the byte address `addr` specified. The `addr` specified is an index
+    /// into this linear memory.
+    ///
+    /// The optional `timeout` argument is the point in time after which the
+    /// calling thread is guaranteed to be woken up. Blocking will not occur
+    /// past this point.
+    ///
+    /// This function returns one of three possible values:
+    ///
+    /// * `WaitResult::Ok` - this function, loaded the value at `addr`, found
+    ///   it was equal to `expected`, and then blocked (all as one atomic
+    ///   operation). The thread was then awoken with a `memory.atomic.notify`
+    ///   instruction or the [`SharedMemory::atomic_notify`] method.
+    /// * `WaitResult::Mismatch` - the value at `addr` was loaded but was not
+    ///   equal to `expected` so the thread did not block and immediately
+    ///   returned.
+    /// * `WaitResult::TimedOut` - all the steps of `Ok` happened, except this
+    ///   thread was woken up due to a timeout.
+    ///
+    /// This function will not return due to spurious wakeups.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if `addr` is not within bounds or
+    /// not aligned to a 4-byte boundary.
+    </span><span class="kw">pub fn </span>atomic_wait32(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        addr: u64,
+        expected: u32,
+        timeout: <span class="prelude-ty">Option</span>&lt;Instant&gt;,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;WaitResult, Trap&gt; {
+        <span class="self">self</span>.<span class="number">0</span>.atomic_wait32(addr, expected, timeout)
+    }
+
+    <span class="doccomment">/// Equivalent of the WebAssembly `memory.atomic.wait64` instruction for
+    /// this shared memory.
+    ///
+    /// For more information see [`SharedMemory::atomic_wait32`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the same error as [`SharedMemory::atomic_wait32`] except that
+    /// the specified address must be 8-byte aligned instead of 4-byte aligned.
+    </span><span class="kw">pub fn </span>atomic_wait64(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        addr: u64,
+        expected: u64,
+        timeout: <span class="prelude-ty">Option</span>&lt;Instant&gt;,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;WaitResult, Trap&gt; {
+        <span class="self">self</span>.<span class="number">0</span>.atomic_wait64(addr, expected, timeout)
+    }
+
+    <span class="doccomment">/// Return a reference to the [`Engine`] used to configure the shared
+    /// memory.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>engine(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Engine {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">1
+    </span>}
+
+    <span class="doccomment">/// Construct a single-memory instance to provide a way to import
+    /// [`SharedMemory`] into other modules.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>vmimport(<span class="kw-2">&amp;</span><span class="self">self</span>, store: <span class="kw-2">&amp;mut </span>StoreOpaque) -&gt; wasmtime_runtime::VMMemoryImport {
+        <span class="kw">let </span>runtime_shared_memory = <span class="self">self</span>.clone().<span class="number">0</span>;
+        <span class="kw">let </span>export_memory =
+            generate_memory_export(store, <span class="kw-2">&amp;</span><span class="self">self</span>.ty(), <span class="prelude-val">Some</span>(runtime_shared_memory)).unwrap();
+        VMMemoryImport {
+            from: export_memory.definition,
+            vmctx: export_memory.vmctx,
+            index: export_memory.index,
+        }
+    }
+
+    <span class="doccomment">/// Create a [`SharedMemory`] from an [`ExportMemory`] definition. This
+    /// function is available to handle the case in which a Wasm module exports
+    /// shared memory and the user wants host-side access to it.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe fn </span>from_wasmtime_memory(
+        wasmtime_export: wasmtime_runtime::ExportMemory,
+        store: <span class="kw-2">&amp;mut </span>StoreOpaque,
+    ) -&gt; <span class="self">Self </span>{
+        <span class="kw">let </span><span class="kw-2">mut </span>handle = wasmtime_runtime::InstanceHandle::from_vmctx(wasmtime_export.vmctx);
+        <span class="kw">let </span>memory = handle
+            .get_defined_memory(wasmtime_export.index)
+            .as_mut()
+            .unwrap();
+        <span class="kw">let </span>shared_memory = memory
+            .as_shared_memory()
+            .expect(<span class="string">&quot;unable to convert from a shared memory&quot;</span>)
+            .clone();
+        <span class="self">Self</span>(shared_memory, store.engine().clone())
+    }
+}
+
+<span class="kw">impl </span>std::fmt::Debug <span class="kw">for </span>SharedMemory {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">&#39;_</span>&gt;) -&gt; std::fmt::Result {
+        f.debug_struct(<span class="string">&quot;SharedMemory&quot;</span>).finish_non_exhaustive()
+    }
+}
+
+<span class="attribute">#[cfg(test)]
+</span><span class="kw">mod </span>tests {
+    <span class="kw">use crate</span>::<span class="kw-2">*</span>;
+
+    <span class="comment">// Assert that creating a memory via `Memory::new` respects the limits/tunables
+    // in `Config`.
+    </span><span class="attribute">#[test]
+    </span><span class="kw">fn </span>respect_tunables() {
+        <span class="kw">let </span><span class="kw-2">mut </span>cfg = Config::new();
+        cfg.static_memory_maximum_size(<span class="number">0</span>)
+            .dynamic_memory_guard_size(<span class="number">0</span>);
+        <span class="kw">let </span><span class="kw-2">mut </span>store = Store::new(<span class="kw-2">&amp;</span>Engine::new(<span class="kw-2">&amp;</span>cfg).unwrap(), ());
+        <span class="kw">let </span>ty = MemoryType::new(<span class="number">1</span>, <span class="prelude-val">None</span>);
+        <span class="kw">let </span>mem = Memory::new(<span class="kw-2">&amp;mut </span>store, ty).unwrap();
+        <span class="kw">let </span>store = store.as_context();
+        <span class="macro">assert_eq!</span>(store[mem.<span class="number">0</span>].memory.offset_guard_size, <span class="number">0</span>);
+        <span class="kw">match </span><span class="kw-2">&amp;</span>store[mem.<span class="number">0</span>].memory.style {
+            wasmtime_environ::MemoryStyle::Dynamic { .. } =&gt; {}
+            other =&gt; <span class="macro">panic!</span>(<span class="string">&quot;unexpected style {:?}&quot;</span>, other),
+        }
+    }
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="wasmtime" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

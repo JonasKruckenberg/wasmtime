@@ -1,0 +1,644 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cranelift/fuzzgen/src/lib.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>lib.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../normalize.css"><link rel="stylesheet" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../ayu.css" disabled><link rel="stylesheet" href="../../dark.css" disabled><link rel="stylesheet" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../cranelift_fuzzgen/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../cranelift_fuzzgen/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../cranelift_fuzzgen/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
+<span id="217">217</span>
+<span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
+<span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
+</pre><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::config::Config;
+<span class="kw">use </span><span class="kw">crate</span>::function_generator::FunctionGenerator;
+<span class="kw">use </span><span class="kw">crate</span>::settings::{Flags, OptLevel};
+<span class="kw">use </span>anyhow::Result;
+<span class="kw">use </span>arbitrary::{Arbitrary, Unstructured};
+<span class="kw">use </span>cranelift::codegen::data_value::DataValue;
+<span class="kw">use </span>cranelift::codegen::ir::types::<span class="kw-2">*</span>;
+<span class="kw">use </span>cranelift::codegen::ir::Function;
+<span class="kw">use </span>cranelift::codegen::Context;
+<span class="kw">use </span>cranelift::prelude::<span class="kw-2">*</span>;
+<span class="kw">use </span>cranelift_native::builder_with_options;
+<span class="kw">use </span>std::fmt;
+
+<span class="kw">mod </span>config;
+<span class="kw">mod </span>function_generator;
+<span class="kw">mod </span>passes;
+
+<span class="kw">pub type </span>TestCaseInput = Vec&lt;DataValue&gt;;
+
+<span class="doccomment">/// Simple wrapper to generate a single Cranelift `Function`.
+</span><span class="attribute">#[derive(Debug)]
+</span><span class="kw">pub struct </span>SingleFunction(<span class="kw">pub </span>Function);
+
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;a</span>&gt; Arbitrary&lt;<span class="lifetime">&#39;a</span>&gt; <span class="kw">for </span>SingleFunction {
+    <span class="kw">fn </span>arbitrary(u: <span class="kw-2">&amp;mut </span>Unstructured&lt;<span class="lifetime">&#39;a</span>&gt;) -&gt; arbitrary::Result&lt;<span class="self">Self</span>&gt; {
+        FuzzGen::new(u)
+            .generate_func()
+            .map_err(|<span class="kw">_</span>| arbitrary::Error::IncorrectFormat)
+            .map(<span class="self">Self</span>)
+    }
+}
+
+<span class="kw">pub struct </span>TestCase {
+    <span class="doccomment">/// [Flags] to use when compiling this test case
+    </span><span class="kw">pub </span>flags: Flags,
+    <span class="doccomment">/// Function under test
+    </span><span class="kw">pub </span>func: Function,
+    <span class="doccomment">/// Generate multiple test inputs for each test case.
+    /// This allows us to get more coverage per compilation, which may be somewhat expensive.
+    </span><span class="kw">pub </span>inputs: Vec&lt;TestCaseInput&gt;,
+}
+
+<span class="kw">impl </span>fmt::Debug <span class="kw">for </span>TestCase {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">&#39;_</span>&gt;) -&gt; fmt::Result {
+        <span class="macro">writeln!</span>(f, <span class="string">&quot;;; Fuzzgen test case\n&quot;</span>)<span class="question-mark">?</span>;
+        <span class="macro">writeln!</span>(f, <span class="string">&quot;test interpret&quot;</span>)<span class="question-mark">?</span>;
+        <span class="macro">writeln!</span>(f, <span class="string">&quot;test run&quot;</span>)<span class="question-mark">?</span>;
+
+        <span class="comment">// Print only non default flags
+        </span><span class="kw">let </span>default_flags = Flags::new(settings::builder());
+        <span class="kw">for </span>(default, flag) <span class="kw">in </span>default_flags.iter().zip(<span class="self">self</span>.flags.iter()) {
+            <span class="macro">assert_eq!</span>(default.name, flag.name);
+
+            <span class="kw">if </span>default.value_string() != flag.value_string() {
+                <span class="macro">writeln!</span>(f, <span class="string">&quot;set {}={}&quot;</span>, flag.name, flag.value_string())<span class="question-mark">?</span>;
+            }
+        }
+
+        <span class="macro">writeln!</span>(f, <span class="string">&quot;target aarch64&quot;</span>)<span class="question-mark">?</span>;
+        <span class="macro">writeln!</span>(f, <span class="string">&quot;target s390x&quot;</span>)<span class="question-mark">?</span>;
+        <span class="macro">writeln!</span>(f, <span class="string">&quot;target riscv64&quot;</span>)<span class="question-mark">?</span>;
+        <span class="macro">writeln!</span>(f, <span class="string">&quot;target x86_64\n&quot;</span>)<span class="question-mark">?</span>;
+
+        <span class="macro">writeln!</span>(f, <span class="string">&quot;{}&quot;</span>, <span class="self">self</span>.func)<span class="question-mark">?</span>;
+
+        <span class="macro">writeln!</span>(f, <span class="string">&quot;; Note: the results in the below test cases are simply a placeholder and probably will be wrong\n&quot;</span>)<span class="question-mark">?</span>;
+
+        <span class="kw">for </span>input <span class="kw">in </span><span class="self">self</span>.inputs.iter() {
+            <span class="comment">// TODO: We don&#39;t know the expected outputs, maybe we can run the interpreter
+            // here to figure them out? Should work, however we need to be careful to catch
+            // panics in case its the interpreter that is failing.
+            // For now create a placeholder output consisting of the zero value for the type
+            </span><span class="kw">let </span>returns = <span class="kw-2">&amp;</span><span class="self">self</span>.func.signature.returns;
+            <span class="kw">let </span>placeholder_output = returns
+                .iter()
+                .map(|param| DataValue::read_from_slice(<span class="kw-2">&amp;</span>[<span class="number">0</span>; <span class="number">16</span>][..], param.value_type))
+                .map(|val| <span class="macro">format!</span>(<span class="string">&quot;{}&quot;</span>, val))
+                .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+                .join(<span class="string">&quot;, &quot;</span>);
+
+            <span class="comment">// If we have no output, we don&#39;t need the == condition
+            </span><span class="kw">let </span>test_condition = <span class="kw">match </span>returns.len() {
+                <span class="number">0 </span>=&gt; String::new(),
+                <span class="number">1 </span>=&gt; <span class="macro">format!</span>(<span class="string">&quot; == {}&quot;</span>, placeholder_output),
+                <span class="kw">_ </span>=&gt; <span class="macro">format!</span>(<span class="string">&quot; == [{}]&quot;</span>, placeholder_output),
+            };
+
+            <span class="kw">let </span>args = input
+                .iter()
+                .map(|val| <span class="macro">format!</span>(<span class="string">&quot;{}&quot;</span>, val))
+                .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+                .join(<span class="string">&quot;, &quot;</span>);
+
+            <span class="macro">writeln!</span>(f, <span class="string">&quot;; run: {}({}){}&quot;</span>, <span class="self">self</span>.func.name, args, test_condition)<span class="question-mark">?</span>;
+        }
+
+        <span class="prelude-val">Ok</span>(())
+    }
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;a</span>&gt; Arbitrary&lt;<span class="lifetime">&#39;a</span>&gt; <span class="kw">for </span>TestCase {
+    <span class="kw">fn </span>arbitrary(u: <span class="kw-2">&amp;mut </span>Unstructured&lt;<span class="lifetime">&#39;a</span>&gt;) -&gt; arbitrary::Result&lt;<span class="self">Self</span>&gt; {
+        FuzzGen::new(u)
+            .generate_test()
+            .map_err(|<span class="kw">_</span>| arbitrary::Error::IncorrectFormat)
+    }
+}
+
+<span class="kw">pub struct </span>FuzzGen&lt;<span class="lifetime">&#39;r</span>, <span class="lifetime">&#39;data</span>&gt;
+<span class="kw">where
+    </span><span class="lifetime">&#39;data</span>: <span class="lifetime">&#39;r</span>,
+{
+    u: <span class="kw-2">&amp;</span><span class="lifetime">&#39;r </span><span class="kw-2">mut </span>Unstructured&lt;<span class="lifetime">&#39;data</span>&gt;,
+    config: Config,
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;r</span>, <span class="lifetime">&#39;data</span>&gt; FuzzGen&lt;<span class="lifetime">&#39;r</span>, <span class="lifetime">&#39;data</span>&gt;
+<span class="kw">where
+    </span><span class="lifetime">&#39;data</span>: <span class="lifetime">&#39;r</span>,
+{
+    <span class="kw">pub fn </span>new(u: <span class="kw-2">&amp;</span><span class="lifetime">&#39;r </span><span class="kw-2">mut </span>Unstructured&lt;<span class="lifetime">&#39;data</span>&gt;) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            u,
+            config: Config::default(),
+        }
+    }
+
+    <span class="kw">fn </span>generate_datavalue(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ty: Type) -&gt; <span class="prelude-ty">Result</span>&lt;DataValue&gt; {
+        <span class="prelude-val">Ok</span>(<span class="kw">match </span>ty {
+            ty <span class="kw">if </span>ty.is_int() =&gt; {
+                <span class="kw">let </span>imm = <span class="kw">match </span>ty {
+                    I8 =&gt; <span class="self">self</span>.u.arbitrary::&lt;i8&gt;()<span class="question-mark">? </span><span class="kw">as </span>i128,
+                    I16 =&gt; <span class="self">self</span>.u.arbitrary::&lt;i16&gt;()<span class="question-mark">? </span><span class="kw">as </span>i128,
+                    I32 =&gt; <span class="self">self</span>.u.arbitrary::&lt;i32&gt;()<span class="question-mark">? </span><span class="kw">as </span>i128,
+                    I64 =&gt; <span class="self">self</span>.u.arbitrary::&lt;i64&gt;()<span class="question-mark">? </span><span class="kw">as </span>i128,
+                    I128 =&gt; <span class="self">self</span>.u.arbitrary::&lt;i128&gt;()<span class="question-mark">?</span>,
+                    <span class="kw">_ </span>=&gt; <span class="macro">unreachable!</span>(),
+                };
+                DataValue::from_integer(imm, ty)<span class="question-mark">?
+            </span>}
+            <span class="comment">// f{32,64}::arbitrary does not generate a bunch of important values
+            // such as Signaling NaN&#39;s / NaN&#39;s with payload, so generate floats from integers.
+            </span>F32 =&gt; DataValue::F32(Ieee32::with_bits(u32::arbitrary(<span class="self">self</span>.u)<span class="question-mark">?</span>)),
+            F64 =&gt; DataValue::F64(Ieee64::with_bits(u64::arbitrary(<span class="self">self</span>.u)<span class="question-mark">?</span>)),
+            <span class="kw">_ </span>=&gt; <span class="macro">unimplemented!</span>(),
+        })
+    }
+
+    <span class="kw">fn </span>generate_test_inputs(<span class="kw-2">mut </span><span class="self">self</span>, signature: <span class="kw-2">&amp;</span>Signature) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;TestCaseInput&gt;&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>inputs = Vec::new();
+
+        <span class="comment">// Generate up to &quot;max_test_case_inputs&quot; inputs, we need an upper bound here since
+        // the fuzzer at some point starts trying to feed us way too many inputs. (I found one
+        // test case with 130k inputs!)
+        </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="self">self</span>.config.max_test_case_inputs {
+            <span class="kw">let </span>last_len = <span class="self">self</span>.u.len();
+
+            <span class="kw">let </span>test_args = signature
+                .params
+                .iter()
+                .map(|p| <span class="self">self</span>.generate_datavalue(p.value_type))
+                .collect::&lt;<span class="prelude-ty">Result</span>&lt;TestCaseInput&gt;&gt;()<span class="question-mark">?</span>;
+
+            inputs.push(test_args);
+
+            <span class="comment">// Continue generating input as long as we just consumed some of self.u. Otherwise
+            // we&#39;ll generate the same test input again and again, forever. Note that once self.u
+            // becomes empty we obviously can&#39;t consume any more of it, so this check is more
+            // general. Also note that we need to generate at least one input or the fuzz target
+            // won&#39;t actually test anything, so checking at the end of the loop is good, even if
+            // self.u is empty from the start and we end up with all zeros in test_args.
+            </span><span class="macro">assert!</span>(<span class="self">self</span>.u.len() &lt;= last_len);
+            <span class="kw">if </span><span class="self">self</span>.u.len() == last_len {
+                <span class="kw">break</span>;
+            }
+        }
+
+        <span class="prelude-val">Ok</span>(inputs)
+    }
+
+    <span class="kw">fn </span>run_func_passes(<span class="kw-2">&amp;mut </span><span class="self">self</span>, func: Function) -&gt; <span class="prelude-ty">Result</span>&lt;Function&gt; {
+        <span class="comment">// Do a NaN Canonicalization pass on the generated function.
+        //
+        // Both IEEE754 and the Wasm spec are somewhat loose about what is allowed
+        // to be returned from NaN producing operations. And in practice this changes
+        // from X86 to Aarch64 and others. Even in the same host machine, the
+        // interpreter may produce a code sequence different from cranelift that
+        // generates different NaN&#39;s but produces legal results according to the spec.
+        //
+        // These differences cause spurious failures in the fuzzer. To fix this
+        // we enable the NaN Canonicalization pass that replaces any NaN&#39;s produced
+        // with a single fixed canonical NaN value.
+        //
+        // This is something that we can enable via flags for the compiled version, however
+        // the interpreter won&#39;t get that version, so call that pass manually here.
+
+        </span><span class="kw">let </span><span class="kw-2">mut </span>ctx = Context::for_function(func);
+        <span class="comment">// Assume that we are generating this function for the current ISA.
+        // We disable the verifier here, since if it fails it prevents a test case from
+        // being generated and formatted by `cargo fuzz fmt`.
+        // We run the verifier before compiling the code, so it always gets verified.
+        </span><span class="kw">let </span>flags = settings::Flags::new({
+            <span class="kw">let </span><span class="kw-2">mut </span>builder = settings::builder();
+            builder.set(<span class="string">&quot;enable_verifier&quot;</span>, <span class="string">&quot;false&quot;</span>).unwrap();
+            builder
+        });
+
+        <span class="kw">let </span>isa = builder_with_options(<span class="bool-val">false</span>)
+            .expect(<span class="string">&quot;Unable to build a TargetIsa for the current host&quot;</span>)
+            .finish(flags)
+            .expect(<span class="string">&quot;Failed to build TargetISA&quot;</span>);
+
+        ctx.canonicalize_nans(isa.as_ref())
+            .expect(<span class="string">&quot;Failed NaN canonicalization pass&quot;</span>);
+
+        <span class="comment">// Run the int_divz pass
+        //
+        // This pass replaces divs and rems with sequences that do not trap
+        </span>passes::do_int_divz_pass(<span class="self">self</span>, <span class="kw-2">&amp;mut </span>ctx.func)<span class="question-mark">?</span>;
+
+        <span class="comment">// This pass replaces fcvt* instructions with sequences that do not trap
+        </span>passes::do_fcvt_trap_pass(<span class="self">self</span>, <span class="kw-2">&amp;mut </span>ctx.func)<span class="question-mark">?</span>;
+
+        <span class="prelude-val">Ok</span>(ctx.func)
+    }
+
+    <span class="kw">fn </span>generate_func(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Function&gt; {
+        <span class="kw">let </span>func = FunctionGenerator::new(<span class="kw-2">&amp;mut </span><span class="self">self</span>.u, <span class="kw-2">&amp;</span><span class="self">self</span>.config).generate()<span class="question-mark">?</span>;
+        <span class="self">self</span>.run_func_passes(func)
+    }
+
+    <span class="doccomment">/// Generate a random set of cranelift flags.
+    /// Only semantics preserving flags are considered
+    </span><span class="kw">fn </span>generate_flags(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Flags&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>builder = settings::builder();
+
+        <span class="kw">let </span>opt = <span class="self">self</span>.u.choose(OptLevel::all())<span class="question-mark">?</span>;
+        builder.set(<span class="string">&quot;opt_level&quot;</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;{}&quot;</span>, opt)[..])<span class="question-mark">?</span>;
+
+        <span class="comment">// Boolean flags
+        // TODO: enable_pinned_reg does not work with our current trampolines. See: #4376
+        // TODO: is_pic has issues:
+        //   x86: https://github.com/bytecodealliance/wasmtime/issues/5005
+        //   aarch64: https://github.com/bytecodealliance/wasmtime/issues/2735
+        </span><span class="kw">let </span>bool_settings = [
+            <span class="string">&quot;enable_alias_analysis&quot;</span>,
+            <span class="string">&quot;enable_safepoints&quot;</span>,
+            <span class="string">&quot;unwind_info&quot;</span>,
+            <span class="string">&quot;preserve_frame_pointers&quot;</span>,
+            <span class="string">&quot;enable_jump_tables&quot;</span>,
+            <span class="string">&quot;enable_heap_access_spectre_mitigation&quot;</span>,
+            <span class="string">&quot;enable_table_access_spectre_mitigation&quot;</span>,
+            <span class="string">&quot;enable_incremental_compilation_cache_checks&quot;</span>,
+            <span class="string">&quot;regalloc_checker&quot;</span>,
+            <span class="string">&quot;enable_llvm_abi_extensions&quot;</span>,
+        ];
+        <span class="kw">for </span>flag_name <span class="kw">in </span>bool_settings {
+            <span class="kw">let </span>enabled = <span class="self">self
+                </span>.config
+                .compile_flag_ratio
+                .get(<span class="kw-2">&amp;</span>flag_name)
+                .map(|<span class="kw-2">&amp;</span>(num, denum)| <span class="self">self</span>.u.ratio(num, denum))
+                .unwrap_or_else(|| bool::arbitrary(<span class="self">self</span>.u))<span class="question-mark">?</span>;
+
+            <span class="kw">let </span>value = <span class="macro">format!</span>(<span class="string">&quot;{}&quot;</span>, enabled);
+            builder.set(flag_name, value.as_str())<span class="question-mark">?</span>;
+        }
+
+        <span class="comment">// Optionally test inline stackprobes on x86
+        // TODO: inline stack probes are not available on AArch64
+        // TODO: Test outlined stack probes.
+        </span><span class="kw">if </span><span class="macro">cfg!</span>(target_arch = <span class="string">&quot;x86_64&quot;</span>) &amp;&amp; bool::arbitrary(<span class="self">self</span>.u)<span class="question-mark">? </span>{
+            builder.enable(<span class="string">&quot;enable_probestack&quot;</span>)<span class="question-mark">?</span>;
+            builder.set(<span class="string">&quot;probestack_strategy&quot;</span>, <span class="string">&quot;inline&quot;</span>)<span class="question-mark">?</span>;
+
+            <span class="kw">let </span>size = <span class="self">self
+                </span>.u
+                .int_in_range(<span class="self">self</span>.config.stack_probe_size_log2.clone())<span class="question-mark">?</span>;
+            builder.set(<span class="string">&quot;probestack_size_log2&quot;</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;{}&quot;</span>, size))<span class="question-mark">?</span>;
+        }
+
+        <span class="comment">// Fixed settings
+
+        // We need llvm ABI extensions for i128 values on x86, so enable it regardless of
+        // what we picked above.
+        </span><span class="kw">if </span><span class="macro">cfg!</span>(target_arch = <span class="string">&quot;x86_64&quot;</span>) {
+            builder.enable(<span class="string">&quot;enable_llvm_abi_extensions&quot;</span>)<span class="question-mark">?</span>;
+        }
+
+        <span class="comment">// This is the default, but we should ensure that it wasn&#39;t accidentally turned off anywhere.
+        </span>builder.enable(<span class="string">&quot;enable_verifier&quot;</span>)<span class="question-mark">?</span>;
+
+        <span class="comment">// These settings just panic when they&#39;re not enabled and we try to use their respective functionality
+        // so they aren&#39;t very interesting to be automatically generated.
+        </span>builder.enable(<span class="string">&quot;enable_atomics&quot;</span>)<span class="question-mark">?</span>;
+        builder.enable(<span class="string">&quot;enable_float&quot;</span>)<span class="question-mark">?</span>;
+        builder.enable(<span class="string">&quot;enable_simd&quot;</span>)<span class="question-mark">?</span>;
+
+        <span class="comment">// `machine_code_cfg_info` generates additional metadata for the embedder but this doesn&#39;t feed back
+        // into compilation anywhere, we leave it on unconditionally to make sure the generation doesn&#39;t panic.
+        </span>builder.enable(<span class="string">&quot;machine_code_cfg_info&quot;</span>)<span class="question-mark">?</span>;
+
+        <span class="prelude-val">Ok</span>(Flags::new(builder))
+    }
+
+    <span class="kw">pub fn </span>generate_test(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;TestCase&gt; {
+        <span class="comment">// If we&#39;re generating test inputs as well as a function, then we&#39;re planning to execute
+        // this function. That means that any function references in it need to exist. We don&#39;t yet
+        // have infrastructure for generating multiple functions, so just don&#39;t generate funcrefs.
+        </span><span class="self">self</span>.config.funcrefs_per_function = <span class="number">0</span>..=<span class="number">0</span>;
+
+        <span class="kw">let </span>flags = <span class="self">self</span>.generate_flags()<span class="question-mark">?</span>;
+        <span class="kw">let </span>func = <span class="self">self</span>.generate_func()<span class="question-mark">?</span>;
+        <span class="kw">let </span>inputs = <span class="self">self</span>.generate_test_inputs(<span class="kw-2">&amp;</span>func.signature)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(TestCase {
+            flags,
+            func,
+            inputs,
+        })
+    }
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="cranelift_fuzzgen" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

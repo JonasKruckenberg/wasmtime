@@ -1,0 +1,3764 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/wasmtime/src/config.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>config.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../normalize.css"><link rel="stylesheet" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../ayu.css" disabled><link rel="stylesheet" href="../../dark.css" disabled><link rel="stylesheet" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../wasmtime/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../wasmtime/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../wasmtime/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
+<span id="217">217</span>
+<span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
+<span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
+<span id="322">322</span>
+<span id="323">323</span>
+<span id="324">324</span>
+<span id="325">325</span>
+<span id="326">326</span>
+<span id="327">327</span>
+<span id="328">328</span>
+<span id="329">329</span>
+<span id="330">330</span>
+<span id="331">331</span>
+<span id="332">332</span>
+<span id="333">333</span>
+<span id="334">334</span>
+<span id="335">335</span>
+<span id="336">336</span>
+<span id="337">337</span>
+<span id="338">338</span>
+<span id="339">339</span>
+<span id="340">340</span>
+<span id="341">341</span>
+<span id="342">342</span>
+<span id="343">343</span>
+<span id="344">344</span>
+<span id="345">345</span>
+<span id="346">346</span>
+<span id="347">347</span>
+<span id="348">348</span>
+<span id="349">349</span>
+<span id="350">350</span>
+<span id="351">351</span>
+<span id="352">352</span>
+<span id="353">353</span>
+<span id="354">354</span>
+<span id="355">355</span>
+<span id="356">356</span>
+<span id="357">357</span>
+<span id="358">358</span>
+<span id="359">359</span>
+<span id="360">360</span>
+<span id="361">361</span>
+<span id="362">362</span>
+<span id="363">363</span>
+<span id="364">364</span>
+<span id="365">365</span>
+<span id="366">366</span>
+<span id="367">367</span>
+<span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
+<span id="373">373</span>
+<span id="374">374</span>
+<span id="375">375</span>
+<span id="376">376</span>
+<span id="377">377</span>
+<span id="378">378</span>
+<span id="379">379</span>
+<span id="380">380</span>
+<span id="381">381</span>
+<span id="382">382</span>
+<span id="383">383</span>
+<span id="384">384</span>
+<span id="385">385</span>
+<span id="386">386</span>
+<span id="387">387</span>
+<span id="388">388</span>
+<span id="389">389</span>
+<span id="390">390</span>
+<span id="391">391</span>
+<span id="392">392</span>
+<span id="393">393</span>
+<span id="394">394</span>
+<span id="395">395</span>
+<span id="396">396</span>
+<span id="397">397</span>
+<span id="398">398</span>
+<span id="399">399</span>
+<span id="400">400</span>
+<span id="401">401</span>
+<span id="402">402</span>
+<span id="403">403</span>
+<span id="404">404</span>
+<span id="405">405</span>
+<span id="406">406</span>
+<span id="407">407</span>
+<span id="408">408</span>
+<span id="409">409</span>
+<span id="410">410</span>
+<span id="411">411</span>
+<span id="412">412</span>
+<span id="413">413</span>
+<span id="414">414</span>
+<span id="415">415</span>
+<span id="416">416</span>
+<span id="417">417</span>
+<span id="418">418</span>
+<span id="419">419</span>
+<span id="420">420</span>
+<span id="421">421</span>
+<span id="422">422</span>
+<span id="423">423</span>
+<span id="424">424</span>
+<span id="425">425</span>
+<span id="426">426</span>
+<span id="427">427</span>
+<span id="428">428</span>
+<span id="429">429</span>
+<span id="430">430</span>
+<span id="431">431</span>
+<span id="432">432</span>
+<span id="433">433</span>
+<span id="434">434</span>
+<span id="435">435</span>
+<span id="436">436</span>
+<span id="437">437</span>
+<span id="438">438</span>
+<span id="439">439</span>
+<span id="440">440</span>
+<span id="441">441</span>
+<span id="442">442</span>
+<span id="443">443</span>
+<span id="444">444</span>
+<span id="445">445</span>
+<span id="446">446</span>
+<span id="447">447</span>
+<span id="448">448</span>
+<span id="449">449</span>
+<span id="450">450</span>
+<span id="451">451</span>
+<span id="452">452</span>
+<span id="453">453</span>
+<span id="454">454</span>
+<span id="455">455</span>
+<span id="456">456</span>
+<span id="457">457</span>
+<span id="458">458</span>
+<span id="459">459</span>
+<span id="460">460</span>
+<span id="461">461</span>
+<span id="462">462</span>
+<span id="463">463</span>
+<span id="464">464</span>
+<span id="465">465</span>
+<span id="466">466</span>
+<span id="467">467</span>
+<span id="468">468</span>
+<span id="469">469</span>
+<span id="470">470</span>
+<span id="471">471</span>
+<span id="472">472</span>
+<span id="473">473</span>
+<span id="474">474</span>
+<span id="475">475</span>
+<span id="476">476</span>
+<span id="477">477</span>
+<span id="478">478</span>
+<span id="479">479</span>
+<span id="480">480</span>
+<span id="481">481</span>
+<span id="482">482</span>
+<span id="483">483</span>
+<span id="484">484</span>
+<span id="485">485</span>
+<span id="486">486</span>
+<span id="487">487</span>
+<span id="488">488</span>
+<span id="489">489</span>
+<span id="490">490</span>
+<span id="491">491</span>
+<span id="492">492</span>
+<span id="493">493</span>
+<span id="494">494</span>
+<span id="495">495</span>
+<span id="496">496</span>
+<span id="497">497</span>
+<span id="498">498</span>
+<span id="499">499</span>
+<span id="500">500</span>
+<span id="501">501</span>
+<span id="502">502</span>
+<span id="503">503</span>
+<span id="504">504</span>
+<span id="505">505</span>
+<span id="506">506</span>
+<span id="507">507</span>
+<span id="508">508</span>
+<span id="509">509</span>
+<span id="510">510</span>
+<span id="511">511</span>
+<span id="512">512</span>
+<span id="513">513</span>
+<span id="514">514</span>
+<span id="515">515</span>
+<span id="516">516</span>
+<span id="517">517</span>
+<span id="518">518</span>
+<span id="519">519</span>
+<span id="520">520</span>
+<span id="521">521</span>
+<span id="522">522</span>
+<span id="523">523</span>
+<span id="524">524</span>
+<span id="525">525</span>
+<span id="526">526</span>
+<span id="527">527</span>
+<span id="528">528</span>
+<span id="529">529</span>
+<span id="530">530</span>
+<span id="531">531</span>
+<span id="532">532</span>
+<span id="533">533</span>
+<span id="534">534</span>
+<span id="535">535</span>
+<span id="536">536</span>
+<span id="537">537</span>
+<span id="538">538</span>
+<span id="539">539</span>
+<span id="540">540</span>
+<span id="541">541</span>
+<span id="542">542</span>
+<span id="543">543</span>
+<span id="544">544</span>
+<span id="545">545</span>
+<span id="546">546</span>
+<span id="547">547</span>
+<span id="548">548</span>
+<span id="549">549</span>
+<span id="550">550</span>
+<span id="551">551</span>
+<span id="552">552</span>
+<span id="553">553</span>
+<span id="554">554</span>
+<span id="555">555</span>
+<span id="556">556</span>
+<span id="557">557</span>
+<span id="558">558</span>
+<span id="559">559</span>
+<span id="560">560</span>
+<span id="561">561</span>
+<span id="562">562</span>
+<span id="563">563</span>
+<span id="564">564</span>
+<span id="565">565</span>
+<span id="566">566</span>
+<span id="567">567</span>
+<span id="568">568</span>
+<span id="569">569</span>
+<span id="570">570</span>
+<span id="571">571</span>
+<span id="572">572</span>
+<span id="573">573</span>
+<span id="574">574</span>
+<span id="575">575</span>
+<span id="576">576</span>
+<span id="577">577</span>
+<span id="578">578</span>
+<span id="579">579</span>
+<span id="580">580</span>
+<span id="581">581</span>
+<span id="582">582</span>
+<span id="583">583</span>
+<span id="584">584</span>
+<span id="585">585</span>
+<span id="586">586</span>
+<span id="587">587</span>
+<span id="588">588</span>
+<span id="589">589</span>
+<span id="590">590</span>
+<span id="591">591</span>
+<span id="592">592</span>
+<span id="593">593</span>
+<span id="594">594</span>
+<span id="595">595</span>
+<span id="596">596</span>
+<span id="597">597</span>
+<span id="598">598</span>
+<span id="599">599</span>
+<span id="600">600</span>
+<span id="601">601</span>
+<span id="602">602</span>
+<span id="603">603</span>
+<span id="604">604</span>
+<span id="605">605</span>
+<span id="606">606</span>
+<span id="607">607</span>
+<span id="608">608</span>
+<span id="609">609</span>
+<span id="610">610</span>
+<span id="611">611</span>
+<span id="612">612</span>
+<span id="613">613</span>
+<span id="614">614</span>
+<span id="615">615</span>
+<span id="616">616</span>
+<span id="617">617</span>
+<span id="618">618</span>
+<span id="619">619</span>
+<span id="620">620</span>
+<span id="621">621</span>
+<span id="622">622</span>
+<span id="623">623</span>
+<span id="624">624</span>
+<span id="625">625</span>
+<span id="626">626</span>
+<span id="627">627</span>
+<span id="628">628</span>
+<span id="629">629</span>
+<span id="630">630</span>
+<span id="631">631</span>
+<span id="632">632</span>
+<span id="633">633</span>
+<span id="634">634</span>
+<span id="635">635</span>
+<span id="636">636</span>
+<span id="637">637</span>
+<span id="638">638</span>
+<span id="639">639</span>
+<span id="640">640</span>
+<span id="641">641</span>
+<span id="642">642</span>
+<span id="643">643</span>
+<span id="644">644</span>
+<span id="645">645</span>
+<span id="646">646</span>
+<span id="647">647</span>
+<span id="648">648</span>
+<span id="649">649</span>
+<span id="650">650</span>
+<span id="651">651</span>
+<span id="652">652</span>
+<span id="653">653</span>
+<span id="654">654</span>
+<span id="655">655</span>
+<span id="656">656</span>
+<span id="657">657</span>
+<span id="658">658</span>
+<span id="659">659</span>
+<span id="660">660</span>
+<span id="661">661</span>
+<span id="662">662</span>
+<span id="663">663</span>
+<span id="664">664</span>
+<span id="665">665</span>
+<span id="666">666</span>
+<span id="667">667</span>
+<span id="668">668</span>
+<span id="669">669</span>
+<span id="670">670</span>
+<span id="671">671</span>
+<span id="672">672</span>
+<span id="673">673</span>
+<span id="674">674</span>
+<span id="675">675</span>
+<span id="676">676</span>
+<span id="677">677</span>
+<span id="678">678</span>
+<span id="679">679</span>
+<span id="680">680</span>
+<span id="681">681</span>
+<span id="682">682</span>
+<span id="683">683</span>
+<span id="684">684</span>
+<span id="685">685</span>
+<span id="686">686</span>
+<span id="687">687</span>
+<span id="688">688</span>
+<span id="689">689</span>
+<span id="690">690</span>
+<span id="691">691</span>
+<span id="692">692</span>
+<span id="693">693</span>
+<span id="694">694</span>
+<span id="695">695</span>
+<span id="696">696</span>
+<span id="697">697</span>
+<span id="698">698</span>
+<span id="699">699</span>
+<span id="700">700</span>
+<span id="701">701</span>
+<span id="702">702</span>
+<span id="703">703</span>
+<span id="704">704</span>
+<span id="705">705</span>
+<span id="706">706</span>
+<span id="707">707</span>
+<span id="708">708</span>
+<span id="709">709</span>
+<span id="710">710</span>
+<span id="711">711</span>
+<span id="712">712</span>
+<span id="713">713</span>
+<span id="714">714</span>
+<span id="715">715</span>
+<span id="716">716</span>
+<span id="717">717</span>
+<span id="718">718</span>
+<span id="719">719</span>
+<span id="720">720</span>
+<span id="721">721</span>
+<span id="722">722</span>
+<span id="723">723</span>
+<span id="724">724</span>
+<span id="725">725</span>
+<span id="726">726</span>
+<span id="727">727</span>
+<span id="728">728</span>
+<span id="729">729</span>
+<span id="730">730</span>
+<span id="731">731</span>
+<span id="732">732</span>
+<span id="733">733</span>
+<span id="734">734</span>
+<span id="735">735</span>
+<span id="736">736</span>
+<span id="737">737</span>
+<span id="738">738</span>
+<span id="739">739</span>
+<span id="740">740</span>
+<span id="741">741</span>
+<span id="742">742</span>
+<span id="743">743</span>
+<span id="744">744</span>
+<span id="745">745</span>
+<span id="746">746</span>
+<span id="747">747</span>
+<span id="748">748</span>
+<span id="749">749</span>
+<span id="750">750</span>
+<span id="751">751</span>
+<span id="752">752</span>
+<span id="753">753</span>
+<span id="754">754</span>
+<span id="755">755</span>
+<span id="756">756</span>
+<span id="757">757</span>
+<span id="758">758</span>
+<span id="759">759</span>
+<span id="760">760</span>
+<span id="761">761</span>
+<span id="762">762</span>
+<span id="763">763</span>
+<span id="764">764</span>
+<span id="765">765</span>
+<span id="766">766</span>
+<span id="767">767</span>
+<span id="768">768</span>
+<span id="769">769</span>
+<span id="770">770</span>
+<span id="771">771</span>
+<span id="772">772</span>
+<span id="773">773</span>
+<span id="774">774</span>
+<span id="775">775</span>
+<span id="776">776</span>
+<span id="777">777</span>
+<span id="778">778</span>
+<span id="779">779</span>
+<span id="780">780</span>
+<span id="781">781</span>
+<span id="782">782</span>
+<span id="783">783</span>
+<span id="784">784</span>
+<span id="785">785</span>
+<span id="786">786</span>
+<span id="787">787</span>
+<span id="788">788</span>
+<span id="789">789</span>
+<span id="790">790</span>
+<span id="791">791</span>
+<span id="792">792</span>
+<span id="793">793</span>
+<span id="794">794</span>
+<span id="795">795</span>
+<span id="796">796</span>
+<span id="797">797</span>
+<span id="798">798</span>
+<span id="799">799</span>
+<span id="800">800</span>
+<span id="801">801</span>
+<span id="802">802</span>
+<span id="803">803</span>
+<span id="804">804</span>
+<span id="805">805</span>
+<span id="806">806</span>
+<span id="807">807</span>
+<span id="808">808</span>
+<span id="809">809</span>
+<span id="810">810</span>
+<span id="811">811</span>
+<span id="812">812</span>
+<span id="813">813</span>
+<span id="814">814</span>
+<span id="815">815</span>
+<span id="816">816</span>
+<span id="817">817</span>
+<span id="818">818</span>
+<span id="819">819</span>
+<span id="820">820</span>
+<span id="821">821</span>
+<span id="822">822</span>
+<span id="823">823</span>
+<span id="824">824</span>
+<span id="825">825</span>
+<span id="826">826</span>
+<span id="827">827</span>
+<span id="828">828</span>
+<span id="829">829</span>
+<span id="830">830</span>
+<span id="831">831</span>
+<span id="832">832</span>
+<span id="833">833</span>
+<span id="834">834</span>
+<span id="835">835</span>
+<span id="836">836</span>
+<span id="837">837</span>
+<span id="838">838</span>
+<span id="839">839</span>
+<span id="840">840</span>
+<span id="841">841</span>
+<span id="842">842</span>
+<span id="843">843</span>
+<span id="844">844</span>
+<span id="845">845</span>
+<span id="846">846</span>
+<span id="847">847</span>
+<span id="848">848</span>
+<span id="849">849</span>
+<span id="850">850</span>
+<span id="851">851</span>
+<span id="852">852</span>
+<span id="853">853</span>
+<span id="854">854</span>
+<span id="855">855</span>
+<span id="856">856</span>
+<span id="857">857</span>
+<span id="858">858</span>
+<span id="859">859</span>
+<span id="860">860</span>
+<span id="861">861</span>
+<span id="862">862</span>
+<span id="863">863</span>
+<span id="864">864</span>
+<span id="865">865</span>
+<span id="866">866</span>
+<span id="867">867</span>
+<span id="868">868</span>
+<span id="869">869</span>
+<span id="870">870</span>
+<span id="871">871</span>
+<span id="872">872</span>
+<span id="873">873</span>
+<span id="874">874</span>
+<span id="875">875</span>
+<span id="876">876</span>
+<span id="877">877</span>
+<span id="878">878</span>
+<span id="879">879</span>
+<span id="880">880</span>
+<span id="881">881</span>
+<span id="882">882</span>
+<span id="883">883</span>
+<span id="884">884</span>
+<span id="885">885</span>
+<span id="886">886</span>
+<span id="887">887</span>
+<span id="888">888</span>
+<span id="889">889</span>
+<span id="890">890</span>
+<span id="891">891</span>
+<span id="892">892</span>
+<span id="893">893</span>
+<span id="894">894</span>
+<span id="895">895</span>
+<span id="896">896</span>
+<span id="897">897</span>
+<span id="898">898</span>
+<span id="899">899</span>
+<span id="900">900</span>
+<span id="901">901</span>
+<span id="902">902</span>
+<span id="903">903</span>
+<span id="904">904</span>
+<span id="905">905</span>
+<span id="906">906</span>
+<span id="907">907</span>
+<span id="908">908</span>
+<span id="909">909</span>
+<span id="910">910</span>
+<span id="911">911</span>
+<span id="912">912</span>
+<span id="913">913</span>
+<span id="914">914</span>
+<span id="915">915</span>
+<span id="916">916</span>
+<span id="917">917</span>
+<span id="918">918</span>
+<span id="919">919</span>
+<span id="920">920</span>
+<span id="921">921</span>
+<span id="922">922</span>
+<span id="923">923</span>
+<span id="924">924</span>
+<span id="925">925</span>
+<span id="926">926</span>
+<span id="927">927</span>
+<span id="928">928</span>
+<span id="929">929</span>
+<span id="930">930</span>
+<span id="931">931</span>
+<span id="932">932</span>
+<span id="933">933</span>
+<span id="934">934</span>
+<span id="935">935</span>
+<span id="936">936</span>
+<span id="937">937</span>
+<span id="938">938</span>
+<span id="939">939</span>
+<span id="940">940</span>
+<span id="941">941</span>
+<span id="942">942</span>
+<span id="943">943</span>
+<span id="944">944</span>
+<span id="945">945</span>
+<span id="946">946</span>
+<span id="947">947</span>
+<span id="948">948</span>
+<span id="949">949</span>
+<span id="950">950</span>
+<span id="951">951</span>
+<span id="952">952</span>
+<span id="953">953</span>
+<span id="954">954</span>
+<span id="955">955</span>
+<span id="956">956</span>
+<span id="957">957</span>
+<span id="958">958</span>
+<span id="959">959</span>
+<span id="960">960</span>
+<span id="961">961</span>
+<span id="962">962</span>
+<span id="963">963</span>
+<span id="964">964</span>
+<span id="965">965</span>
+<span id="966">966</span>
+<span id="967">967</span>
+<span id="968">968</span>
+<span id="969">969</span>
+<span id="970">970</span>
+<span id="971">971</span>
+<span id="972">972</span>
+<span id="973">973</span>
+<span id="974">974</span>
+<span id="975">975</span>
+<span id="976">976</span>
+<span id="977">977</span>
+<span id="978">978</span>
+<span id="979">979</span>
+<span id="980">980</span>
+<span id="981">981</span>
+<span id="982">982</span>
+<span id="983">983</span>
+<span id="984">984</span>
+<span id="985">985</span>
+<span id="986">986</span>
+<span id="987">987</span>
+<span id="988">988</span>
+<span id="989">989</span>
+<span id="990">990</span>
+<span id="991">991</span>
+<span id="992">992</span>
+<span id="993">993</span>
+<span id="994">994</span>
+<span id="995">995</span>
+<span id="996">996</span>
+<span id="997">997</span>
+<span id="998">998</span>
+<span id="999">999</span>
+<span id="1000">1000</span>
+<span id="1001">1001</span>
+<span id="1002">1002</span>
+<span id="1003">1003</span>
+<span id="1004">1004</span>
+<span id="1005">1005</span>
+<span id="1006">1006</span>
+<span id="1007">1007</span>
+<span id="1008">1008</span>
+<span id="1009">1009</span>
+<span id="1010">1010</span>
+<span id="1011">1011</span>
+<span id="1012">1012</span>
+<span id="1013">1013</span>
+<span id="1014">1014</span>
+<span id="1015">1015</span>
+<span id="1016">1016</span>
+<span id="1017">1017</span>
+<span id="1018">1018</span>
+<span id="1019">1019</span>
+<span id="1020">1020</span>
+<span id="1021">1021</span>
+<span id="1022">1022</span>
+<span id="1023">1023</span>
+<span id="1024">1024</span>
+<span id="1025">1025</span>
+<span id="1026">1026</span>
+<span id="1027">1027</span>
+<span id="1028">1028</span>
+<span id="1029">1029</span>
+<span id="1030">1030</span>
+<span id="1031">1031</span>
+<span id="1032">1032</span>
+<span id="1033">1033</span>
+<span id="1034">1034</span>
+<span id="1035">1035</span>
+<span id="1036">1036</span>
+<span id="1037">1037</span>
+<span id="1038">1038</span>
+<span id="1039">1039</span>
+<span id="1040">1040</span>
+<span id="1041">1041</span>
+<span id="1042">1042</span>
+<span id="1043">1043</span>
+<span id="1044">1044</span>
+<span id="1045">1045</span>
+<span id="1046">1046</span>
+<span id="1047">1047</span>
+<span id="1048">1048</span>
+<span id="1049">1049</span>
+<span id="1050">1050</span>
+<span id="1051">1051</span>
+<span id="1052">1052</span>
+<span id="1053">1053</span>
+<span id="1054">1054</span>
+<span id="1055">1055</span>
+<span id="1056">1056</span>
+<span id="1057">1057</span>
+<span id="1058">1058</span>
+<span id="1059">1059</span>
+<span id="1060">1060</span>
+<span id="1061">1061</span>
+<span id="1062">1062</span>
+<span id="1063">1063</span>
+<span id="1064">1064</span>
+<span id="1065">1065</span>
+<span id="1066">1066</span>
+<span id="1067">1067</span>
+<span id="1068">1068</span>
+<span id="1069">1069</span>
+<span id="1070">1070</span>
+<span id="1071">1071</span>
+<span id="1072">1072</span>
+<span id="1073">1073</span>
+<span id="1074">1074</span>
+<span id="1075">1075</span>
+<span id="1076">1076</span>
+<span id="1077">1077</span>
+<span id="1078">1078</span>
+<span id="1079">1079</span>
+<span id="1080">1080</span>
+<span id="1081">1081</span>
+<span id="1082">1082</span>
+<span id="1083">1083</span>
+<span id="1084">1084</span>
+<span id="1085">1085</span>
+<span id="1086">1086</span>
+<span id="1087">1087</span>
+<span id="1088">1088</span>
+<span id="1089">1089</span>
+<span id="1090">1090</span>
+<span id="1091">1091</span>
+<span id="1092">1092</span>
+<span id="1093">1093</span>
+<span id="1094">1094</span>
+<span id="1095">1095</span>
+<span id="1096">1096</span>
+<span id="1097">1097</span>
+<span id="1098">1098</span>
+<span id="1099">1099</span>
+<span id="1100">1100</span>
+<span id="1101">1101</span>
+<span id="1102">1102</span>
+<span id="1103">1103</span>
+<span id="1104">1104</span>
+<span id="1105">1105</span>
+<span id="1106">1106</span>
+<span id="1107">1107</span>
+<span id="1108">1108</span>
+<span id="1109">1109</span>
+<span id="1110">1110</span>
+<span id="1111">1111</span>
+<span id="1112">1112</span>
+<span id="1113">1113</span>
+<span id="1114">1114</span>
+<span id="1115">1115</span>
+<span id="1116">1116</span>
+<span id="1117">1117</span>
+<span id="1118">1118</span>
+<span id="1119">1119</span>
+<span id="1120">1120</span>
+<span id="1121">1121</span>
+<span id="1122">1122</span>
+<span id="1123">1123</span>
+<span id="1124">1124</span>
+<span id="1125">1125</span>
+<span id="1126">1126</span>
+<span id="1127">1127</span>
+<span id="1128">1128</span>
+<span id="1129">1129</span>
+<span id="1130">1130</span>
+<span id="1131">1131</span>
+<span id="1132">1132</span>
+<span id="1133">1133</span>
+<span id="1134">1134</span>
+<span id="1135">1135</span>
+<span id="1136">1136</span>
+<span id="1137">1137</span>
+<span id="1138">1138</span>
+<span id="1139">1139</span>
+<span id="1140">1140</span>
+<span id="1141">1141</span>
+<span id="1142">1142</span>
+<span id="1143">1143</span>
+<span id="1144">1144</span>
+<span id="1145">1145</span>
+<span id="1146">1146</span>
+<span id="1147">1147</span>
+<span id="1148">1148</span>
+<span id="1149">1149</span>
+<span id="1150">1150</span>
+<span id="1151">1151</span>
+<span id="1152">1152</span>
+<span id="1153">1153</span>
+<span id="1154">1154</span>
+<span id="1155">1155</span>
+<span id="1156">1156</span>
+<span id="1157">1157</span>
+<span id="1158">1158</span>
+<span id="1159">1159</span>
+<span id="1160">1160</span>
+<span id="1161">1161</span>
+<span id="1162">1162</span>
+<span id="1163">1163</span>
+<span id="1164">1164</span>
+<span id="1165">1165</span>
+<span id="1166">1166</span>
+<span id="1167">1167</span>
+<span id="1168">1168</span>
+<span id="1169">1169</span>
+<span id="1170">1170</span>
+<span id="1171">1171</span>
+<span id="1172">1172</span>
+<span id="1173">1173</span>
+<span id="1174">1174</span>
+<span id="1175">1175</span>
+<span id="1176">1176</span>
+<span id="1177">1177</span>
+<span id="1178">1178</span>
+<span id="1179">1179</span>
+<span id="1180">1180</span>
+<span id="1181">1181</span>
+<span id="1182">1182</span>
+<span id="1183">1183</span>
+<span id="1184">1184</span>
+<span id="1185">1185</span>
+<span id="1186">1186</span>
+<span id="1187">1187</span>
+<span id="1188">1188</span>
+<span id="1189">1189</span>
+<span id="1190">1190</span>
+<span id="1191">1191</span>
+<span id="1192">1192</span>
+<span id="1193">1193</span>
+<span id="1194">1194</span>
+<span id="1195">1195</span>
+<span id="1196">1196</span>
+<span id="1197">1197</span>
+<span id="1198">1198</span>
+<span id="1199">1199</span>
+<span id="1200">1200</span>
+<span id="1201">1201</span>
+<span id="1202">1202</span>
+<span id="1203">1203</span>
+<span id="1204">1204</span>
+<span id="1205">1205</span>
+<span id="1206">1206</span>
+<span id="1207">1207</span>
+<span id="1208">1208</span>
+<span id="1209">1209</span>
+<span id="1210">1210</span>
+<span id="1211">1211</span>
+<span id="1212">1212</span>
+<span id="1213">1213</span>
+<span id="1214">1214</span>
+<span id="1215">1215</span>
+<span id="1216">1216</span>
+<span id="1217">1217</span>
+<span id="1218">1218</span>
+<span id="1219">1219</span>
+<span id="1220">1220</span>
+<span id="1221">1221</span>
+<span id="1222">1222</span>
+<span id="1223">1223</span>
+<span id="1224">1224</span>
+<span id="1225">1225</span>
+<span id="1226">1226</span>
+<span id="1227">1227</span>
+<span id="1228">1228</span>
+<span id="1229">1229</span>
+<span id="1230">1230</span>
+<span id="1231">1231</span>
+<span id="1232">1232</span>
+<span id="1233">1233</span>
+<span id="1234">1234</span>
+<span id="1235">1235</span>
+<span id="1236">1236</span>
+<span id="1237">1237</span>
+<span id="1238">1238</span>
+<span id="1239">1239</span>
+<span id="1240">1240</span>
+<span id="1241">1241</span>
+<span id="1242">1242</span>
+<span id="1243">1243</span>
+<span id="1244">1244</span>
+<span id="1245">1245</span>
+<span id="1246">1246</span>
+<span id="1247">1247</span>
+<span id="1248">1248</span>
+<span id="1249">1249</span>
+<span id="1250">1250</span>
+<span id="1251">1251</span>
+<span id="1252">1252</span>
+<span id="1253">1253</span>
+<span id="1254">1254</span>
+<span id="1255">1255</span>
+<span id="1256">1256</span>
+<span id="1257">1257</span>
+<span id="1258">1258</span>
+<span id="1259">1259</span>
+<span id="1260">1260</span>
+<span id="1261">1261</span>
+<span id="1262">1262</span>
+<span id="1263">1263</span>
+<span id="1264">1264</span>
+<span id="1265">1265</span>
+<span id="1266">1266</span>
+<span id="1267">1267</span>
+<span id="1268">1268</span>
+<span id="1269">1269</span>
+<span id="1270">1270</span>
+<span id="1271">1271</span>
+<span id="1272">1272</span>
+<span id="1273">1273</span>
+<span id="1274">1274</span>
+<span id="1275">1275</span>
+<span id="1276">1276</span>
+<span id="1277">1277</span>
+<span id="1278">1278</span>
+<span id="1279">1279</span>
+<span id="1280">1280</span>
+<span id="1281">1281</span>
+<span id="1282">1282</span>
+<span id="1283">1283</span>
+<span id="1284">1284</span>
+<span id="1285">1285</span>
+<span id="1286">1286</span>
+<span id="1287">1287</span>
+<span id="1288">1288</span>
+<span id="1289">1289</span>
+<span id="1290">1290</span>
+<span id="1291">1291</span>
+<span id="1292">1292</span>
+<span id="1293">1293</span>
+<span id="1294">1294</span>
+<span id="1295">1295</span>
+<span id="1296">1296</span>
+<span id="1297">1297</span>
+<span id="1298">1298</span>
+<span id="1299">1299</span>
+<span id="1300">1300</span>
+<span id="1301">1301</span>
+<span id="1302">1302</span>
+<span id="1303">1303</span>
+<span id="1304">1304</span>
+<span id="1305">1305</span>
+<span id="1306">1306</span>
+<span id="1307">1307</span>
+<span id="1308">1308</span>
+<span id="1309">1309</span>
+<span id="1310">1310</span>
+<span id="1311">1311</span>
+<span id="1312">1312</span>
+<span id="1313">1313</span>
+<span id="1314">1314</span>
+<span id="1315">1315</span>
+<span id="1316">1316</span>
+<span id="1317">1317</span>
+<span id="1318">1318</span>
+<span id="1319">1319</span>
+<span id="1320">1320</span>
+<span id="1321">1321</span>
+<span id="1322">1322</span>
+<span id="1323">1323</span>
+<span id="1324">1324</span>
+<span id="1325">1325</span>
+<span id="1326">1326</span>
+<span id="1327">1327</span>
+<span id="1328">1328</span>
+<span id="1329">1329</span>
+<span id="1330">1330</span>
+<span id="1331">1331</span>
+<span id="1332">1332</span>
+<span id="1333">1333</span>
+<span id="1334">1334</span>
+<span id="1335">1335</span>
+<span id="1336">1336</span>
+<span id="1337">1337</span>
+<span id="1338">1338</span>
+<span id="1339">1339</span>
+<span id="1340">1340</span>
+<span id="1341">1341</span>
+<span id="1342">1342</span>
+<span id="1343">1343</span>
+<span id="1344">1344</span>
+<span id="1345">1345</span>
+<span id="1346">1346</span>
+<span id="1347">1347</span>
+<span id="1348">1348</span>
+<span id="1349">1349</span>
+<span id="1350">1350</span>
+<span id="1351">1351</span>
+<span id="1352">1352</span>
+<span id="1353">1353</span>
+<span id="1354">1354</span>
+<span id="1355">1355</span>
+<span id="1356">1356</span>
+<span id="1357">1357</span>
+<span id="1358">1358</span>
+<span id="1359">1359</span>
+<span id="1360">1360</span>
+<span id="1361">1361</span>
+<span id="1362">1362</span>
+<span id="1363">1363</span>
+<span id="1364">1364</span>
+<span id="1365">1365</span>
+<span id="1366">1366</span>
+<span id="1367">1367</span>
+<span id="1368">1368</span>
+<span id="1369">1369</span>
+<span id="1370">1370</span>
+<span id="1371">1371</span>
+<span id="1372">1372</span>
+<span id="1373">1373</span>
+<span id="1374">1374</span>
+<span id="1375">1375</span>
+<span id="1376">1376</span>
+<span id="1377">1377</span>
+<span id="1378">1378</span>
+<span id="1379">1379</span>
+<span id="1380">1380</span>
+<span id="1381">1381</span>
+<span id="1382">1382</span>
+<span id="1383">1383</span>
+<span id="1384">1384</span>
+<span id="1385">1385</span>
+<span id="1386">1386</span>
+<span id="1387">1387</span>
+<span id="1388">1388</span>
+<span id="1389">1389</span>
+<span id="1390">1390</span>
+<span id="1391">1391</span>
+<span id="1392">1392</span>
+<span id="1393">1393</span>
+<span id="1394">1394</span>
+<span id="1395">1395</span>
+<span id="1396">1396</span>
+<span id="1397">1397</span>
+<span id="1398">1398</span>
+<span id="1399">1399</span>
+<span id="1400">1400</span>
+<span id="1401">1401</span>
+<span id="1402">1402</span>
+<span id="1403">1403</span>
+<span id="1404">1404</span>
+<span id="1405">1405</span>
+<span id="1406">1406</span>
+<span id="1407">1407</span>
+<span id="1408">1408</span>
+<span id="1409">1409</span>
+<span id="1410">1410</span>
+<span id="1411">1411</span>
+<span id="1412">1412</span>
+<span id="1413">1413</span>
+<span id="1414">1414</span>
+<span id="1415">1415</span>
+<span id="1416">1416</span>
+<span id="1417">1417</span>
+<span id="1418">1418</span>
+<span id="1419">1419</span>
+<span id="1420">1420</span>
+<span id="1421">1421</span>
+<span id="1422">1422</span>
+<span id="1423">1423</span>
+<span id="1424">1424</span>
+<span id="1425">1425</span>
+<span id="1426">1426</span>
+<span id="1427">1427</span>
+<span id="1428">1428</span>
+<span id="1429">1429</span>
+<span id="1430">1430</span>
+<span id="1431">1431</span>
+<span id="1432">1432</span>
+<span id="1433">1433</span>
+<span id="1434">1434</span>
+<span id="1435">1435</span>
+<span id="1436">1436</span>
+<span id="1437">1437</span>
+<span id="1438">1438</span>
+<span id="1439">1439</span>
+<span id="1440">1440</span>
+<span id="1441">1441</span>
+<span id="1442">1442</span>
+<span id="1443">1443</span>
+<span id="1444">1444</span>
+<span id="1445">1445</span>
+<span id="1446">1446</span>
+<span id="1447">1447</span>
+<span id="1448">1448</span>
+<span id="1449">1449</span>
+<span id="1450">1450</span>
+<span id="1451">1451</span>
+<span id="1452">1452</span>
+<span id="1453">1453</span>
+<span id="1454">1454</span>
+<span id="1455">1455</span>
+<span id="1456">1456</span>
+<span id="1457">1457</span>
+<span id="1458">1458</span>
+<span id="1459">1459</span>
+<span id="1460">1460</span>
+<span id="1461">1461</span>
+<span id="1462">1462</span>
+<span id="1463">1463</span>
+<span id="1464">1464</span>
+<span id="1465">1465</span>
+<span id="1466">1466</span>
+<span id="1467">1467</span>
+<span id="1468">1468</span>
+<span id="1469">1469</span>
+<span id="1470">1470</span>
+<span id="1471">1471</span>
+<span id="1472">1472</span>
+<span id="1473">1473</span>
+<span id="1474">1474</span>
+<span id="1475">1475</span>
+<span id="1476">1476</span>
+<span id="1477">1477</span>
+<span id="1478">1478</span>
+<span id="1479">1479</span>
+<span id="1480">1480</span>
+<span id="1481">1481</span>
+<span id="1482">1482</span>
+<span id="1483">1483</span>
+<span id="1484">1484</span>
+<span id="1485">1485</span>
+<span id="1486">1486</span>
+<span id="1487">1487</span>
+<span id="1488">1488</span>
+<span id="1489">1489</span>
+<span id="1490">1490</span>
+<span id="1491">1491</span>
+<span id="1492">1492</span>
+<span id="1493">1493</span>
+<span id="1494">1494</span>
+<span id="1495">1495</span>
+<span id="1496">1496</span>
+<span id="1497">1497</span>
+<span id="1498">1498</span>
+<span id="1499">1499</span>
+<span id="1500">1500</span>
+<span id="1501">1501</span>
+<span id="1502">1502</span>
+<span id="1503">1503</span>
+<span id="1504">1504</span>
+<span id="1505">1505</span>
+<span id="1506">1506</span>
+<span id="1507">1507</span>
+<span id="1508">1508</span>
+<span id="1509">1509</span>
+<span id="1510">1510</span>
+<span id="1511">1511</span>
+<span id="1512">1512</span>
+<span id="1513">1513</span>
+<span id="1514">1514</span>
+<span id="1515">1515</span>
+<span id="1516">1516</span>
+<span id="1517">1517</span>
+<span id="1518">1518</span>
+<span id="1519">1519</span>
+<span id="1520">1520</span>
+<span id="1521">1521</span>
+<span id="1522">1522</span>
+<span id="1523">1523</span>
+<span id="1524">1524</span>
+<span id="1525">1525</span>
+<span id="1526">1526</span>
+<span id="1527">1527</span>
+<span id="1528">1528</span>
+<span id="1529">1529</span>
+<span id="1530">1530</span>
+<span id="1531">1531</span>
+<span id="1532">1532</span>
+<span id="1533">1533</span>
+<span id="1534">1534</span>
+<span id="1535">1535</span>
+<span id="1536">1536</span>
+<span id="1537">1537</span>
+<span id="1538">1538</span>
+<span id="1539">1539</span>
+<span id="1540">1540</span>
+<span id="1541">1541</span>
+<span id="1542">1542</span>
+<span id="1543">1543</span>
+<span id="1544">1544</span>
+<span id="1545">1545</span>
+<span id="1546">1546</span>
+<span id="1547">1547</span>
+<span id="1548">1548</span>
+<span id="1549">1549</span>
+<span id="1550">1550</span>
+<span id="1551">1551</span>
+<span id="1552">1552</span>
+<span id="1553">1553</span>
+<span id="1554">1554</span>
+<span id="1555">1555</span>
+<span id="1556">1556</span>
+<span id="1557">1557</span>
+<span id="1558">1558</span>
+<span id="1559">1559</span>
+<span id="1560">1560</span>
+<span id="1561">1561</span>
+<span id="1562">1562</span>
+<span id="1563">1563</span>
+<span id="1564">1564</span>
+<span id="1565">1565</span>
+<span id="1566">1566</span>
+<span id="1567">1567</span>
+<span id="1568">1568</span>
+<span id="1569">1569</span>
+<span id="1570">1570</span>
+<span id="1571">1571</span>
+<span id="1572">1572</span>
+<span id="1573">1573</span>
+<span id="1574">1574</span>
+<span id="1575">1575</span>
+<span id="1576">1576</span>
+<span id="1577">1577</span>
+<span id="1578">1578</span>
+<span id="1579">1579</span>
+<span id="1580">1580</span>
+<span id="1581">1581</span>
+<span id="1582">1582</span>
+<span id="1583">1583</span>
+<span id="1584">1584</span>
+<span id="1585">1585</span>
+<span id="1586">1586</span>
+<span id="1587">1587</span>
+<span id="1588">1588</span>
+<span id="1589">1589</span>
+<span id="1590">1590</span>
+<span id="1591">1591</span>
+<span id="1592">1592</span>
+<span id="1593">1593</span>
+<span id="1594">1594</span>
+<span id="1595">1595</span>
+<span id="1596">1596</span>
+<span id="1597">1597</span>
+<span id="1598">1598</span>
+<span id="1599">1599</span>
+<span id="1600">1600</span>
+<span id="1601">1601</span>
+<span id="1602">1602</span>
+<span id="1603">1603</span>
+<span id="1604">1604</span>
+<span id="1605">1605</span>
+<span id="1606">1606</span>
+<span id="1607">1607</span>
+<span id="1608">1608</span>
+<span id="1609">1609</span>
+<span id="1610">1610</span>
+<span id="1611">1611</span>
+<span id="1612">1612</span>
+<span id="1613">1613</span>
+<span id="1614">1614</span>
+<span id="1615">1615</span>
+<span id="1616">1616</span>
+<span id="1617">1617</span>
+<span id="1618">1618</span>
+<span id="1619">1619</span>
+<span id="1620">1620</span>
+<span id="1621">1621</span>
+<span id="1622">1622</span>
+<span id="1623">1623</span>
+<span id="1624">1624</span>
+<span id="1625">1625</span>
+<span id="1626">1626</span>
+<span id="1627">1627</span>
+<span id="1628">1628</span>
+<span id="1629">1629</span>
+<span id="1630">1630</span>
+<span id="1631">1631</span>
+<span id="1632">1632</span>
+<span id="1633">1633</span>
+<span id="1634">1634</span>
+<span id="1635">1635</span>
+<span id="1636">1636</span>
+<span id="1637">1637</span>
+<span id="1638">1638</span>
+<span id="1639">1639</span>
+<span id="1640">1640</span>
+<span id="1641">1641</span>
+<span id="1642">1642</span>
+<span id="1643">1643</span>
+<span id="1644">1644</span>
+<span id="1645">1645</span>
+<span id="1646">1646</span>
+<span id="1647">1647</span>
+<span id="1648">1648</span>
+<span id="1649">1649</span>
+<span id="1650">1650</span>
+<span id="1651">1651</span>
+<span id="1652">1652</span>
+<span id="1653">1653</span>
+<span id="1654">1654</span>
+<span id="1655">1655</span>
+<span id="1656">1656</span>
+<span id="1657">1657</span>
+<span id="1658">1658</span>
+<span id="1659">1659</span>
+<span id="1660">1660</span>
+<span id="1661">1661</span>
+<span id="1662">1662</span>
+<span id="1663">1663</span>
+<span id="1664">1664</span>
+<span id="1665">1665</span>
+<span id="1666">1666</span>
+<span id="1667">1667</span>
+<span id="1668">1668</span>
+<span id="1669">1669</span>
+<span id="1670">1670</span>
+<span id="1671">1671</span>
+<span id="1672">1672</span>
+<span id="1673">1673</span>
+<span id="1674">1674</span>
+<span id="1675">1675</span>
+<span id="1676">1676</span>
+<span id="1677">1677</span>
+<span id="1678">1678</span>
+<span id="1679">1679</span>
+<span id="1680">1680</span>
+<span id="1681">1681</span>
+<span id="1682">1682</span>
+<span id="1683">1683</span>
+<span id="1684">1684</span>
+<span id="1685">1685</span>
+<span id="1686">1686</span>
+<span id="1687">1687</span>
+<span id="1688">1688</span>
+<span id="1689">1689</span>
+<span id="1690">1690</span>
+<span id="1691">1691</span>
+<span id="1692">1692</span>
+<span id="1693">1693</span>
+<span id="1694">1694</span>
+<span id="1695">1695</span>
+<span id="1696">1696</span>
+<span id="1697">1697</span>
+<span id="1698">1698</span>
+<span id="1699">1699</span>
+<span id="1700">1700</span>
+<span id="1701">1701</span>
+<span id="1702">1702</span>
+<span id="1703">1703</span>
+<span id="1704">1704</span>
+<span id="1705">1705</span>
+<span id="1706">1706</span>
+<span id="1707">1707</span>
+<span id="1708">1708</span>
+<span id="1709">1709</span>
+<span id="1710">1710</span>
+<span id="1711">1711</span>
+<span id="1712">1712</span>
+<span id="1713">1713</span>
+<span id="1714">1714</span>
+<span id="1715">1715</span>
+<span id="1716">1716</span>
+<span id="1717">1717</span>
+<span id="1718">1718</span>
+<span id="1719">1719</span>
+<span id="1720">1720</span>
+<span id="1721">1721</span>
+<span id="1722">1722</span>
+<span id="1723">1723</span>
+<span id="1724">1724</span>
+<span id="1725">1725</span>
+<span id="1726">1726</span>
+<span id="1727">1727</span>
+<span id="1728">1728</span>
+<span id="1729">1729</span>
+<span id="1730">1730</span>
+<span id="1731">1731</span>
+<span id="1732">1732</span>
+<span id="1733">1733</span>
+<span id="1734">1734</span>
+<span id="1735">1735</span>
+<span id="1736">1736</span>
+<span id="1737">1737</span>
+<span id="1738">1738</span>
+<span id="1739">1739</span>
+<span id="1740">1740</span>
+<span id="1741">1741</span>
+<span id="1742">1742</span>
+<span id="1743">1743</span>
+<span id="1744">1744</span>
+<span id="1745">1745</span>
+<span id="1746">1746</span>
+<span id="1747">1747</span>
+<span id="1748">1748</span>
+<span id="1749">1749</span>
+<span id="1750">1750</span>
+<span id="1751">1751</span>
+<span id="1752">1752</span>
+<span id="1753">1753</span>
+<span id="1754">1754</span>
+<span id="1755">1755</span>
+<span id="1756">1756</span>
+<span id="1757">1757</span>
+<span id="1758">1758</span>
+<span id="1759">1759</span>
+<span id="1760">1760</span>
+<span id="1761">1761</span>
+<span id="1762">1762</span>
+<span id="1763">1763</span>
+<span id="1764">1764</span>
+<span id="1765">1765</span>
+<span id="1766">1766</span>
+<span id="1767">1767</span>
+<span id="1768">1768</span>
+<span id="1769">1769</span>
+<span id="1770">1770</span>
+<span id="1771">1771</span>
+<span id="1772">1772</span>
+<span id="1773">1773</span>
+<span id="1774">1774</span>
+<span id="1775">1775</span>
+<span id="1776">1776</span>
+<span id="1777">1777</span>
+<span id="1778">1778</span>
+<span id="1779">1779</span>
+<span id="1780">1780</span>
+<span id="1781">1781</span>
+<span id="1782">1782</span>
+<span id="1783">1783</span>
+<span id="1784">1784</span>
+<span id="1785">1785</span>
+<span id="1786">1786</span>
+<span id="1787">1787</span>
+<span id="1788">1788</span>
+<span id="1789">1789</span>
+<span id="1790">1790</span>
+<span id="1791">1791</span>
+<span id="1792">1792</span>
+<span id="1793">1793</span>
+<span id="1794">1794</span>
+<span id="1795">1795</span>
+<span id="1796">1796</span>
+<span id="1797">1797</span>
+<span id="1798">1798</span>
+<span id="1799">1799</span>
+<span id="1800">1800</span>
+<span id="1801">1801</span>
+<span id="1802">1802</span>
+<span id="1803">1803</span>
+<span id="1804">1804</span>
+<span id="1805">1805</span>
+<span id="1806">1806</span>
+<span id="1807">1807</span>
+<span id="1808">1808</span>
+<span id="1809">1809</span>
+<span id="1810">1810</span>
+<span id="1811">1811</span>
+<span id="1812">1812</span>
+<span id="1813">1813</span>
+<span id="1814">1814</span>
+<span id="1815">1815</span>
+<span id="1816">1816</span>
+<span id="1817">1817</span>
+<span id="1818">1818</span>
+<span id="1819">1819</span>
+<span id="1820">1820</span>
+<span id="1821">1821</span>
+<span id="1822">1822</span>
+<span id="1823">1823</span>
+<span id="1824">1824</span>
+<span id="1825">1825</span>
+<span id="1826">1826</span>
+<span id="1827">1827</span>
+<span id="1828">1828</span>
+<span id="1829">1829</span>
+<span id="1830">1830</span>
+<span id="1831">1831</span>
+<span id="1832">1832</span>
+<span id="1833">1833</span>
+<span id="1834">1834</span>
+<span id="1835">1835</span>
+<span id="1836">1836</span>
+<span id="1837">1837</span>
+<span id="1838">1838</span>
+<span id="1839">1839</span>
+<span id="1840">1840</span>
+<span id="1841">1841</span>
+<span id="1842">1842</span>
+<span id="1843">1843</span>
+<span id="1844">1844</span>
+<span id="1845">1845</span>
+<span id="1846">1846</span>
+<span id="1847">1847</span>
+<span id="1848">1848</span>
+<span id="1849">1849</span>
+<span id="1850">1850</span>
+<span id="1851">1851</span>
+<span id="1852">1852</span>
+<span id="1853">1853</span>
+<span id="1854">1854</span>
+<span id="1855">1855</span>
+<span id="1856">1856</span>
+<span id="1857">1857</span>
+<span id="1858">1858</span>
+<span id="1859">1859</span>
+<span id="1860">1860</span>
+<span id="1861">1861</span>
+<span id="1862">1862</span>
+<span id="1863">1863</span>
+<span id="1864">1864</span>
+<span id="1865">1865</span>
+<span id="1866">1866</span>
+<span id="1867">1867</span>
+<span id="1868">1868</span>
+<span id="1869">1869</span>
+<span id="1870">1870</span>
+<span id="1871">1871</span>
+<span id="1872">1872</span>
+<span id="1873">1873</span>
+<span id="1874">1874</span>
+<span id="1875">1875</span>
+<span id="1876">1876</span>
+<span id="1877">1877</span>
+<span id="1878">1878</span>
+<span id="1879">1879</span>
+<span id="1880">1880</span>
+<span id="1881">1881</span>
+</pre><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::memory::MemoryCreator;
+<span class="kw">use </span><span class="kw">crate</span>::trampoline::MemoryCreatorProxy;
+<span class="kw">use </span>anyhow::{bail, <span class="prelude-ty">Result</span>};
+<span class="kw">use </span>serde::{Deserialize, Serialize};
+<span class="kw">use </span>std::collections::{HashMap, HashSet};
+<span class="kw">use </span>std::fmt;
+<span class="attribute">#[cfg(feature = <span class="string">&quot;cache&quot;</span>)]
+</span><span class="kw">use </span>std::path::Path;
+<span class="kw">use </span>std::sync::Arc;
+<span class="kw">use </span>wasmparser::WasmFeatures;
+<span class="attribute">#[cfg(feature = <span class="string">&quot;cache&quot;</span>)]
+</span><span class="kw">use </span>wasmtime_cache::CacheConfig;
+<span class="kw">use </span>wasmtime_environ::Tunables;
+<span class="kw">use </span>wasmtime_jit::{JitDumpAgent, NullProfilerAgent, ProfilingAgent, VTuneAgent};
+<span class="kw">use </span>wasmtime_runtime::{InstanceAllocator, OnDemandInstanceAllocator, RuntimeMemoryCreator};
+
+<span class="kw">pub use </span>wasmtime_environ::CacheStore;
+
+<span class="doccomment">/// Represents the module instance allocation strategy to use.
+</span><span class="attribute">#[derive(Clone)]
+</span><span class="kw">pub enum </span>InstanceAllocationStrategy {
+    <span class="doccomment">/// The on-demand instance allocation strategy.
+    ///
+    /// Resources related to a module instance are allocated at instantiation time and
+    /// immediately deallocated when the `Store` referencing the instance is dropped.
+    ///
+    /// This is the default allocation strategy for Wasmtime.
+    </span>OnDemand,
+    <span class="doccomment">/// The pooling instance allocation strategy.
+    ///
+    /// A pool of resources is created in advance and module instantiation reuses resources
+    /// from the pool. Resources are returned to the pool when the `Store` referencing the instance
+    /// is dropped.
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;pooling-allocator&quot;</span>)]
+    </span>Pooling(PoolingAllocationConfig),
+}
+
+<span class="kw">impl </span>InstanceAllocationStrategy {
+    <span class="doccomment">/// The default pooling instance allocation strategy.
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;pooling-allocator&quot;</span>)]
+    </span><span class="kw">pub fn </span>pooling() -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::Pooling(Default::default())
+    }
+}
+
+<span class="kw">impl </span>Default <span class="kw">for </span>InstanceAllocationStrategy {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::OnDemand
+    }
+}
+
+<span class="attribute">#[derive(Clone)]
+</span><span class="doccomment">/// Configure the strategy used for versioning in serializing and deserializing [`crate::Module`].
+</span><span class="kw">pub enum </span>ModuleVersionStrategy {
+    <span class="doccomment">/// Use the wasmtime crate&#39;s Cargo package version.
+    </span>WasmtimeVersion,
+    <span class="doccomment">/// Use a custom version string. Must be at most 255 bytes.
+    </span>Custom(String),
+    <span class="doccomment">/// Emit no version string in serialization, and accept all version strings in deserialization.
+    </span><span class="prelude-val">None</span>,
+}
+
+<span class="kw">impl </span>Default <span class="kw">for </span>ModuleVersionStrategy {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        ModuleVersionStrategy::WasmtimeVersion
+    }
+}
+
+<span class="doccomment">/// Global configuration options used to create an [`Engine`](crate::Engine)
+/// and customize its behavior.
+///
+/// This structure exposed a builder-like interface and is primarily consumed by
+/// [`Engine::new()`](crate::Engine::new).
+///
+/// The validation of `Config` is deferred until the engine is being built, thus
+/// a problematic config may cause `Engine::new` to fail.
+</span><span class="attribute">#[derive(Clone)]
+</span><span class="kw">pub struct </span>Config {
+    <span class="attribute">#[cfg(compiler)]
+    </span>compiler_config: CompilerConfig,
+    profiling_strategy: ProfilingStrategy,
+
+    <span class="kw">pub</span>(<span class="kw">crate</span>) tunables: Tunables,
+    <span class="attribute">#[cfg(feature = <span class="string">&quot;cache&quot;</span>)]
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) cache_config: CacheConfig,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) mem_creator: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>RuntimeMemoryCreator&gt;&gt;,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) allocation_strategy: InstanceAllocationStrategy,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) max_wasm_stack: usize,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) features: WasmFeatures,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) wasm_backtrace: bool,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) wasm_backtrace_details_env_used: bool,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) native_unwind_info: bool,
+    <span class="attribute">#[cfg(feature = <span class="string">&quot;async&quot;</span>)]
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) async_stack_size: usize,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) async_support: bool,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) module_version: ModuleVersionStrategy,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) parallel_compilation: bool,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) memory_init_cow: bool,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) memory_guaranteed_dense_image_size: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) force_memory_init_memfd: bool,
+}
+
+<span class="doccomment">/// User-provided configuration for the compiler.
+</span><span class="attribute">#[cfg(compiler)]
+#[derive(Debug, Clone)]
+</span><span class="kw">struct </span>CompilerConfig {
+    strategy: Strategy,
+    target: <span class="prelude-ty">Option</span>&lt;target_lexicon::Triple&gt;,
+    settings: HashMap&lt;String, String&gt;,
+    flags: HashSet&lt;String&gt;,
+    <span class="attribute">#[cfg(compiler)]
+    </span>cache_store: <span class="prelude-ty">Option</span>&lt;Arc&lt;<span class="kw">dyn </span>CacheStore&gt;&gt;,
+}
+
+<span class="attribute">#[cfg(compiler)]
+</span><span class="kw">impl </span>CompilerConfig {
+    <span class="kw">fn </span>new(strategy: Strategy) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            strategy,
+            target: <span class="prelude-val">None</span>,
+            settings: HashMap::new(),
+            flags: HashSet::new(),
+            cache_store: <span class="prelude-val">None</span>,
+        }
+    }
+
+    <span class="doccomment">/// Ensures that the key is not set or equals to the given value.
+    /// If the key is not set, it will be set to the given value.
+    ///
+    /// # Returns
+    ///
+    /// Returns true if successfully set or already had the given setting
+    /// value, or false if the setting was explicitly set to something
+    /// else previously.
+    </span><span class="kw">fn </span>ensure_setting_unset_or_given(<span class="kw-2">&amp;mut </span><span class="self">self</span>, k: <span class="kw-2">&amp;</span>str, v: <span class="kw-2">&amp;</span>str) -&gt; bool {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(value) = <span class="self">self</span>.settings.get(k) {
+            <span class="kw">if </span>value != v {
+                <span class="kw">return </span><span class="bool-val">false</span>;
+            }
+        } <span class="kw">else </span>{
+            <span class="self">self</span>.settings.insert(k.to_string(), v.to_string());
+        }
+        <span class="bool-val">true
+    </span>}
+}
+
+<span class="attribute">#[cfg(compiler)]
+</span><span class="kw">impl </span>Default <span class="kw">for </span>CompilerConfig {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::new(Strategy::Auto)
+    }
+}
+
+<span class="kw">impl </span>Config {
+    <span class="doccomment">/// Creates a new configuration object with the default configuration
+    /// specified.
+    </span><span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
+        <span class="kw">let </span><span class="kw-2">mut </span>ret = <span class="self">Self </span>{
+            tunables: Tunables::default(),
+            <span class="attribute">#[cfg(compiler)]
+            </span>compiler_config: CompilerConfig::default(),
+            <span class="attribute">#[cfg(feature = <span class="string">&quot;cache&quot;</span>)]
+            </span>cache_config: CacheConfig::new_cache_disabled(),
+            profiling_strategy: ProfilingStrategy::None,
+            mem_creator: <span class="prelude-val">None</span>,
+            allocation_strategy: InstanceAllocationStrategy::OnDemand,
+            <span class="comment">// 512k of stack -- note that this is chosen currently to not be too
+            // big, not be too small, and be a good default for most platforms.
+            // One platform of particular note is Windows where the stack size
+            // of the main thread seems to, by default, be smaller than that of
+            // Linux and macOS. This 512k value at least lets our current test
+            // suite pass on the main thread of Windows (using `--test-threads
+            // 1` forces this), or at least it passed when this change was
+            // committed.
+            </span>max_wasm_stack: <span class="number">512 </span>* <span class="number">1024</span>,
+            wasm_backtrace: <span class="bool-val">true</span>,
+            wasm_backtrace_details_env_used: <span class="bool-val">false</span>,
+            native_unwind_info: <span class="bool-val">true</span>,
+            features: WasmFeatures::default(),
+            <span class="attribute">#[cfg(feature = <span class="string">&quot;async&quot;</span>)]
+            </span>async_stack_size: <span class="number">2 </span>&lt;&lt; <span class="number">20</span>,
+            async_support: <span class="bool-val">false</span>,
+            module_version: ModuleVersionStrategy::default(),
+            parallel_compilation: <span class="bool-val">true</span>,
+            memory_init_cow: <span class="bool-val">true</span>,
+            memory_guaranteed_dense_image_size: <span class="number">16 </span>&lt;&lt; <span class="number">20</span>,
+            force_memory_init_memfd: <span class="bool-val">false</span>,
+        };
+        <span class="attribute">#[cfg(compiler)]
+        </span>{
+            ret.cranelift_debug_verifier(<span class="bool-val">false</span>);
+            ret.cranelift_opt_level(OptLevel::Speed);
+        }
+        ret.wasm_reference_types(<span class="bool-val">true</span>);
+        ret.wasm_multi_value(<span class="bool-val">true</span>);
+        ret.wasm_bulk_memory(<span class="bool-val">true</span>);
+        ret.wasm_simd(<span class="bool-val">true</span>);
+        ret.wasm_backtrace_details(WasmBacktraceDetails::Environment);
+        ret
+    }
+
+    <span class="doccomment">/// Sets the target triple for the [`Config`].
+    ///
+    /// By default, the host target triple is used for the [`Config`].
+    ///
+    /// This method can be used to change the target triple.
+    ///
+    /// Cranelift flags will not be inferred for the given target and any
+    /// existing target-specific Cranelift flags will be cleared.
+    ///
+    /// # Errors
+    ///
+    /// This method will error if the given target triple is not supported.
+    </span><span class="attribute">#[cfg(compiler)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;cranelift&quot;</span>)))] </span><span class="comment">// see build.rs
+    </span><span class="kw">pub fn </span>target(<span class="kw-2">&amp;mut </span><span class="self">self</span>, target: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt; {
+        <span class="kw">use </span>std::str::FromStr;
+        <span class="self">self</span>.compiler_config.target =
+            <span class="prelude-val">Some</span>(target_lexicon::Triple::from_str(target).map_err(|e| <span class="macro">anyhow::anyhow!</span>(e))<span class="question-mark">?</span>);
+
+        <span class="prelude-val">Ok</span>(<span class="self">self</span>)
+    }
+
+    <span class="doccomment">/// Enables the incremental compilation cache in Cranelift, using the provided `CacheStore`
+    /// backend for storage.
+    </span><span class="attribute">#[cfg(all(feature = <span class="string">&quot;incremental-cache&quot;</span>, feature = <span class="string">&quot;cranelift&quot;</span>))]
+    </span><span class="kw">pub fn </span>enable_incremental_compilation(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        cache_store: Arc&lt;<span class="kw">dyn </span>CacheStore&gt;,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt; {
+        <span class="self">self</span>.compiler_config.cache_store = <span class="prelude-val">Some</span>(cache_store);
+        <span class="prelude-val">Ok</span>(<span class="self">self</span>)
+    }
+
+    <span class="doccomment">/// Whether or not to enable support for asynchronous functions in Wasmtime.
+    ///
+    /// When enabled, the config can optionally define host functions with `async`.
+    /// Instances created and functions called with this `Config` *must* be called
+    /// through their asynchronous APIs, however. For example using
+    /// [`Func::call`](crate::Func::call) will panic when used with this config.
+    ///
+    /// # Asynchronous Wasm
+    ///
+    /// WebAssembly does not currently have a way to specify at the bytecode
+    /// level what is and isn&#39;t async. Host-defined functions, however, may be
+    /// defined as `async`. WebAssembly imports always appear synchronous, which
+    /// gives rise to a bit of an impedance mismatch here. To solve this
+    /// Wasmtime supports &quot;asynchronous configs&quot; which enables calling these
+    /// asynchronous functions in a way that looks synchronous to the executing
+    /// WebAssembly code.
+    ///
+    /// An asynchronous config must always invoke wasm code asynchronously,
+    /// meaning we&#39;ll always represent its computation as a
+    /// [`Future`](std::future::Future). The `poll` method of the futures
+    /// returned by Wasmtime will perform the actual work of calling the
+    /// WebAssembly. Wasmtime won&#39;t manage its own thread pools or similar,
+    /// that&#39;s left up to the embedder.
+    ///
+    /// To implement futures in a way that WebAssembly sees asynchronous host
+    /// functions as synchronous, all async Wasmtime futures will execute on a
+    /// separately allocated native stack from the thread otherwise executing
+    /// Wasmtime. This separate native stack can then be switched to and from.
+    /// Using this whenever an `async` host function returns a future that
+    /// resolves to `Pending` we switch away from the temporary stack back to
+    /// the main stack and propagate the `Pending` status.
+    ///
+    /// In general it&#39;s encouraged that the integration with `async` and
+    /// wasmtime is designed early on in your embedding of Wasmtime to ensure
+    /// that it&#39;s planned that WebAssembly executes in the right context of your
+    /// application.
+    ///
+    /// # Execution in `poll`
+    ///
+    /// The [`Future::poll`](std::future::Future::poll) method is the main
+    /// driving force behind Rust&#39;s futures. That method&#39;s own documentation
+    /// states &quot;an implementation of `poll` should strive to return quickly, and
+    /// should not block&quot;. This, however, can be at odds with executing
+    /// WebAssembly code as part of the `poll` method itself. If your
+    /// WebAssembly is untrusted then this could allow the `poll` method to take
+    /// arbitrarily long in the worst case, likely blocking all other
+    /// asynchronous tasks.
+    ///
+    /// To remedy this situation you have a a few possible ways to solve this:
+    ///
+    /// * The most efficient solution is to enable
+    ///   [`Config::epoch_interruption`] in conjunction with
+    ///   [`crate::Store::epoch_deadline_async_yield_and_update`]. Coupled with
+    ///   periodic calls to [`crate::Engine::increment_epoch`] this will cause
+    ///   executing WebAssembly to periodically yield back according to the
+    ///   epoch configuration settings. This enables `Future::poll` to take at
+    ///   most a certain amount of time according to epoch configuration
+    ///   settings and when increments happen. The benefit of this approach is
+    ///   that the instrumentation in compiled code is quite lightweight, but a
+    ///   downside can be that the scheduling is somewhat nondeterministic since
+    ///   increments are usually timer-based which are not always deterministic.
+    ///
+    ///   Note that to prevent infinite execution of wasm it&#39;s recommended to
+    ///   place a timeout on the entire future representing executing wasm code
+    ///   and the periodic yields with epochs should ensure that when the
+    ///   timeout is reached it&#39;s appropriately recognized.
+    ///
+    /// * Alternatively you can enable the
+    ///   [`Config::consume_fuel`](crate::Config::consume_fuel) method as well
+    ///   as [`crate::Store::out_of_fuel_async_yield`] When doing so this will
+    ///   configure Wasmtime futures to yield periodically while they&#39;re
+    ///   executing WebAssembly code. After consuming the specified amount of
+    ///   fuel wasm futures will return `Poll::Pending` from their `poll`
+    ///   method, and will get automatically re-polled later. This enables the
+    ///   `Future::poll` method to take roughly a fixed amount of time since
+    ///   fuel is guaranteed to get consumed while wasm is executing. Unlike
+    ///   epoch-based preemption this is deterministic since wasm always
+    ///   consumes a fixed amount of fuel per-operation. The downside of this
+    ///   approach, however, is that the compiled code instrumentation is
+    ///   significantly more expensive than epoch checks.
+    ///
+    ///   Note that to prevent infinite execution of wasm it&#39;s recommended to
+    ///   place a timeout on the entire future representing executing wasm code
+    ///   and the periodic yields with epochs should ensure that when the
+    ///   timeout is reached it&#39;s appropriately recognized.
+    ///
+    /// In all cases special care needs to be taken when integrating
+    /// asynchronous wasm into your application. You should carefully plan where
+    /// WebAssembly will execute and what compute resources will be allotted to
+    /// it. If Wasmtime doesn&#39;t support exactly what you&#39;d like just yet, please
+    /// feel free to open an issue!
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;async&quot;</span>)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;async&quot;</span>)))]
+    </span><span class="kw">pub fn </span>async_support(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.async_support = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether DWARF debug information will be emitted during
+    /// compilation.
+    ///
+    /// By default this option is `false`.
+    </span><span class="kw">pub fn </span>debug_info(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.tunables.generate_native_debuginfo = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether [`WasmBacktrace`] will be present in the context of
+    /// errors returned from Wasmtime.
+    ///
+    /// A backtrace may be collected whenever an error is returned from a host
+    /// function call through to WebAssembly or when WebAssembly itself hits a
+    /// trap condition, such as an out-of-bounds memory access. This flag
+    /// indicates, in these conditions, whether the backtrace is collected or
+    /// not.
+    ///
+    /// Currently wasm backtraces are implemented through frame pointer walking.
+    /// This means that collecting a backtrace is expected to be a fast and
+    /// relatively cheap operation. Additionally backtrace collection is
+    /// suitable in concurrent environments since one thread capturing a
+    /// backtrace won&#39;t block other threads.
+    ///
+    /// Collected backtraces are attached via [`anyhow::Error::context`] to
+    /// errors returned from host functions. The [`WasmBacktrace`] type can be
+    /// acquired via [`anyhow::Error::downcast_ref`] to inspect the backtrace.
+    /// When this option is disabled then this context is never applied to
+    /// errors coming out of wasm.
+    ///
+    /// This option is `true` by default.
+    ///
+    /// [`WasmBacktrace`]: crate::WasmBacktrace
+    </span><span class="attribute">#[deprecated = <span class="string">&quot;Backtraces will always be enabled in future Wasmtime releases; if this \
+                    causes problems for you, please file an issue.&quot;</span>]
+    </span><span class="kw">pub fn </span>wasm_backtrace(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.wasm_backtrace = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether backtraces in `Trap` will parse debug info in the wasm file to
+    /// have filename/line number information.
+    ///
+    /// When enabled this will causes modules to retain debugging information
+    /// found in wasm binaries. This debug information will be used when a trap
+    /// happens to symbolicate each stack frame and attempt to print a
+    /// filename/line number for each wasm frame in the stack trace.
+    ///
+    /// By default this option is `WasmBacktraceDetails::Environment`, meaning
+    /// that wasm will read `WASMTIME_BACKTRACE_DETAILS` to indicate whether details
+    /// should be parsed.
+    </span><span class="kw">pub fn </span>wasm_backtrace_details(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: WasmBacktraceDetails) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.wasm_backtrace_details_env_used = <span class="bool-val">false</span>;
+        <span class="self">self</span>.tunables.parse_wasm_debuginfo = <span class="kw">match </span>enable {
+            WasmBacktraceDetails::Enable =&gt; <span class="bool-val">true</span>,
+            WasmBacktraceDetails::Disable =&gt; <span class="bool-val">false</span>,
+            WasmBacktraceDetails::Environment =&gt; {
+                <span class="self">self</span>.wasm_backtrace_details_env_used = <span class="bool-val">true</span>;
+                std::env::var(<span class="string">&quot;WASMTIME_BACKTRACE_DETAILS&quot;</span>)
+                    .map(|s| s == <span class="string">&quot;1&quot;</span>)
+                    .unwrap_or(<span class="bool-val">false</span>)
+            }
+        };
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether to generate native unwind information
+    /// (e.g. `.eh_frame` on Linux).
+    ///
+    /// This configuration option only exists to help third-party stack
+    /// capturing mechanisms, such as the system&#39;s unwinder or the `backtrace`
+    /// crate, determine how to unwind through Wasm frames. It does not affect
+    /// whether Wasmtime can capture Wasm backtraces or not. The presence of
+    /// [`WasmBacktrace`] is controlled by the [`Config::wasm_backtrace`]
+    /// option.
+    ///
+    /// Note that native unwind information is always generated when targeting
+    /// Windows, since the Windows ABI requires it.
+    ///
+    /// This option defaults to `true`.
+    ///
+    /// [`WasmBacktrace`]: crate::WasmBacktrace
+    </span><span class="kw">pub fn </span>native_unwind_info(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.native_unwind_info = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether execution of WebAssembly will &quot;consume fuel&quot; to
+    /// either halt or yield execution as desired.
+    ///
+    /// This can be used to deterministically prevent infinitely-executing
+    /// WebAssembly code by instrumenting generated code to consume fuel as it
+    /// executes. When fuel runs out the behavior is defined by configuration
+    /// within a [`Store`], and by default a trap is raised.
+    ///
+    /// Note that a [`Store`] starts with no fuel, so if you enable this option
+    /// you&#39;ll have to be sure to pour some fuel into [`Store`] before
+    /// executing some code.
+    ///
+    /// By default this option is `false`.
+    ///
+    /// [`Store`]: crate::Store
+    </span><span class="kw">pub fn </span>consume_fuel(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.tunables.consume_fuel = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Enables epoch-based interruption.
+    ///
+    /// When executing code in async mode, we sometimes want to
+    /// implement a form of cooperative timeslicing: long-running Wasm
+    /// guest code should periodically yield to the executor
+    /// loop. This yielding could be implemented by using &quot;fuel&quot; (see
+    /// [`consume_fuel`](Config::consume_fuel)). However, fuel
+    /// instrumentation is somewhat expensive: it modifies the
+    /// compiled form of the Wasm code so that it maintains a precise
+    /// instruction count, frequently checking this count against the
+    /// remaining fuel. If one does not need this precise count or
+    /// deterministic interruptions, and only needs a periodic
+    /// interrupt of some form, then It would be better to have a more
+    /// lightweight mechanism.
+    ///
+    /// Epoch-based interruption is that mechanism. There is a global
+    /// &quot;epoch&quot;, which is a counter that divides time into arbitrary
+    /// periods (or epochs). This counter lives on the
+    /// [`Engine`](crate::Engine) and can be incremented by calling
+    /// [`Engine::increment_epoch`](crate::Engine::increment_epoch).
+    /// Epoch-based instrumentation works by setting a &quot;deadline
+    /// epoch&quot;. The compiled code knows the deadline, and at certain
+    /// points, checks the current epoch against that deadline. It
+    /// will yield if the deadline has been reached.
+    ///
+    /// The idea is that checking an infrequently-changing counter is
+    /// cheaper than counting and frequently storing a precise metric
+    /// (instructions executed) locally. The interruptions are not
+    /// deterministic, but if the embedder increments the epoch in a
+    /// periodic way (say, every regular timer tick by a thread or
+    /// signal handler), then we can ensure that all async code will
+    /// yield to the executor within a bounded time.
+    ///
+    /// The deadline check cannot be avoided by malicious wasm code. It is safe
+    /// to use epoch deadlines to limit the execution time of untrusted
+    /// code.
+    ///
+    /// The [`Store`](crate::Store) tracks the deadline, and controls
+    /// what happens when the deadline is reached during
+    /// execution. Several behaviors are possible:
+    ///
+    /// - Trap if code is executing when the epoch deadline is
+    ///   met. See
+    ///   [`Store::epoch_deadline_trap`](crate::Store::epoch_deadline_trap).
+    ///
+    /// - Call an arbitrary function. This function may chose to trap or
+    ///   increment the epoch. See
+    ///   [`Store::epoch_deadline_callback`](crate::Store::epoch_deadline_callback).
+    ///
+    /// - Yield to the executor loop, then resume when the future is
+    ///   next polled. See
+    ///   [`Store::epoch_deadline_async_yield_and_update`](crate::Store::epoch_deadline_async_yield_and_update).
+    ///
+    /// Trapping is the default. The yielding behaviour may be used for
+    /// the timeslicing behavior described above.
+    ///
+    /// This feature is available with or without async support.
+    /// However, without async support, the timeslicing behaviour is
+    /// not available. This means epoch-based interruption can only
+    /// serve as a simple external-interruption mechanism.
+    ///
+    /// An initial deadline must be set before executing code by calling
+    /// [`Store::set_epoch_deadline`](crate::Store::set_epoch_deadline). If this
+    /// deadline is not configured then wasm will immediately trap.
+    ///
+    /// ## When to use fuel vs. epochs
+    ///
+    /// In general, epoch-based interruption results in faster
+    /// execution. This difference is sometimes significant: in some
+    /// measurements, up to 2-3x. This is because epoch-based
+    /// interruption does less work: it only watches for a global
+    /// rarely-changing counter to increment, rather than keeping a
+    /// local frequently-changing counter and comparing it to a
+    /// deadline.
+    ///
+    /// Fuel, in contrast, should be used when *deterministic*
+    /// yielding or trapping is needed. For example, if it is required
+    /// that the same function call with the same starting state will
+    /// always either complete or trap with an out-of-fuel error,
+    /// deterministically, then fuel with a fixed bound should be
+    /// used.
+    ///
+    /// # See Also
+    ///
+    /// - [`Engine::increment_epoch`](crate::Engine::increment_epoch)
+    /// - [`Store::set_epoch_deadline`](crate::Store::set_epoch_deadline)
+    /// - [`Store::epoch_deadline_trap`](crate::Store::epoch_deadline_trap)
+    /// - [`Store::epoch_deadline_callback`](crate::Store::epoch_deadline_callback)
+    /// - [`Store::epoch_deadline_async_yield_and_update`](crate::Store::epoch_deadline_async_yield_and_update)
+    </span><span class="kw">pub fn </span>epoch_interruption(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.tunables.epoch_interruption = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures the maximum amount of stack space available for
+    /// executing WebAssembly code.
+    ///
+    /// WebAssembly has well-defined semantics on stack overflow. This is
+    /// intended to be a knob which can help configure how much stack space
+    /// wasm execution is allowed to consume. Note that the number here is not
+    /// super-precise, but rather wasm will take at most &quot;pretty close to this
+    /// much&quot; stack space.
+    ///
+    /// If a wasm call (or series of nested wasm calls) take more stack space
+    /// than the `size` specified then a stack overflow trap will be raised.
+    ///
+    /// Caveat: this knob only limits the stack space consumed by wasm code.
+    /// More importantly, it does not ensure that this much stack space is
+    /// available on the calling thread stack. Exhausting the thread stack
+    /// typically leads to an **abort** of the process.
+    ///
+    /// Here are some examples of how that could happen:
+    ///
+    /// - Let&#39;s assume this option is set to 2 MiB and then a thread that has
+    ///   a stack with 512 KiB left.
+    ///
+    ///   If wasm code consumes more than 512 KiB then the process will be aborted.
+    ///
+    /// - Assuming the same conditions, but this time wasm code does not consume
+    ///   any stack but calls into a host function. The host function consumes
+    ///   more than 512 KiB of stack space. The process will be aborted.
+    ///
+    /// There&#39;s another gotcha related to recursive calling into wasm: the stack
+    /// space consumed by a host function is counted towards this limit. The
+    /// host functions are not prevented from consuming more than this limit.
+    /// However, if the host function that used more than this limit and called
+    /// back into wasm, then the execution will trap immediatelly because of
+    /// stack overflow.
+    ///
+    /// When the `async` feature is enabled, this value cannot exceed the
+    /// `async_stack_size` option. Be careful not to set this value too close
+    /// to `async_stack_size` as doing so may limit how much stack space
+    /// is available for host functions.
+    ///
+    /// By default this option is 512 KiB.
+    ///
+    /// # Errors
+    ///
+    /// The `Engine::new` method will fail if the `size` specified here is
+    /// either 0 or larger than the [`Config::async_stack_size`] configuration.
+    </span><span class="kw">pub fn </span>max_wasm_stack(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size: usize) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.max_wasm_stack = size;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures the size of the stacks used for asynchronous execution.
+    ///
+    /// This setting configures the size of the stacks that are allocated for
+    /// asynchronous execution. The value cannot be less than `max_wasm_stack`.
+    ///
+    /// The amount of stack space guaranteed for host functions is
+    /// `async_stack_size - max_wasm_stack`, so take care not to set these two values
+    /// close to one another; doing so may cause host functions to overflow the
+    /// stack and abort the process.
+    ///
+    /// By default this option is 2 MiB.
+    ///
+    /// # Errors
+    ///
+    /// The `Engine::new` method will fail if the value for this option is
+    /// smaller than the [`Config::max_wasm_stack`] option.
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;async&quot;</span>)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;async&quot;</span>)))]
+    </span><span class="kw">pub fn </span>async_stack_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size: usize) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.async_stack_size = size;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether the WebAssembly threads proposal will be enabled for
+    /// compilation.
+    ///
+    /// The [WebAssembly threads proposal][threads] is not currently fully
+    /// standardized and is undergoing development. Additionally the support in
+    /// wasmtime itself is still being worked on. Support for this feature can
+    /// be enabled through this method for appropriate wasm modules.
+    ///
+    /// This feature gates items such as shared memories and atomic
+    /// instructions. Note that the threads feature depends on the
+    /// bulk memory feature, which is enabled by default.
+    ///
+    /// This is `false` by default.
+    ///
+    /// &gt; **Note**: Wasmtime does not implement everything for the wasm threads
+    /// &gt; spec at this time, so bugs, panics, and possibly segfaults should be
+    /// &gt; expected. This should not be enabled in a production setting right
+    /// &gt; now.
+    ///
+    /// # Errors
+    ///
+    /// The validation of this feature are deferred until the engine is being built,
+    /// and thus may cause `Engine::new` fail if the `bulk_memory` feature is disabled.
+    ///
+    /// [threads]: https://github.com/webassembly/threads
+    </span><span class="kw">pub fn </span>wasm_threads(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.features.threads = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether the [WebAssembly reference types proposal][proposal]
+    /// will be enabled for compilation.
+    ///
+    /// This feature gates items such as the `externref` and `funcref` types as
+    /// well as allowing a module to define multiple tables.
+    ///
+    /// Note that the reference types proposal depends on the bulk memory proposal.
+    ///
+    /// This feature is `true` by default.
+    ///
+    /// # Errors
+    ///
+    /// The validation of this feature are deferred until the engine is being built,
+    /// and thus may cause `Engine::new` fail if the `bulk_memory` feature is disabled.
+    ///
+    /// [proposal]: https://github.com/webassembly/reference-types
+    </span><span class="kw">pub fn </span>wasm_reference_types(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.features.reference_types = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether the WebAssembly SIMD proposal will be
+    /// enabled for compilation.
+    ///
+    /// The [WebAssembly SIMD proposal][proposal]. This feature gates items such
+    /// as the `v128` type and all of its operators being in a module. Note that
+    /// this does not enable the [relaxed simd proposal] as that is not
+    /// implemented in Wasmtime at this time.
+    ///
+    /// On x86_64 platforms note that enabling this feature requires SSE 4.2 and
+    /// below to be available on the target platform. Compilation will fail if
+    /// the compile target does not include SSE 4.2.
+    ///
+    /// This is `true` by default.
+    ///
+    /// [proposal]: https://github.com/webassembly/simd
+    /// [relaxed simd proposal]: https://github.com/WebAssembly/relaxed-simd
+    </span><span class="kw">pub fn </span>wasm_simd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.features.simd = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether the [WebAssembly bulk memory operations
+    /// proposal][proposal] will be enabled for compilation.
+    ///
+    /// This feature gates items such as the `memory.copy` instruction, passive
+    /// data/table segments, etc, being in a module.
+    ///
+    /// This is `true` by default.
+    ///
+    /// Feature `reference_types`, which is also `true` by default, requires
+    /// this feature to be enabled. Thus disabling this feature must also disable
+    /// `reference_types` as well using [`wasm_reference_types`](crate::Config::wasm_reference_types).
+    ///
+    /// # Errors
+    ///
+    /// Disabling this feature without disabling `reference_types` will cause
+    /// `Engine::new` to fail.
+    ///
+    /// [proposal]: https://github.com/webassembly/bulk-memory-operations
+    </span><span class="kw">pub fn </span>wasm_bulk_memory(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.features.bulk_memory = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether the WebAssembly multi-value [proposal] will
+    /// be enabled for compilation.
+    ///
+    /// This feature gates functions and blocks returning multiple values in a
+    /// module, for example.
+    ///
+    /// This is `true` by default.
+    ///
+    /// [proposal]: https://github.com/webassembly/multi-value
+    </span><span class="kw">pub fn </span>wasm_multi_value(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.features.multi_value = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether the WebAssembly multi-memory [proposal] will
+    /// be enabled for compilation.
+    ///
+    /// This feature gates modules having more than one linear memory
+    /// declaration or import.
+    ///
+    /// This is `false` by default.
+    ///
+    /// [proposal]: https://github.com/webassembly/multi-memory
+    </span><span class="kw">pub fn </span>wasm_multi_memory(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.features.multi_memory = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether the WebAssembly memory64 [proposal] will
+    /// be enabled for compilation.
+    ///
+    /// Note that this the upstream specification is not finalized and Wasmtime
+    /// may also have bugs for this feature since it hasn&#39;t been exercised
+    /// much.
+    ///
+    /// This is `false` by default.
+    ///
+    /// [proposal]: https://github.com/webassembly/memory64
+    </span><span class="kw">pub fn </span>wasm_memory64(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.features.memory64 = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether the WebAssembly component-model [proposal] will
+    /// be enabled for compilation.
+    ///
+    /// Note that this feature is a work-in-progress and is incomplete.
+    ///
+    /// This is `false` by default.
+    ///
+    /// [proposal]: https://github.com/webassembly/component-model
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;component-model&quot;</span>)]
+    </span><span class="kw">pub fn </span>wasm_component_model(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.features.component_model = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures which compilation strategy will be used for wasm modules.
+    ///
+    /// This method can be used to configure which compiler is used for wasm
+    /// modules, and for more documentation consult the [`Strategy`] enumeration
+    /// and its documentation.
+    ///
+    /// The default value for this is `Strategy::Auto`.
+    </span><span class="attribute">#[cfg(compiler)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;cranelift&quot;</span>)))] </span><span class="comment">// see build.rs
+    </span><span class="kw">pub fn </span>strategy(<span class="kw-2">&amp;mut </span><span class="self">self</span>, strategy: Strategy) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.compiler_config.strategy = strategy;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Creates a default profiler based on the profiling strategy chosen.
+    ///
+    /// Profiler creation calls the type&#39;s default initializer where the purpose is
+    /// really just to put in place the type used for profiling.
+    ///
+    /// Some [`ProfilingStrategy`] require specific platforms or particular feature
+    /// to be enabled, such as `ProfilingStrategy::JitDump` requires the `jitdump`
+    /// feature.
+    ///
+    /// # Errors
+    ///
+    /// The validation of this field is deferred until the engine is being built, and thus may
+    /// cause `Engine::new` fail if the required feature is disabled, or the platform is not
+    /// supported.
+    </span><span class="kw">pub fn </span>profiler(<span class="kw-2">&amp;mut </span><span class="self">self</span>, profile: ProfilingStrategy) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.profiling_strategy = profile;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether the debug verifier of Cranelift is enabled or not.
+    ///
+    /// When Cranelift is used as a code generation backend this will configure
+    /// it to have the `enable_verifier` flag which will enable a number of debug
+    /// checks inside of Cranelift. This is largely only useful for the
+    /// developers of wasmtime itself.
+    ///
+    /// The default value for this is `false`
+    </span><span class="attribute">#[cfg(compiler)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;cranelift&quot;</span>)))] </span><span class="comment">// see build.rs
+    </span><span class="kw">pub fn </span>cranelift_debug_verifier(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="kw">let </span>val = <span class="kw">if </span>enable { <span class="string">&quot;true&quot; </span>} <span class="kw">else </span>{ <span class="string">&quot;false&quot; </span>};
+        <span class="self">self</span>.compiler_config
+            .settings
+            .insert(<span class="string">&quot;enable_verifier&quot;</span>.to_string(), val.to_string());
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures the Cranelift code generator optimization level.
+    ///
+    /// When the Cranelift code generator is used you can configure the
+    /// optimization level used for generated code in a few various ways. For
+    /// more information see the documentation of [`OptLevel`].
+    ///
+    /// The default value for this is `OptLevel::None`.
+    </span><span class="attribute">#[cfg(compiler)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;cranelift&quot;</span>)))] </span><span class="comment">// see build.rs
+    </span><span class="kw">pub fn </span>cranelift_opt_level(<span class="kw-2">&amp;mut </span><span class="self">self</span>, level: OptLevel) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="kw">let </span>val = <span class="kw">match </span>level {
+            OptLevel::None =&gt; <span class="string">&quot;none&quot;</span>,
+            OptLevel::Speed =&gt; <span class="string">&quot;speed&quot;</span>,
+            OptLevel::SpeedAndSize =&gt; <span class="string">&quot;speed_and_size&quot;</span>,
+        };
+        <span class="self">self</span>.compiler_config
+            .settings
+            .insert(<span class="string">&quot;opt_level&quot;</span>.to_string(), val.to_string());
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures the Cranelift code generator to use its
+    /// &quot;egraph&quot;-based mid-end optimizer.
+    ///
+    /// This optimizer is intended to replace the compiler&#39;s more
+    /// traditional pipeline of optimization passes with a unified
+    /// code-rewriting system. It is not yet on by default, but it is
+    /// intended to become the default in a future version. It may
+    /// result in faster code, at the cost of slightly more
+    /// compilation-time work.
+    ///
+    /// The default value for this is `false`.
+    </span><span class="attribute">#[cfg(compiler)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;cranelift&quot;</span>)))] </span><span class="comment">// see build.rs
+    </span><span class="kw">pub fn </span>cranelift_use_egraphs(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="kw">let </span>val = <span class="kw">if </span>enable { <span class="string">&quot;true&quot; </span>} <span class="kw">else </span>{ <span class="string">&quot;false&quot; </span>};
+        <span class="self">self</span>.compiler_config
+            .settings
+            .insert(<span class="string">&quot;use_egraphs&quot;</span>.to_string(), val.to_string());
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether Cranelift should perform a NaN-canonicalization pass.
+    ///
+    /// When Cranelift is used as a code generation backend this will configure
+    /// it to replace NaNs with a single canonical value. This is useful for users
+    /// requiring entirely deterministic WebAssembly computation.
+    /// This is not required by the WebAssembly spec, so it is not enabled by default.
+    ///
+    /// The default value for this is `false`
+    </span><span class="attribute">#[cfg(compiler)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;cranelift&quot;</span>)))] </span><span class="comment">// see build.rs
+    </span><span class="kw">pub fn </span>cranelift_nan_canonicalization(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="kw">let </span>val = <span class="kw">if </span>enable { <span class="string">&quot;true&quot; </span>} <span class="kw">else </span>{ <span class="string">&quot;false&quot; </span>};
+        <span class="self">self</span>.compiler_config
+            .settings
+            .insert(<span class="string">&quot;enable_nan_canonicalization&quot;</span>.to_string(), val.to_string());
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Allows setting a Cranelift boolean flag or preset. This allows
+    /// fine-tuning of Cranelift settings.
+    ///
+    /// Since Cranelift flags may be unstable, this method should not be considered to be stable
+    /// either; other `Config` functions should be preferred for stability.
+    ///
+    /// # Safety
+    ///
+    /// This is marked as unsafe, because setting the wrong flag might break invariants,
+    /// resulting in execution hazards.
+    ///
+    /// # Errors
+    ///
+    /// The validation of the flags are deferred until the engine is being built, and thus may
+    /// cause `Engine::new` fail if the flag&#39;s name does not exist, or the value is not appropriate
+    /// for the flag type.
+    </span><span class="attribute">#[cfg(compiler)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;cranelift&quot;</span>)))] </span><span class="comment">// see build.rs
+    </span><span class="kw">pub unsafe fn </span>cranelift_flag_enable(<span class="kw-2">&amp;mut </span><span class="self">self</span>, flag: <span class="kw-2">&amp;</span>str) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.compiler_config.flags.insert(flag.to_string());
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Allows settings another Cranelift flag defined by a flag name and value. This allows
+    /// fine-tuning of Cranelift settings.
+    ///
+    /// Since Cranelift flags may be unstable, this method should not be considered to be stable
+    /// either; other `Config` functions should be preferred for stability.
+    ///
+    /// # Safety
+    ///
+    /// This is marked as unsafe, because setting the wrong flag might break invariants,
+    /// resulting in execution hazards.
+    ///
+    /// # Errors
+    ///
+    /// The validation of the flags are deferred until the engine is being built, and thus may
+    /// cause `Engine::new` fail if the flag&#39;s name does not exist, or incompatible with other
+    /// settings.
+    ///
+    /// For example, feature `wasm_backtrace` will set `unwind_info` to `true`, but if it&#39;s
+    /// manually set to false then it will fail.
+    </span><span class="attribute">#[cfg(compiler)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;cranelift&quot;</span>)))] </span><span class="comment">// see build.rs
+    </span><span class="kw">pub unsafe fn </span>cranelift_flag_set(<span class="kw-2">&amp;mut </span><span class="self">self</span>, name: <span class="kw-2">&amp;</span>str, value: <span class="kw-2">&amp;</span>str) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.compiler_config
+            .settings
+            .insert(name.to_string(), value.to_string());
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Loads cache configuration specified at `path`.
+    ///
+    /// This method will read the file specified by `path` on the filesystem and
+    /// attempt to load cache configuration from it. This method can also fail
+    /// due to I/O errors, misconfiguration, syntax errors, etc. For expected
+    /// syntax in the configuration file see the [documentation online][docs].
+    ///
+    /// By default cache configuration is not enabled or loaded.
+    ///
+    /// This method is only available when the `cache` feature of this crate is
+    /// enabled.
+    ///
+    /// # Errors
+    ///
+    /// This method can fail due to any error that happens when loading the file
+    /// pointed to by `path` and attempting to load the cache configuration.
+    ///
+    /// [docs]: https://bytecodealliance.github.io/wasmtime/cli-cache.html
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;cache&quot;</span>)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;cache&quot;</span>)))]
+    </span><span class="kw">pub fn </span>cache_config_load(<span class="kw-2">&amp;mut </span><span class="self">self</span>, path: <span class="kw">impl </span>AsRef&lt;Path&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt; {
+        <span class="self">self</span>.cache_config = CacheConfig::from_file(<span class="prelude-val">Some</span>(path.as_ref()))<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(<span class="self">self</span>)
+    }
+
+    <span class="doccomment">/// Loads cache configuration from the system default path.
+    ///
+    /// This commit is the same as [`Config::cache_config_load`] except that it
+    /// does not take a path argument and instead loads the default
+    /// configuration present on the system. This is located, for example, on
+    /// Unix at `$HOME/.config/wasmtime/config.toml` and is typically created
+    /// with the `wasmtime config new` command.
+    ///
+    /// By default cache configuration is not enabled or loaded.
+    ///
+    /// This method is only available when the `cache` feature of this crate is
+    /// enabled.
+    ///
+    /// # Errors
+    ///
+    /// This method can fail due to any error that happens when loading the
+    /// default system configuration. Note that it is not an error if the
+    /// default config file does not exist, in which case the default settings
+    /// for an enabled cache are applied.
+    ///
+    /// [docs]: https://bytecodealliance.github.io/wasmtime/cli-cache.html
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;cache&quot;</span>)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;cache&quot;</span>)))]
+    </span><span class="kw">pub fn </span>cache_config_load_default(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt; {
+        <span class="self">self</span>.cache_config = CacheConfig::from_file(<span class="prelude-val">None</span>)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(<span class="self">self</span>)
+    }
+
+    <span class="doccomment">/// Sets a custom memory creator.
+    ///
+    /// Custom memory creators are used when creating host `Memory` objects or when
+    /// creating instance linear memories for the on-demand instance allocation strategy.
+    </span><span class="kw">pub fn </span>with_host_memory(<span class="kw-2">&amp;mut </span><span class="self">self</span>, mem_creator: Arc&lt;<span class="kw">dyn </span>MemoryCreator&gt;) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.mem_creator = <span class="prelude-val">Some</span>(Arc::new(MemoryCreatorProxy(mem_creator)));
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Sets the instance allocation strategy to use.
+    ///
+    /// When using the pooling instance allocation strategy, all linear memories
+    /// will be created as &quot;static&quot; and the
+    /// [`Config::static_memory_maximum_size`] and
+    /// [`Config::static_memory_guard_size`] options will be used to configure
+    /// the virtual memory allocations of linear memories.
+    </span><span class="kw">pub fn </span>allocation_strategy(<span class="kw-2">&amp;mut </span><span class="self">self</span>, strategy: InstanceAllocationStrategy) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.allocation_strategy = strategy;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures the maximum size, in bytes, where a linear memory is
+    /// considered static, above which it&#39;ll be considered dynamic.
+    ///
+    /// &gt; Note: this value has important performance ramifications, be sure to
+    /// &gt; understand what this value does before tweaking it and benchmarking.
+    ///
+    /// This function configures the threshold for wasm memories whether they&#39;re
+    /// implemented as a dynamically relocatable chunk of memory or a statically
+    /// located chunk of memory. The `max_size` parameter here is the size, in
+    /// bytes, where if the maximum size of a linear memory is below `max_size`
+    /// then it will be statically allocated with enough space to never have to
+    /// move. If the maximum size of a linear memory is larger than `max_size`
+    /// then wasm memory will be dynamically located and may move in memory
+    /// through growth operations.
+    ///
+    /// Specifying a `max_size` of 0 means that all memories will be dynamic and
+    /// may be relocated through `memory.grow`. Also note that if any wasm
+    /// memory&#39;s maximum size is below `max_size` then it will still reserve
+    /// `max_size` bytes in the virtual memory space.
+    ///
+    /// ## Static vs Dynamic Memory
+    ///
+    /// Linear memories represent contiguous arrays of bytes, but they can also
+    /// be grown through the API and wasm instructions. When memory is grown if
+    /// space hasn&#39;t been preallocated then growth may involve relocating the
+    /// base pointer in memory. Memories in Wasmtime are classified in two
+    /// different ways:
+    ///
+    /// * **static** - these memories preallocate all space necessary they&#39;ll
+    ///   ever need, meaning that the base pointer of these memories is never
+    ///   moved. Static memories may take more virtual memory space because of
+    ///   pre-reserving space for memories.
+    ///
+    /// * **dynamic** - these memories are not preallocated and may move during
+    ///   growth operations. Dynamic memories consume less virtual memory space
+    ///   because they don&#39;t need to preallocate space for future growth.
+    ///
+    /// Static memories can be optimized better in JIT code because once the
+    /// base address is loaded in a function it&#39;s known that we never need to
+    /// reload it because it never changes, `memory.grow` is generally a pretty
+    /// fast operation because the wasm memory is never relocated, and under
+    /// some conditions bounds checks can be elided on memory accesses.
+    ///
+    /// Dynamic memories can&#39;t be quite as heavily optimized because the base
+    /// address may need to be reloaded more often, they may require relocating
+    /// lots of data on `memory.grow`, and dynamic memories require
+    /// unconditional bounds checks on all memory accesses.
+    ///
+    /// ## Should you use static or dynamic memory?
+    ///
+    /// In general you probably don&#39;t need to change the value of this property.
+    /// The defaults here are optimized for each target platform to consume a
+    /// reasonable amount of physical memory while also generating speedy
+    /// machine code.
+    ///
+    /// One of the main reasons you may want to configure this today is if your
+    /// environment can&#39;t reserve virtual memory space for each wasm linear
+    /// memory. On 64-bit platforms wasm memories require a 6GB reservation by
+    /// default, and system limits may prevent this in some scenarios. In this
+    /// case you may wish to force memories to be allocated dynamically meaning
+    /// that the virtual memory footprint of creating a wasm memory should be
+    /// exactly what&#39;s used by the wasm itself.
+    ///
+    /// For 32-bit memories a static memory must contain at least 4GB of
+    /// reserved address space plus a guard page to elide any bounds checks at
+    /// all. Smaller static memories will use similar bounds checks as dynamic
+    /// memories.
+    ///
+    /// ## Default
+    ///
+    /// The default value for this property depends on the host platform. For
+    /// 64-bit platforms there&#39;s lots of address space available, so the default
+    /// configured here is 4GB. WebAssembly linear memories currently max out at
+    /// 4GB which means that on 64-bit platforms Wasmtime by default always uses
+    /// a static memory. This, coupled with a sufficiently sized guard region,
+    /// should produce the fastest JIT code on 64-bit platforms, but does
+    /// require a large address space reservation for each wasm memory.
+    ///
+    /// For 32-bit platforms this value defaults to 1GB. This means that wasm
+    /// memories whose maximum size is less than 1GB will be allocated
+    /// statically, otherwise they&#39;ll be considered dynamic.
+    ///
+    /// ## Static Memory and Pooled Instance Allocation
+    ///
+    /// When using the pooling instance allocator memories are considered to
+    /// always be static memories, they are never dynamic. This setting
+    /// configures the size of linear memory to reserve for each memory in the
+    /// pooling allocator.
+    </span><span class="kw">pub fn </span>static_memory_maximum_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, max_size: u64) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="kw">let </span>max_pages = max_size / u64::from(wasmtime_environ::WASM_PAGE_SIZE);
+        <span class="self">self</span>.tunables.static_memory_bound = max_pages;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Indicates that the &quot;static&quot; style of memory should always be used.
+    ///
+    /// This configuration option enables selecting the &quot;static&quot; option for all
+    /// linear memories created within this `Config`. This means that all
+    /// memories will be allocated up-front and will never move. Additionally
+    /// this means that all memories are synthetically limited by the
+    /// [`Config::static_memory_maximum_size`] option, irregardless of what the
+    /// actual maximum size is on the memory&#39;s original type.
+    ///
+    /// For the difference between static and dynamic memories, see the
+    /// [`Config::static_memory_maximum_size`].
+    </span><span class="kw">pub fn </span>static_memory_forced(<span class="kw-2">&amp;mut </span><span class="self">self</span>, force: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.tunables.static_memory_bound_is_maximum = force;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures the size, in bytes, of the guard region used at the end of a
+    /// static memory&#39;s address space reservation.
+    ///
+    /// &gt; Note: this value has important performance ramifications, be sure to
+    /// &gt; understand what this value does before tweaking it and benchmarking.
+    ///
+    /// All WebAssembly loads/stores are bounds-checked and generate a trap if
+    /// they&#39;re out-of-bounds. Loads and stores are often very performance
+    /// critical, so we want the bounds check to be as fast as possible!
+    /// Accelerating these memory accesses is the motivation for a guard after a
+    /// memory allocation.
+    ///
+    /// Memories (both static and dynamic) can be configured with a guard at the
+    /// end of them which consists of unmapped virtual memory. This unmapped
+    /// memory will trigger a memory access violation (e.g. segfault) if
+    /// accessed. This allows JIT code to elide bounds checks if it can prove
+    /// that an access, if out of bounds, would hit the guard region. This means
+    /// that having such a guard of unmapped memory can remove the need for
+    /// bounds checks in JIT code.
+    ///
+    /// For the difference between static and dynamic memories, see the
+    /// [`Config::static_memory_maximum_size`].
+    ///
+    /// ## How big should the guard be?
+    ///
+    /// In general, like with configuring `static_memory_maximum_size`, you
+    /// probably don&#39;t want to change this value from the defaults. Otherwise,
+    /// though, the size of the guard region affects the number of bounds checks
+    /// needed for generated wasm code. More specifically, loads/stores with
+    /// immediate offsets will generate bounds checks based on how big the guard
+    /// page is.
+    ///
+    /// For 32-bit memories a 4GB static memory is required to even start
+    /// removing bounds checks. A 4GB guard size will guarantee that the module
+    /// has zero bounds checks for memory accesses. A 2GB guard size will
+    /// eliminate all bounds checks with an immediate offset less than 2GB. A
+    /// guard size of zero means that all memory accesses will still have bounds
+    /// checks.
+    ///
+    /// ## Default
+    ///
+    /// The default value for this property is 2GB on 64-bit platforms. This
+    /// allows eliminating almost all bounds checks on loads/stores with an
+    /// immediate offset of less than 2GB. On 32-bit platforms this defaults to
+    /// 64KB.
+    ///
+    /// ## Errors
+    ///
+    /// The `Engine::new` method will return an error if this option is smaller
+    /// than the value configured for [`Config::dynamic_memory_guard_size`].
+    </span><span class="kw">pub fn </span>static_memory_guard_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, guard_size: u64) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="kw">let </span>guard_size = round_up_to_pages(guard_size);
+        <span class="self">self</span>.tunables.static_memory_offset_guard_size = guard_size;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures the size, in bytes, of the guard region used at the end of a
+    /// dynamic memory&#39;s address space reservation.
+    ///
+    /// For the difference between static and dynamic memories, see the
+    /// [`Config::static_memory_maximum_size`]
+    ///
+    /// For more information about what a guard is, see the documentation on
+    /// [`Config::static_memory_guard_size`].
+    ///
+    /// Note that the size of the guard region for dynamic memories is not super
+    /// critical for performance. Making it reasonably-sized can improve
+    /// generated code slightly, but for maximum performance you&#39;ll want to lean
+    /// towards static memories rather than dynamic anyway.
+    ///
+    /// Also note that the dynamic memory guard size must be smaller than the
+    /// static memory guard size, so if a large dynamic memory guard is
+    /// specified then the static memory guard size will also be automatically
+    /// increased.
+    ///
+    /// ## Default
+    ///
+    /// This value defaults to 64KB.
+    ///
+    /// ## Errors
+    ///
+    /// The `Engine::new` method will return an error if this option is larger
+    /// than the value configured for [`Config::static_memory_guard_size`].
+    </span><span class="kw">pub fn </span>dynamic_memory_guard_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, guard_size: u64) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="kw">let </span>guard_size = round_up_to_pages(guard_size);
+        <span class="self">self</span>.tunables.dynamic_memory_offset_guard_size = guard_size;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures the size, in bytes, of the extra virtual memory space
+    /// reserved after a &quot;dynamic&quot; memory for growing into.
+    ///
+    /// For the difference between static and dynamic memories, see the
+    /// [`Config::static_memory_maximum_size`]
+    ///
+    /// Dynamic memories can be relocated in the process&#39;s virtual address space
+    /// on growth and do not always reserve their entire space up-front. This
+    /// means that a growth of the memory may require movement in the address
+    /// space, which in the worst case can copy a large number of bytes from one
+    /// region to another.
+    ///
+    /// This setting configures how many bytes are reserved after the initial
+    /// reservation for a dynamic memory for growing into. A value of 0 here
+    /// means that no extra bytes are reserved and all calls to `memory.grow`
+    /// will need to relocate the wasm linear memory (copying all the bytes). A
+    /// value of 1 megabyte, however, means that `memory.grow` can allocate up
+    /// to a megabyte of extra memory before the memory needs to be moved in
+    /// linear memory.
+    ///
+    /// Note that this is a currently simple heuristic for optimizing the growth
+    /// of dynamic memories, primarily implemented for the memory64 proposal
+    /// where all memories are currently &quot;dynamic&quot;. This is unlikely to be a
+    /// one-size-fits-all style approach and if you&#39;re an embedder running into
+    /// issues with dynamic memories and growth and are interested in having
+    /// other growth strategies available here please feel free to [open an
+    /// issue on the Wasmtime repository][issue]!
+    ///
+    /// [issue]: https://github.com/bytecodealliance/wasmtime/issues/ne
+    ///
+    /// ## Default
+    ///
+    /// For 64-bit platforms this defaults to 2GB, and for 32-bit platforms this
+    /// defaults to 1MB.
+    </span><span class="kw">pub fn </span>dynamic_memory_reserved_for_growth(<span class="kw-2">&amp;mut </span><span class="self">self</span>, reserved: u64) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.tunables.dynamic_memory_growth_reserve = round_up_to_pages(reserved);
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Indicates whether a guard region is present before allocations of
+    /// linear memory.
+    ///
+    /// Guard regions before linear memories are never used during normal
+    /// operation of WebAssembly modules, even if they have out-of-bounds
+    /// loads. The only purpose for a preceding guard region in linear memory
+    /// is extra protection against possible bugs in code generators like
+    /// Cranelift. This setting does not affect performance in any way, but will
+    /// result in larger virtual memory reservations for linear memories (it
+    /// won&#39;t actually ever use more memory, just use more of the address
+    /// space).
+    ///
+    /// The size of the guard region before linear memory is the same as the
+    /// guard size that comes after linear memory, which is configured by
+    /// [`Config::static_memory_guard_size`] and
+    /// [`Config::dynamic_memory_guard_size`].
+    ///
+    /// ## Default
+    ///
+    /// This value defaults to `true`.
+    </span><span class="kw">pub fn </span>guard_before_linear_memory(<span class="kw-2">&amp;mut </span><span class="self">self</span>, guard: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.tunables.guard_before_linear_memory = guard;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configure the version information used in serialized and deserialzied [`crate::Module`]s.
+    /// This effects the behavior of [`crate::Module::serialize()`], as well as
+    /// [`crate::Module::deserialize()`] and related functions.
+    ///
+    /// The default strategy is to use the wasmtime crate&#39;s Cargo package version.
+    </span><span class="kw">pub fn </span>module_version(<span class="kw-2">&amp;mut </span><span class="self">self</span>, strategy: ModuleVersionStrategy) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;mut </span><span class="self">Self</span>&gt; {
+        <span class="kw">match </span>strategy {
+            <span class="comment">// This case requires special precondition for assertion in SerializedModule::to_bytes
+            </span>ModuleVersionStrategy::Custom(<span class="kw-2">ref </span>v) =&gt; {
+                <span class="kw">if </span>v.as_bytes().len() &gt; <span class="number">255 </span>{
+                    <span class="macro">bail!</span>(<span class="string">&quot;custom module version cannot be more than 255 bytes: {}&quot;</span>, v);
+                }
+            }
+            <span class="kw">_ </span>=&gt; {}
+        }
+        <span class="self">self</span>.module_version = strategy;
+        <span class="prelude-val">Ok</span>(<span class="self">self</span>)
+    }
+
+    <span class="doccomment">/// Configure wether wasmtime should compile a module using multiple threads.
+    ///
+    /// Disabling this will result in a single thread being used to compile the wasm bytecode.
+    ///
+    /// By default parallel compilation is enabled.
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;parallel-compilation&quot;</span>)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;parallel-compilation&quot;</span>)))]
+    </span><span class="kw">pub fn </span>parallel_compilation(<span class="kw-2">&amp;mut </span><span class="self">self</span>, parallel: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.parallel_compilation = parallel;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether compiled artifacts will contain information to map
+    /// native program addresses back to the original wasm module.
+    ///
+    /// This configuration option is `true` by default and, if enables,
+    /// generates the appropriate tables in compiled modules to map from native
+    /// address back to wasm source addresses. This is used for displaying wasm
+    /// program counters in backtraces as well as generating filenames/line
+    /// numbers if so configured as well (and the original wasm module has DWARF
+    /// debugging information present).
+    </span><span class="kw">pub fn </span>generate_address_map(<span class="kw-2">&amp;mut </span><span class="self">self</span>, generate: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.tunables.generate_address_map = generate;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether copy-on-write memory-mapped data is used to
+    /// initialize a linear memory.
+    ///
+    /// Initializing linear memory via a copy-on-write mapping can drastically
+    /// improve instantiation costs of a WebAssembly module because copying
+    /// memory is deferred. Additionally if a page of memory is only ever read
+    /// from WebAssembly and never written too then the same underlying page of
+    /// data will be reused between all instantiations of a module meaning that
+    /// if a module is instantiated many times this can lower the overall memory
+    /// required needed to run that module.
+    ///
+    /// This feature is only applicable when a WebAssembly module meets specific
+    /// criteria to be initialized in this fashion, such as:
+    ///
+    /// * Only memories defined in the module can be initialized this way.
+    /// * Data segments for memory must use statically known offsets.
+    /// * Data segments for memory must all be in-bounds.
+    ///
+    /// Modules which do not meet these criteria will fall back to
+    /// initialization of linear memory based on copying memory.
+    ///
+    /// This feature of Wasmtime is also platform-specific:
+    ///
+    /// * Linux - this feature is supported for all instances of [`Module`].
+    ///   Modules backed by an existing mmap (such as those created by
+    ///   [`Module::deserialize_file`]) will reuse that mmap to cow-initialize
+    ///   memory. Other instance of [`Module`] may use the `memfd_create`
+    ///   syscall to create an initialization image to `mmap`.
+    /// * Unix (not Linux) - this feature is only supported when loading modules
+    ///   from a precompiled file via [`Module::deserialize_file`] where there
+    ///   is a file descriptor to use to map data into the process. Note that
+    ///   the module must have been compiled with this setting enabled as well.
+    /// * Windows - there is no support for this feature at this time. Memory
+    ///   initialization will always copy bytes.
+    ///
+    /// By default this option is enabled.
+    ///
+    /// [`Module::deserialize_file`]: crate::Module::deserialize_file
+    /// [`Module`]: crate::Module
+    </span><span class="kw">pub fn </span>memory_init_cow(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.memory_init_cow = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// A configuration option to force the usage of `memfd_create` on Linux to
+    /// be used as the backing source for a module&#39;s initial memory image.
+    ///
+    /// When [`Config::memory_init_cow`] is enabled, which is enabled by
+    /// default, module memory initialization images are taken from a module&#39;s
+    /// original mmap if possible. If a precompiled module was loaded from disk
+    /// this means that the disk&#39;s file is used as an mmap source for the
+    /// initial linear memory contents. This option can be used to force, on
+    /// Linux, that instead of using the original file on disk a new in-memory
+    /// file is created with `memfd_create` to hold the contents of the initial
+    /// image.
+    ///
+    /// This option can be used to avoid possibly loading the contents of memory
+    /// from disk through a page fault. Instead with `memfd_create` the contents
+    /// of memory are always in RAM, meaning that even page faults which
+    /// initially populate a wasm linear memory will only work with RAM instead
+    /// of ever hitting the disk that the original precompiled module is stored
+    /// on.
+    ///
+    /// This option is disabled by default.
+    </span><span class="kw">pub fn </span>force_memory_init_memfd(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.force_memory_init_memfd = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures the &quot;guaranteed dense image size&quot; for copy-on-write
+    /// initialized memories.
+    ///
+    /// When using the [`Config::memory_init_cow`] feature to initialize memory
+    /// efficiently (which is enabled by default), compiled modules contain an
+    /// image of the module&#39;s initial heap. If the module has a fairly sparse
+    /// initial heap, with just a few data segments at very different offsets,
+    /// this could result in a large region of zero bytes in the image. In
+    /// other words, it&#39;s not very memory-efficient.
+    ///
+    /// We normally use a heuristic to avoid this: if less than half
+    /// of the initialized range (first non-zero to last non-zero
+    /// byte) of any memory in the module has pages with nonzero
+    /// bytes, then we avoid creating a memory image for the entire module.
+    ///
+    /// However, if the embedder always needs the instantiation-time efficiency
+    /// of copy-on-write initialization, and is otherwise carefully controlling
+    /// parameters of the modules (for example, by limiting the maximum heap
+    /// size of the modules), then it may be desirable to ensure a memory image
+    /// is created even if this could go against the heuristic above. Thus, we
+    /// add another condition: there is a size of initialized data region up to
+    /// which we *always* allow a memory image. The embedder can set this to a
+    /// known maximum heap size if they desire to always get the benefits of
+    /// copy-on-write images.
+    ///
+    /// In the future we may implement a &quot;best of both worlds&quot;
+    /// solution where we have a dense image up to some limit, and
+    /// then support a sparse list of initializers beyond that; this
+    /// would get most of the benefit of copy-on-write and pay the incremental
+    /// cost of eager initialization only for those bits of memory
+    /// that are out-of-bounds. However, for now, an embedder desiring
+    /// fast instantiation should ensure that this setting is as large
+    /// as the maximum module initial memory content size.
+    ///
+    /// By default this value is 16 MiB.
+    </span><span class="kw">pub fn </span>memory_guaranteed_dense_image_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size_in_bytes: u64) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.memory_guaranteed_dense_image_size = size_in_bytes;
+        <span class="self">self
+    </span>}
+
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        <span class="kw">if </span><span class="self">self</span>.features.reference_types &amp;&amp; !<span class="self">self</span>.features.bulk_memory {
+            <span class="macro">bail!</span>(<span class="string">&quot;feature &#39;reference_types&#39; requires &#39;bulk_memory&#39; to be enabled&quot;</span>);
+        }
+        <span class="kw">if </span><span class="self">self</span>.features.threads &amp;&amp; !<span class="self">self</span>.features.bulk_memory {
+            <span class="macro">bail!</span>(<span class="string">&quot;feature &#39;threads&#39; requires &#39;bulk_memory&#39; to be enabled&quot;</span>);
+        }
+        <span class="attribute">#[cfg(feature = <span class="string">&quot;async&quot;</span>)]
+        </span><span class="kw">if </span><span class="self">self</span>.max_wasm_stack &gt; <span class="self">self</span>.async_stack_size {
+            <span class="macro">bail!</span>(<span class="string">&quot;max_wasm_stack size cannot exceed the async_stack_size&quot;</span>);
+        }
+        <span class="kw">if </span><span class="self">self</span>.max_wasm_stack == <span class="number">0 </span>{
+            <span class="macro">bail!</span>(<span class="string">&quot;max_wasm_stack size cannot be zero&quot;</span>);
+        }
+        <span class="kw">if </span><span class="self">self</span>.tunables.static_memory_offset_guard_size
+            &lt; <span class="self">self</span>.tunables.dynamic_memory_offset_guard_size
+        {
+            <span class="macro">bail!</span>(<span class="string">&quot;static memory guard size cannot be smaller than dynamic memory guard size&quot;</span>);
+        }
+
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>build_allocator(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;<span class="kw">dyn </span>InstanceAllocator&gt;&gt; {
+        <span class="attribute">#[cfg(feature = <span class="string">&quot;async&quot;</span>)]
+        </span><span class="kw">let </span>stack_size = <span class="self">self</span>.async_stack_size;
+
+        <span class="attribute">#[cfg(not(feature = <span class="string">&quot;async&quot;</span>))]
+        </span><span class="kw">let </span>stack_size = <span class="number">0</span>;
+
+        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.allocation_strategy {
+            InstanceAllocationStrategy::OnDemand =&gt; <span class="prelude-val">Ok</span>(Box::new(OnDemandInstanceAllocator::new(
+                <span class="self">self</span>.mem_creator.clone(),
+                stack_size,
+            ))),
+            <span class="attribute">#[cfg(feature = <span class="string">&quot;pooling-allocator&quot;</span>)]
+            </span>InstanceAllocationStrategy::Pooling(config) =&gt; {
+                <span class="kw">let </span><span class="kw-2">mut </span>config = config.config;
+                config.stack_size = stack_size;
+                <span class="prelude-val">Ok</span>(Box::new(wasmtime_runtime::PoolingInstanceAllocator::new(
+                    <span class="kw-2">&amp;</span>config,
+                    <span class="kw-2">&amp;</span><span class="self">self</span>.tunables,
+                )<span class="question-mark">?</span>))
+            }
+        }
+    }
+
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>build_profiler(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;<span class="kw">dyn </span>ProfilingAgent&gt;&gt; {
+        <span class="prelude-val">Ok</span>(<span class="kw">match </span><span class="self">self</span>.profiling_strategy {
+            ProfilingStrategy::JitDump =&gt; Box::new(JitDumpAgent::new()<span class="question-mark">?</span>) <span class="kw">as </span>Box&lt;<span class="kw">dyn </span>ProfilingAgent&gt;,
+            ProfilingStrategy::VTune =&gt; Box::new(VTuneAgent::new()<span class="question-mark">?</span>) <span class="kw">as </span>Box&lt;<span class="kw">dyn </span>ProfilingAgent&gt;,
+            ProfilingStrategy::None =&gt; Box::new(NullProfilerAgent),
+        })
+    }
+
+    <span class="attribute">#[cfg(compiler)]
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>build_compiler(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Box&lt;<span class="kw">dyn </span>wasmtime_environ::Compiler&gt;&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>compiler = <span class="kw">match </span><span class="self">self</span>.compiler_config.strategy {
+            Strategy::Auto | Strategy::Cranelift =&gt; wasmtime_cranelift::builder(),
+        };
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(target) = <span class="kw-2">&amp;</span><span class="self">self</span>.compiler_config.target {
+            compiler.target(target.clone())<span class="question-mark">?</span>;
+        }
+
+        <span class="kw">if </span><span class="self">self</span>.native_unwind_info ||
+            <span class="comment">// Windows always needs unwind info, since it is part of the ABI.
+            </span><span class="self">self
+                </span>.compiler_config
+                .target
+                .as_ref()
+                .map_or(<span class="macro">cfg!</span>(target_os = <span class="string">&quot;windows&quot;</span>), |target| {
+                    target.operating_system == target_lexicon::OperatingSystem::Windows
+                })
+        {
+            <span class="kw">if </span>!<span class="self">self
+                </span>.compiler_config
+                .ensure_setting_unset_or_given(<span class="string">&quot;unwind_info&quot;</span>, <span class="string">&quot;true&quot;</span>)
+            {
+                <span class="macro">bail!</span>(<span class="string">&quot;compiler option &#39;unwind_info&#39; must be enabled profiling&quot;</span>);
+            }
+        }
+
+        <span class="comment">// We require frame pointers for correct stack walking, which is safety
+        // critical in the presence of reference types, and otherwise it is just
+        // really bad developer experience to get wrong.
+        </span><span class="self">self</span>.compiler_config
+            .settings
+            .insert(<span class="string">&quot;preserve_frame_pointers&quot;</span>.into(), <span class="string">&quot;true&quot;</span>.into());
+
+        <span class="comment">// check for incompatible compiler options and set required values
+        </span><span class="kw">if </span><span class="self">self</span>.features.reference_types {
+            <span class="kw">if </span>!<span class="self">self
+                </span>.compiler_config
+                .ensure_setting_unset_or_given(<span class="string">&quot;enable_safepoints&quot;</span>, <span class="string">&quot;true&quot;</span>)
+            {
+                <span class="macro">bail!</span>(<span class="string">&quot;compiler option &#39;enable_safepoints&#39; must be enabled when &#39;reference types&#39; is enabled&quot;</span>);
+            }
+        }
+        <span class="kw">if </span><span class="self">self</span>.features.simd {
+            <span class="kw">if </span>!<span class="self">self
+                </span>.compiler_config
+                .ensure_setting_unset_or_given(<span class="string">&quot;enable_simd&quot;</span>, <span class="string">&quot;true&quot;</span>)
+            {
+                <span class="macro">bail!</span>(<span class="string">&quot;compiler option &#39;enable_simd&#39; must be enabled when &#39;simd&#39; is enabled&quot;</span>);
+            }
+        }
+
+        <span class="comment">// Apply compiler settings and flags
+        </span><span class="kw">for </span>(k, v) <span class="kw">in </span><span class="self">self</span>.compiler_config.settings.iter() {
+            compiler.set(k, v)<span class="question-mark">?</span>;
+        }
+        <span class="kw">for </span>flag <span class="kw">in </span><span class="self">self</span>.compiler_config.flags.iter() {
+            compiler.enable(flag)<span class="question-mark">?</span>;
+        }
+
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(cache_store) = <span class="kw-2">&amp;</span><span class="self">self</span>.compiler_config.cache_store {
+            compiler.enable_incremental_compilation(cache_store.clone());
+        }
+
+        compiler.build()
+    }
+
+    <span class="doccomment">/// Internal setting for whether adapter modules for components will have
+    /// extra WebAssembly instructions inserted performing more debug checks
+    /// then are necessary.
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;component-model&quot;</span>)]
+    </span><span class="kw">pub fn </span>debug_adapter_modules(<span class="kw-2">&amp;mut </span><span class="self">self</span>, debug: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.tunables.debug_adapter_modules = debug;
+        <span class="self">self
+    </span>}
+}
+
+<span class="kw">fn </span>round_up_to_pages(val: u64) -&gt; u64 {
+    <span class="kw">let </span>page_size = wasmtime_runtime::page_size() <span class="kw">as </span>u64;
+    <span class="macro">debug_assert!</span>(page_size.is_power_of_two());
+    val.checked_add(page_size - <span class="number">1</span>)
+        .map(|val| val &amp; !(page_size - <span class="number">1</span>))
+        .unwrap_or(u64::MAX / page_size + <span class="number">1</span>)
+}
+
+<span class="kw">impl </span>Default <span class="kw">for </span>Config {
+    <span class="kw">fn </span>default() -&gt; Config {
+        Config::new()
+    }
+}
+
+<span class="kw">impl </span>fmt::Debug <span class="kw">for </span>Config {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter) -&gt; fmt::Result {
+        <span class="kw">let </span><span class="kw-2">mut </span>f = f.debug_struct(<span class="string">&quot;Config&quot;</span>);
+        f.field(<span class="string">&quot;debug_info&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.tunables.generate_native_debuginfo)
+            .field(<span class="string">&quot;parse_wasm_debuginfo&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.tunables.parse_wasm_debuginfo)
+            .field(<span class="string">&quot;wasm_threads&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.features.threads)
+            .field(<span class="string">&quot;wasm_reference_types&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.features.reference_types)
+            .field(<span class="string">&quot;wasm_bulk_memory&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.features.bulk_memory)
+            .field(<span class="string">&quot;wasm_simd&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.features.simd)
+            .field(<span class="string">&quot;wasm_multi_value&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.features.multi_value)
+            .field(
+                <span class="string">&quot;static_memory_maximum_size&quot;</span>,
+                <span class="kw-2">&amp;</span>(u64::from(<span class="self">self</span>.tunables.static_memory_bound)
+                    * u64::from(wasmtime_environ::WASM_PAGE_SIZE)),
+            )
+            .field(
+                <span class="string">&quot;static_memory_guard_size&quot;</span>,
+                <span class="kw-2">&amp;</span><span class="self">self</span>.tunables.static_memory_offset_guard_size,
+            )
+            .field(
+                <span class="string">&quot;dynamic_memory_guard_size&quot;</span>,
+                <span class="kw-2">&amp;</span><span class="self">self</span>.tunables.dynamic_memory_offset_guard_size,
+            )
+            .field(
+                <span class="string">&quot;guard_before_linear_memory&quot;</span>,
+                <span class="kw-2">&amp;</span><span class="self">self</span>.tunables.guard_before_linear_memory,
+            )
+            .field(<span class="string">&quot;parallel_compilation&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.parallel_compilation);
+        <span class="attribute">#[cfg(compiler)]
+        </span>{
+            f.field(<span class="string">&quot;compiler_config&quot;</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.compiler_config);
+        }
+        f.finish()
+    }
+}
+
+<span class="doccomment">/// Possible Compilation strategies for a wasm module.
+///
+/// This is used as an argument to the [`Config::strategy`] method.
+</span><span class="attribute">#[non_exhaustive]
+#[derive(Clone, Debug, Copy)]
+</span><span class="kw">pub enum </span>Strategy {
+    <span class="doccomment">/// An indicator that the compilation strategy should be automatically
+    /// selected.
+    ///
+    /// This is generally what you want for most projects and indicates that the
+    /// `wasmtime` crate itself should make the decision about what the best
+    /// code generator for a wasm module is.
+    ///
+    /// Currently this always defaults to Cranelift, but the default value may
+    /// change over time.
+    </span>Auto,
+
+    <span class="doccomment">/// Currently the default backend, Cranelift aims to be a reasonably fast
+    /// code generator which generates high quality machine code.
+    </span>Cranelift,
+}
+
+<span class="doccomment">/// Possible optimization levels for the Cranelift codegen backend.
+</span><span class="attribute">#[non_exhaustive]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+</span><span class="kw">pub enum </span>OptLevel {
+    <span class="doccomment">/// No optimizations performed, minimizes compilation time by disabling most
+    /// optimizations.
+    </span><span class="prelude-val">None</span>,
+    <span class="doccomment">/// Generates the fastest possible code, but may take longer.
+    </span>Speed,
+    <span class="doccomment">/// Similar to `speed`, but also performs transformations aimed at reducing
+    /// code size.
+    </span>SpeedAndSize,
+}
+
+<span class="doccomment">/// Select which profiling technique to support.
+</span><span class="attribute">#[derive(Debug, Clone, Copy)]
+</span><span class="kw">pub enum </span>ProfilingStrategy {
+    <span class="doccomment">/// No profiler support.
+    </span><span class="prelude-val">None</span>,
+
+    <span class="doccomment">/// Collect profiling info for &quot;jitdump&quot; file format, used with `perf` on
+    /// Linux.
+    </span>JitDump,
+
+    <span class="doccomment">/// Collect profiling info using the &quot;ittapi&quot;, used with `VTune` on Linux.
+    </span>VTune,
+}
+
+<span class="doccomment">/// Select how wasm backtrace detailed information is handled.
+</span><span class="attribute">#[derive(Debug, Clone, Copy)]
+</span><span class="kw">pub enum </span>WasmBacktraceDetails {
+    <span class="doccomment">/// Support is unconditionally enabled and wasmtime will parse and read
+    /// debug information.
+    </span>Enable,
+
+    <span class="doccomment">/// Support is disabled, and wasmtime will not parse debug information for
+    /// backtrace details.
+    </span>Disable,
+
+    <span class="doccomment">/// Support for backtrace details is conditional on the
+    /// `WASMTIME_BACKTRACE_DETAILS` environment variable.
+    </span>Environment,
+}
+
+<span class="doccomment">/// Configuration options used with [`InstanceAllocationStrategy::Pooling`] to
+/// change the behavior of the pooling instance allocator.
+///
+/// This structure has a builder-style API in the same manner as [`Config`] and
+/// is configured with [`Config::allocation_strategy`].
+</span><span class="attribute">#[cfg(feature = <span class="string">&quot;pooling-allocator&quot;</span>)]
+#[derive(Debug, Clone, Default)]
+</span><span class="kw">pub struct </span>PoolingAllocationConfig {
+    config: wasmtime_runtime::PoolingInstanceAllocatorConfig,
+}
+
+<span class="attribute">#[cfg(feature = <span class="string">&quot;pooling-allocator&quot;</span>)]
+</span><span class="kw">pub use </span>wasmtime_runtime::PoolingAllocationStrategy;
+
+<span class="attribute">#[cfg(feature = <span class="string">&quot;pooling-allocator&quot;</span>)]
+</span><span class="kw">impl </span>PoolingAllocationConfig {
+    <span class="doccomment">/// Configures the method by which slots in the pooling allocator are
+    /// allocated to instances
+    ///
+    /// This defaults to [`PoolingAllocationStrategy::ReuseAffinity`] .
+    </span><span class="kw">pub fn </span>strategy(<span class="kw-2">&amp;mut </span><span class="self">self</span>, strategy: PoolingAllocationStrategy) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.config.strategy = strategy;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// Configures whether or not stacks used for async futures are reset to
+    /// zero after usage.
+    ///
+    /// When the [`async_support`](Config::async_support) method is enabled for
+    /// Wasmtime and the [`call_async`] variant
+    /// of calling WebAssembly is used then Wasmtime will create a separate
+    /// runtime execution stack for each future produced by [`call_async`].
+    /// During the deallocation process Wasmtime won&#39;t by default reset the
+    /// contents of the stack back to zero.
+    ///
+    /// When this option is enabled it can be seen as a defense-in-depth
+    /// mechanism to reset a stack back to zero. This is not required for
+    /// correctness and can be a costly operation in highly concurrent
+    /// environments due to modifications of the virtual address space requiring
+    /// process-wide synchronization.
+    ///
+    /// This option defaults to `false`.
+    ///
+    /// [`call_async`]: crate::TypedFunc::call_async
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;async&quot;</span>)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;async&quot;</span>)))]
+    </span><span class="kw">pub fn </span>async_stack_zeroing(<span class="kw-2">&amp;mut </span><span class="self">self</span>, enable: bool) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.config.async_stack_zeroing = enable;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// How much memory, in bytes, to keep resident for async stacks allocated
+    /// with the pooling allocator.
+    ///
+    /// When [`PoolingAllocationConfig::async_stack_zeroing`] is enabled then
+    /// Wasmtime will reset the contents of async stacks back to zero upon
+    /// deallocation. This option can be used to perform the zeroing operation
+    /// with `memset` up to a certain threshold of bytes instead of using system
+    /// calls to reset the stack to zero.
+    ///
+    /// Note that when using this option the memory with async stacks will
+    /// never be decommitted.
+    </span><span class="attribute">#[cfg(feature = <span class="string">&quot;async&quot;</span>)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = <span class="string">&quot;async&quot;</span>)))]
+    </span><span class="kw">pub fn </span>async_stack_keep_resident(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size: usize) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="kw">let </span>size = round_up_to_pages(size <span class="kw">as </span>u64) <span class="kw">as </span>usize;
+        <span class="self">self</span>.config.async_stack_keep_resident = size;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// How much memory, in bytes, to keep resident for each linear memory
+    /// after deallocation.
+    ///
+    /// This option is only applicable on Linux and has no effect on other
+    /// platforms.
+    ///
+    /// By default Wasmtime will use `madvise` to reset the entire contents of
+    /// linear memory back to zero when a linear memory is deallocated. This
+    /// option can be used to use `memset` instead to set memory back to zero
+    /// which can, in some configurations, reduce the number of page faults
+    /// taken when a slot is reused.
+    </span><span class="kw">pub fn </span>linear_memory_keep_resident(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size: usize) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="kw">let </span>size = round_up_to_pages(size <span class="kw">as </span>u64) <span class="kw">as </span>usize;
+        <span class="self">self</span>.config.linear_memory_keep_resident = size;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// How much memory, in bytes, to keep resident for each table after
+    /// deallocation.
+    ///
+    /// This option is only applicable on Linux and has no effect on other
+    /// platforms.
+    ///
+    /// This option is the same as
+    /// [`PoolingAllocationConfig::linear_memory_keep_resident`] except that it
+    /// is applicable to tables instead.
+    </span><span class="kw">pub fn </span>table_keep_resident(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size: usize) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="kw">let </span>size = round_up_to_pages(size <span class="kw">as </span>u64) <span class="kw">as </span>usize;
+        <span class="self">self</span>.config.table_keep_resident = size;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// The maximum number of concurrent instances supported (default is 1000).
+    ///
+    /// This value has a direct impact on the amount of memory allocated by the pooling
+    /// instance allocator.
+    ///
+    /// The pooling instance allocator allocates three memory pools with sizes depending on this value:
+    ///
+    /// * An instance pool, where each entry in the pool can store the runtime representation
+    ///   of an instance, including a maximal `VMContext` structure.
+    ///
+    /// * A memory pool, where each entry in the pool contains the reserved address space for each
+    ///   linear memory supported by an instance.
+    ///
+    /// * A table pool, where each entry in the pool contains the space needed for each WebAssembly table
+    ///   supported by an instance (see `table_elements` to control the size of each table).
+    ///
+    /// Additionally, this value will also control the maximum number of execution stacks allowed for
+    /// asynchronous execution (one per instance), when enabled.
+    ///
+    /// The memory pool will reserve a large quantity of host process address space to elide the bounds
+    /// checks required for correct WebAssembly memory semantics. Even for 64-bit address spaces, the
+    /// address space is limited when dealing with a large number of supported instances.
+    ///
+    /// For example, on Linux x86_64, the userland address space limit is 128 TiB. That might seem like a lot,
+    /// but each linear memory will *reserve* 6 GiB of space by default. Multiply that by the number of linear
+    /// memories each instance supports and then by the number of supported instances and it becomes apparent
+    /// that address space can be exhausted depending on the number of supported instances.
+    </span><span class="kw">pub fn </span>instance_count(<span class="kw-2">&amp;mut </span><span class="self">self</span>, count: u32) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.config.limits.count = count;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// The maximum size, in bytes, allocated for an instance and its
+    /// `VMContext`.
+    ///
+    /// This amount of space is pre-allocated for `count` number of instances
+    /// and is used to store the runtime `wasmtime_runtime::Instance` structure
+    /// along with its adjacent `VMContext` structure. The `Instance` type has a
+    /// static size but `VMContext` is dynamically sized depending on the module
+    /// being instantiated. This size limit loosely correlates to the size of
+    /// the wasm module, taking into account factors such as:
+    ///
+    /// * number of functions
+    /// * number of globals
+    /// * number of memories
+    /// * number of tables
+    /// * number of function types
+    ///
+    /// If the allocated size per instance is too small then instantiation of a
+    /// module will fail at runtime with an error indicating how many bytes were
+    /// needed. This amount of bytes are committed to memory per-instance when
+    /// a pooling allocator is created.
+    ///
+    /// The default value for this is 1MB.
+    </span><span class="kw">pub fn </span>instance_size(<span class="kw-2">&amp;mut </span><span class="self">self</span>, size: usize) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.config.limits.size = size;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// The maximum number of defined tables for a module (default is 1).
+    ///
+    /// This value controls the capacity of the `VMTableDefinition` table in each instance&#39;s
+    /// `VMContext` structure.
+    ///
+    /// The allocated size of the table will be `tables * sizeof(VMTableDefinition)` for each
+    /// instance regardless of how many tables are defined by an instance&#39;s module.
+    </span><span class="kw">pub fn </span>instance_tables(<span class="kw-2">&amp;mut </span><span class="self">self</span>, tables: u32) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.config.limits.tables = tables;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// The maximum table elements for any table defined in a module (default is 10000).
+    ///
+    /// If a table&#39;s minimum element limit is greater than this value, the module will
+    /// fail to instantiate.
+    ///
+    /// If a table&#39;s maximum element limit is unbounded or greater than this value,
+    /// the maximum will be `table_elements` for the purpose of any `table.grow` instruction.
+    ///
+    /// This value is used to reserve the maximum space for each supported table; table elements
+    /// are pointer-sized in the Wasmtime runtime.  Therefore, the space reserved for each instance
+    /// is `tables * table_elements * sizeof::&lt;*const ()&gt;`.
+    </span><span class="kw">pub fn </span>instance_table_elements(<span class="kw-2">&amp;mut </span><span class="self">self</span>, elements: u32) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.config.limits.table_elements = elements;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// The maximum number of defined linear memories for a module (default is 1).
+    ///
+    /// This value controls the capacity of the `VMMemoryDefinition` table in each instance&#39;s
+    /// `VMContext` structure.
+    ///
+    /// The allocated size of the table will be `memories * sizeof(VMMemoryDefinition)` for each
+    /// instance regardless of how many memories are defined by an instance&#39;s module.
+    </span><span class="kw">pub fn </span>instance_memories(<span class="kw-2">&amp;mut </span><span class="self">self</span>, memories: u32) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.config.limits.memories = memories;
+        <span class="self">self
+    </span>}
+
+    <span class="doccomment">/// The maximum number of pages for any linear memory defined in a module (default is 160).
+    ///
+    /// The default of 160 means at most 10 MiB of host memory may be committed for each instance.
+    ///
+    /// If a memory&#39;s minimum page limit is greater than this value, the module will
+    /// fail to instantiate.
+    ///
+    /// If a memory&#39;s maximum page limit is unbounded or greater than this value,
+    /// the maximum will be `memory_pages` for the purpose of any `memory.grow` instruction.
+    ///
+    /// This value is used to control the maximum accessible space for each linear memory of an instance.
+    ///
+    /// The reservation size of each linear memory is controlled by the
+    /// `static_memory_maximum_size` setting and this value cannot
+    /// exceed the configured static memory maximum size.
+    </span><span class="kw">pub fn </span>instance_memory_pages(<span class="kw-2">&amp;mut </span><span class="self">self</span>, pages: u64) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self </span>{
+        <span class="self">self</span>.config.limits.memory_pages = pages;
+        <span class="self">self
+    </span>}
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="wasmtime" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

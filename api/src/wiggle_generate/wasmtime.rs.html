@@ -1,0 +1,332 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/wiggle/generate/src/wasmtime.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>wasmtime.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../normalize.css"><link rel="stylesheet" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../ayu.css" disabled><link rel="stylesheet" href="../../dark.css" disabled><link rel="stylesheet" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../wiggle_generate/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../wiggle_generate/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../wiggle_generate/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+</pre><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::config::Asyncness;
+<span class="kw">use </span><span class="kw">crate</span>::funcs::func_bounds;
+<span class="kw">use </span><span class="kw">crate</span>::names;
+<span class="kw">use </span><span class="kw">crate</span>::CodegenSettings;
+<span class="kw">use </span>proc_macro2::{Ident, Span, TokenStream};
+<span class="kw">use </span>quote::{format_ident, quote};
+<span class="kw">use </span>std::collections::HashSet;
+
+<span class="kw">pub fn </span>link_module(
+    module: <span class="kw-2">&amp;</span>witx::Module,
+    target_path: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>syn::Path&gt;,
+    settings: <span class="kw-2">&amp;</span>CodegenSettings,
+) -&gt; TokenStream {
+    <span class="kw">let </span>module_ident = names::module(<span class="kw-2">&amp;</span>module.name);
+
+    <span class="kw">let </span>send_bound = <span class="kw">if </span>settings.async_.contains_async(module) {
+        <span class="macro">quote! </span>{ + Send, T: Send }
+    } <span class="kw">else </span>{
+        <span class="macro">quote! </span>{}
+    };
+
+    <span class="kw">let </span><span class="kw-2">mut </span>bodies = Vec::new();
+    <span class="kw">let </span><span class="kw-2">mut </span>bounds = HashSet::new();
+    <span class="kw">for </span>f <span class="kw">in </span>module.funcs() {
+        <span class="kw">let </span>asyncness = settings.async_.get(module.name.as_str(), f.name.as_str());
+        bodies.push(generate_func(<span class="kw-2">&amp;</span>module, <span class="kw-2">&amp;</span>f, target_path, asyncness));
+        <span class="kw">let </span>bound = func_bounds(module, <span class="kw-2">&amp;</span>f, settings);
+        <span class="kw">for </span>b <span class="kw">in </span>bound {
+            bounds.insert(b);
+        }
+    }
+
+    <span class="kw">let </span>ctx_bound = <span class="kw">if let </span><span class="prelude-val">Some</span>(target_path) = target_path {
+        <span class="kw">let </span>bounds = bounds
+            .into_iter()
+            .map(|b| <span class="macro">quote!</span>(#target_path::#module_ident::#b));
+        <span class="macro">quote!</span>( #(#bounds)+* #send_bound )
+    } <span class="kw">else </span>{
+        <span class="kw">let </span>bounds = bounds.into_iter();
+        <span class="macro">quote!</span>( #(#bounds)+* #send_bound )
+    };
+
+    <span class="kw">let </span>func_name = <span class="kw">if </span>target_path.is_none() {
+        <span class="macro">format_ident!</span>(<span class="string">&quot;add_to_linker&quot;</span>)
+    } <span class="kw">else </span>{
+        <span class="macro">format_ident!</span>(<span class="string">&quot;add_{}_to_linker&quot;</span>, module_ident)
+    };
+
+    <span class="macro">quote! </span>{
+        <span class="doccomment">/// Adds all instance items to the specified `Linker`.
+        </span><span class="kw">pub fn </span>#func_name&lt;T, U&gt;(
+            linker: <span class="kw-2">&amp;mut </span>wiggle::wasmtime_crate::Linker&lt;T&gt;,
+            get_cx: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;mut </span>T) -&gt; <span class="kw-2">&amp;mut </span>U + Send + Sync + Copy + <span class="lifetime">&#39;static</span>,
+        ) -&gt; wiggle::anyhow::Result&lt;()&gt;
+            <span class="kw">where
+                </span>U: #ctx_bound #send_bound
+        {
+            #(#bodies)*
+            <span class="prelude-val">Ok</span>(())
+        }
+    }
+}
+
+<span class="kw">fn </span>generate_func(
+    module: <span class="kw-2">&amp;</span>witx::Module,
+    func: <span class="kw-2">&amp;</span>witx::InterfaceFunc,
+    target_path: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>syn::Path&gt;,
+    asyncness: Asyncness,
+) -&gt; TokenStream {
+    <span class="kw">let </span>module_str = module.name.as_str();
+    <span class="kw">let </span>module_ident = names::module(<span class="kw-2">&amp;</span>module.name);
+
+    <span class="kw">let </span>field_str = func.name.as_str();
+    <span class="kw">let </span>field_ident = names::func(<span class="kw-2">&amp;</span>func.name);
+
+    <span class="kw">let </span>(params, results) = func.wasm_signature();
+
+    <span class="kw">let </span>arg_names = (<span class="number">0</span>..params.len())
+        .map(|i| Ident::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;arg{}&quot;</span>, i), Span::call_site()))
+        .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+    <span class="kw">let </span>arg_decls = params
+        .iter()
+        .enumerate()
+        .map(|(i, ty)| {
+            <span class="kw">let </span>name = <span class="kw-2">&amp;</span>arg_names[i];
+            <span class="kw">let </span>wasm = names::wasm_type(<span class="kw-2">*</span>ty);
+            <span class="macro">quote! </span>{ #name: #wasm }
+        })
+        .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+
+    <span class="kw">let </span>ret_ty = <span class="kw">match </span>results.len() {
+        <span class="number">0 </span>=&gt; <span class="macro">quote!</span>(()),
+        <span class="number">1 </span>=&gt; names::wasm_type(results[<span class="number">0</span>]),
+        <span class="kw">_ </span>=&gt; <span class="macro">unimplemented!</span>(),
+    };
+
+    <span class="kw">let </span>await_ = <span class="kw">if </span>asyncness.is_sync() {
+        <span class="macro">quote!</span>()
+    } <span class="kw">else </span>{
+        <span class="macro">quote!</span>(.<span class="kw">await</span>)
+    };
+
+    <span class="kw">let </span>abi_func = <span class="kw">if let </span><span class="prelude-val">Some</span>(target_path) = target_path {
+        <span class="macro">quote!</span>( #target_path::#module_ident::#field_ident )
+    } <span class="kw">else </span>{
+        <span class="macro">quote!</span>( #field_ident )
+    };
+
+    <span class="kw">let </span>body = <span class="macro">quote! </span>{
+        <span class="kw">let </span>export = caller.get_export(<span class="string">&quot;memory&quot;</span>);
+        <span class="kw">let </span>(mem, ctx) = <span class="kw">match </span><span class="kw-2">&amp;</span>export {
+            <span class="prelude-val">Some</span>(wiggle::wasmtime_crate::Extern::Memory(m)) =&gt; {
+                <span class="kw">let </span>(mem, ctx) = m.data_and_store_mut(<span class="kw-2">&amp;mut </span>caller);
+                <span class="kw">let </span>ctx = get_cx(ctx);
+                (wiggle::wasmtime::WasmtimeGuestMemory::new(mem), ctx)
+            }
+            <span class="prelude-val">Some</span>(wiggle::wasmtime_crate::Extern::SharedMemory(m)) =&gt; {
+                <span class="kw">let </span>ctx = get_cx(caller.data_mut());
+                (wiggle::wasmtime::WasmtimeGuestMemory::shared(m.data()), ctx)
+            }
+            <span class="kw">_ </span>=&gt; <span class="macro">wiggle::anyhow::bail!</span>(<span class="string">&quot;missing required memory export&quot;</span>),
+        };
+        <span class="prelude-val">Ok</span>(&lt;#ret_ty&gt;::from(#abi_func(ctx, <span class="kw-2">&amp;</span>mem #(, #arg_names)<span class="kw-2">*</span>) #await_ <span class="question-mark">?</span>))
+    };
+
+    <span class="kw">match </span>asyncness {
+        Asyncness::Async =&gt; {
+            <span class="kw">let </span>wrapper = <span class="macro">format_ident!</span>(<span class="string">&quot;func_wrap{}_async&quot;</span>, params.len());
+            <span class="macro">quote! </span>{
+                linker.#wrapper(
+                    #module_str,
+                    #field_str,
+                    <span class="kw">move </span>|<span class="kw-2">mut </span>caller: wiggle::wasmtime_crate::Caller&lt;<span class="lifetime">&#39;_</span>, T&gt; #(, #arg_decls)<span class="kw-2">*</span>| {
+                        Box::new(<span class="kw">async move </span>{ #body })
+                    },
+                )<span class="question-mark">?</span>;
+            }
+        }
+
+        Asyncness::Blocking =&gt; {
+            <span class="macro">quote! </span>{
+                linker.func_wrap(
+                    #module_str,
+                    #field_str,
+                    <span class="kw">move </span>|<span class="kw-2">mut </span>caller: wiggle::wasmtime_crate::Caller&lt;<span class="lifetime">&#39;_</span>, T&gt; #(, #arg_decls)<span class="kw-2">*</span>| -&gt; wiggle::anyhow::Result&lt;#ret_ty&gt; {
+                        <span class="kw">let </span>result = <span class="kw">async </span>{ #body };
+                        wiggle::run_in_dummy_executor(result)<span class="question-mark">?
+                    </span>},
+                )<span class="question-mark">?</span>;
+            }
+        }
+
+        Asyncness::Sync =&gt; {
+            <span class="macro">quote! </span>{
+                linker.func_wrap(
+                    #module_str,
+                    #field_str,
+                    <span class="kw">move </span>|<span class="kw-2">mut </span>caller: wiggle::wasmtime_crate::Caller&lt;<span class="lifetime">&#39;_</span>, T&gt; #(, #arg_decls)<span class="kw-2">*</span>| -&gt; wiggle::anyhow::Result&lt;#ret_ty&gt; {
+                        #body
+                    },
+                )<span class="question-mark">?</span>;
+            }
+        }
+    }
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="wiggle_generate" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

@@ -1,0 +1,326 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/environ/src/address_map.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>address_map.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../normalize.css"><link rel="stylesheet" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../ayu.css" disabled><link rel="stylesheet" href="../../dark.css" disabled><link rel="stylesheet" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../wasmtime_environ/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../wasmtime_environ/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../wasmtime_environ/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+</pre><pre class="rust"><code><span class="doccomment">//! Data structures to provide transformation of the source
+
+</span><span class="kw">use </span><span class="kw">crate</span>::obj::ELF_WASMTIME_ADDRMAP;
+<span class="kw">use </span>object::write::{Object, StandardSegment};
+<span class="kw">use </span>object::{Bytes, LittleEndian, SectionKind, U32Bytes};
+<span class="kw">use </span>serde::{Deserialize, Serialize};
+<span class="kw">use </span>std::convert::TryFrom;
+<span class="kw">use </span>std::ops::Range;
+
+<span class="doccomment">/// Single source location to generated address mapping.
+</span><span class="attribute">#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+</span><span class="kw">pub struct </span>InstructionAddressMap {
+    <span class="doccomment">/// Where in the source wasm binary this instruction comes from, specified
+    /// in an offset of bytes from the front of the file.
+    </span><span class="kw">pub </span>srcloc: FilePos,
+
+    <span class="doccomment">/// Offset from the start of the function&#39;s compiled code to where this
+    /// instruction is located, or the region where it starts.
+    </span><span class="kw">pub </span>code_offset: u32,
+}
+
+<span class="doccomment">/// A position within an original source file,
+///
+/// This structure is used as a newtype wrapper around a 32-bit integer which
+/// represents an offset within a file where a wasm instruction or function is
+/// to be originally found.
+</span><span class="attribute">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>FilePos(u32);
+
+<span class="kw">impl </span>FilePos {
+    <span class="doccomment">/// Create a new file position with the given offset.
+    </span><span class="kw">pub fn </span>new(pos: u32) -&gt; FilePos {
+        <span class="macro">assert!</span>(pos != u32::MAX);
+        FilePos(pos)
+    }
+
+    <span class="doccomment">/// Returns the offset that this offset was created with.
+    ///
+    /// Note that the `Default` implementation will return `None` here, whereas
+    /// positions created with `FilePos::new` will return `Some`.
+    </span><span class="kw">pub fn </span>file_offset(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;u32&gt; {
+        <span class="kw">if </span><span class="self">self</span>.<span class="number">0 </span>== u32::MAX {
+            <span class="prelude-val">None
+        </span>} <span class="kw">else </span>{
+            <span class="prelude-val">Some</span>(<span class="self">self</span>.<span class="number">0</span>)
+        }
+    }
+}
+
+<span class="kw">impl </span>Default <span class="kw">for </span>FilePos {
+    <span class="kw">fn </span>default() -&gt; FilePos {
+        FilePos(u32::MAX)
+    }
+}
+
+<span class="doccomment">/// Builder for the address map section of a wasmtime compilation image.
+///
+/// This builder is used to conveniently built the `ELF_WASMTIME_ADDRMAP`
+/// section by compilers, and provides utilities to directly insert the results
+/// into an `Object`.
+</span><span class="attribute">#[derive(Default)]
+</span><span class="kw">pub struct </span>AddressMapSection {
+    offsets: Vec&lt;U32Bytes&lt;LittleEndian&gt;&gt;,
+    positions: Vec&lt;U32Bytes&lt;LittleEndian&gt;&gt;,
+    last_offset: u32,
+}
+
+<span class="kw">impl </span>AddressMapSection {
+    <span class="doccomment">/// Pushes a new set of instruction mapping information for a function added
+    /// in the exectuable.
+    ///
+    /// The `func` argument here is the range of the function, relative to the
+    /// start of the text section in the executable. The `instrs` provided are
+    /// the descriptors for instructions in the function and their various
+    /// mappings back to original source positions.
+    ///
+    /// This is required to be called for `func` values that are strictly
+    /// increasing in addresses (e.g. as the object is built). Additionally the
+    /// `instrs` map must be sorted based on code offset in the native text
+    /// section.
+    </span><span class="kw">pub fn </span>push(<span class="kw-2">&amp;mut </span><span class="self">self</span>, func: Range&lt;u64&gt;, instrs: <span class="kw-2">&amp;</span>[InstructionAddressMap]) {
+        <span class="comment">// NB: for now this only supports &lt;=4GB text sections in object files.
+        // Alternative schemes will need to be created for &gt;32-bit offsets to
+        // avoid making this section overly large.
+        </span><span class="kw">let </span>func_start = u32::try_from(func.start).unwrap();
+        <span class="kw">let </span>func_end = u32::try_from(func.end).unwrap();
+
+        <span class="self">self</span>.offsets.reserve(instrs.len());
+        <span class="self">self</span>.positions.reserve(instrs.len());
+        <span class="kw">for </span>map <span class="kw">in </span>instrs {
+            <span class="comment">// Sanity-check to ensure that functions are pushed in-order, otherwise
+            // the `offsets` array won&#39;t be sorted which is our goal.
+            </span><span class="kw">let </span>pos = func_start + map.code_offset;
+            <span class="macro">assert!</span>(pos &gt;= <span class="self">self</span>.last_offset);
+            <span class="self">self</span>.offsets.push(U32Bytes::new(LittleEndian, pos));
+            <span class="self">self</span>.positions
+                .push(U32Bytes::new(LittleEndian, map.srcloc.<span class="number">0</span>));
+            <span class="self">self</span>.last_offset = pos;
+        }
+        <span class="self">self</span>.last_offset = func_end;
+    }
+
+    <span class="doccomment">/// Finishes encoding this section into the `Object` provided.
+    </span><span class="kw">pub fn </span>append_to(<span class="self">self</span>, obj: <span class="kw-2">&amp;mut </span>Object) {
+        <span class="kw">let </span>section = obj.add_section(
+            obj.segment_name(StandardSegment::Data).to_vec(),
+            ELF_WASMTIME_ADDRMAP.as_bytes().to_vec(),
+            SectionKind::ReadOnlyData,
+        );
+
+        <span class="comment">// NB: this matches the encoding expected by `lookup` below.
+        </span><span class="kw">let </span>amt = u32::try_from(<span class="self">self</span>.offsets.len()).unwrap();
+        obj.append_section_data(section, <span class="kw-2">&amp;</span>amt.to_le_bytes(), <span class="number">1</span>);
+        obj.append_section_data(section, object::bytes_of_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.offsets), <span class="number">1</span>);
+        obj.append_section_data(section, object::bytes_of_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.positions), <span class="number">1</span>);
+    }
+}
+
+<span class="doccomment">/// Lookup an `offset` within an encoded address map section, returning the
+/// original `FilePos` that corresponds to the offset, if found.
+///
+/// This function takes a `section` as its first argument which must have been
+/// created with `AddressMapSection` above. This is intended to be the raw
+/// `ELF_WASMTIME_ADDRMAP` section from the compilation artifact.
+///
+/// The `offset` provided is a relative offset from the start of the text
+/// section of the pc that is being looked up. If `offset` is out of range or
+/// doesn&#39;t correspond to anything in this file then `None` is returned.
+</span><span class="kw">pub fn </span>lookup_file_pos(section: <span class="kw-2">&amp;</span>[u8], offset: usize) -&gt; <span class="prelude-ty">Option</span>&lt;FilePos&gt; {
+    <span class="kw">let </span><span class="kw-2">mut </span>section = Bytes(section);
+    <span class="comment">// NB: this matches the encoding written by `append_to` above.
+    </span><span class="kw">let </span>count = section.read::&lt;U32Bytes&lt;LittleEndian&gt;&gt;().ok()<span class="question-mark">?</span>;
+    <span class="kw">let </span>count = usize::try_from(count.get(LittleEndian)).ok()<span class="question-mark">?</span>;
+    <span class="kw">let </span>(offsets, section) =
+        object::slice_from_bytes::&lt;U32Bytes&lt;LittleEndian&gt;&gt;(section.<span class="number">0</span>, count).ok()<span class="question-mark">?</span>;
+    <span class="kw">let </span>(positions, section) =
+        object::slice_from_bytes::&lt;U32Bytes&lt;LittleEndian&gt;&gt;(section, count).ok()<span class="question-mark">?</span>;
+    <span class="macro">debug_assert!</span>(section.is_empty());
+
+    <span class="comment">// First perform a binary search on the `offsets` array. This is a sorted
+    // array of offsets within the text section, which is conveniently what our
+    // `offset` also is. Note that we are somewhat unlikely to find a precise
+    // match on the element in the array, so we&#39;re largely interested in which
+    // &quot;bucket&quot; the `offset` falls into.
+    </span><span class="kw">let </span>offset = u32::try_from(offset).ok()<span class="question-mark">?</span>;
+    <span class="kw">let </span>index = <span class="kw">match </span>offsets.binary_search_by_key(<span class="kw-2">&amp;</span>offset, |v| v.get(LittleEndian)) {
+        <span class="comment">// Exact hit!
+        </span><span class="prelude-val">Ok</span>(i) =&gt; i,
+
+        <span class="comment">// This *would* be at the first slot in the array, so no
+        // instructions cover `pc`.
+        </span><span class="prelude-val">Err</span>(<span class="number">0</span>) =&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
+
+        <span class="comment">// This would be at the `nth` slot, so we&#39;re at the `n-1`th slot.
+        </span><span class="prelude-val">Err</span>(n) =&gt; n - <span class="number">1</span>,
+    };
+
+    <span class="comment">// Using the `index` we found of which bucket `offset` corresponds to we can
+    // lookup the actual `FilePos` value in the `positions` array.
+    </span><span class="kw">let </span>pos = positions.get(index)<span class="question-mark">?</span>;
+    <span class="prelude-val">Some</span>(FilePos(pos.get(LittleEndian)))
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="wasmtime_environ" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

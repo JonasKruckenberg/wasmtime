@@ -1,0 +1,260 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/wiggle/generate/src/types/mod.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>mod.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../../normalize.css"><link rel="stylesheet" href="../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../../ayu.css" disabled><link rel="stylesheet" href="../../../dark.css" disabled><link rel="stylesheet" href="../../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../../storage.js"></script><script defer src="../../../source-script.js"></script><script defer src="../../../source-files.js"></script><script defer src="../../../main.js"></script><noscript><link rel="stylesheet" href="../../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../../wiggle_generate/index.html"><div class="logo-container"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../../wiggle_generate/index.html"><div class="logo-container"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../../wiggle_generate/index.html"><img class="rust-logo" src="../../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+</pre><pre class="rust"><code><span class="comment">// mod r#enum;
+</span><span class="kw">mod </span>error;
+<span class="kw">mod </span>flags;
+<span class="kw">mod </span>handle;
+<span class="kw">mod </span>record;
+<span class="kw">mod </span>variant;
+
+<span class="kw">use </span><span class="kw">crate</span>::codegen_settings::ErrorType;
+<span class="kw">use </span><span class="kw">crate</span>::lifetimes::LifetimeExt;
+<span class="kw">use </span><span class="kw">crate</span>::names;
+
+<span class="kw">use </span>proc_macro2::TokenStream;
+<span class="kw">use </span>quote::quote;
+
+<span class="kw">pub fn </span>define_datatype(namedtype: <span class="kw-2">&amp;</span>witx::NamedType, error: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ErrorType&gt;) -&gt; TokenStream {
+    <span class="kw">match </span><span class="kw-2">&amp;</span>namedtype.tref {
+        witx::TypeRef::Name(alias_to) =&gt; define_alias(<span class="kw-2">&amp;</span>namedtype.name, <span class="kw-2">&amp;</span>alias_to),
+        witx::TypeRef::Value(v) =&gt; <span class="kw">match </span><span class="kw-2">&amp;**</span>v {
+            witx::Type::Record(r) =&gt; <span class="kw">match </span>r.bitflags_repr() {
+                <span class="prelude-val">Some</span>(repr) =&gt; flags::define_flags(<span class="kw-2">&amp;</span>namedtype.name, repr, <span class="kw-2">&amp;</span>r),
+                <span class="prelude-val">None </span>=&gt; record::define_struct(<span class="kw-2">&amp;</span>namedtype.name, <span class="kw-2">&amp;</span>r),
+            },
+            witx::Type::Variant(v) =&gt; <span class="kw">match </span>error {
+                <span class="prelude-val">Some</span>(ErrorType::Generated(error)) =&gt; {
+                    <span class="kw">let </span>d = variant::define_variant(<span class="kw-2">&amp;</span>namedtype.name, <span class="kw-2">&amp;</span>v, <span class="bool-val">true</span>);
+                    <span class="kw">let </span>e = error::define_error(<span class="kw-2">&amp;</span>namedtype.name, <span class="kw-2">&amp;</span>v, error);
+                    <span class="macro">quote!</span>( #d #e )
+                }
+                <span class="kw">_ </span>=&gt; variant::define_variant(<span class="kw-2">&amp;</span>namedtype.name, <span class="kw-2">&amp;</span>v, <span class="bool-val">false</span>),
+            },
+            witx::Type::Handle(h) =&gt; handle::define_handle(<span class="kw-2">&amp;</span>namedtype.name, <span class="kw-2">&amp;</span>h),
+            witx::Type::Builtin(b) =&gt; define_builtin(<span class="kw-2">&amp;</span>namedtype.name, <span class="kw-2">*</span>b),
+            witx::Type::Pointer(p) =&gt; {
+                define_witx_pointer(<span class="kw-2">&amp;</span>namedtype.name, <span class="macro">quote!</span>(wiggle::GuestPtr), p)
+            }
+            witx::Type::ConstPointer(p) =&gt; {
+                define_witx_pointer(<span class="kw-2">&amp;</span>namedtype.name, <span class="macro">quote!</span>(wiggle::GuestPtr), p)
+            }
+            witx::Type::List(arr) =&gt; define_witx_list(<span class="kw-2">&amp;</span>namedtype.name, <span class="kw-2">&amp;</span>arr),
+        },
+    }
+}
+
+<span class="kw">fn </span>define_alias(name: <span class="kw-2">&amp;</span>witx::Id, to: <span class="kw-2">&amp;</span>witx::NamedType) -&gt; TokenStream {
+    <span class="kw">let </span>ident = names::type_(name);
+    <span class="kw">let </span>rhs = names::type_(<span class="kw-2">&amp;</span>to.name);
+    <span class="kw">if </span>to.tref.needs_lifetime() {
+        <span class="macro">quote!</span>(<span class="kw">pub type </span>#ident&lt;<span class="lifetime">&#39;a</span>&gt; = #rhs&lt;<span class="lifetime">&#39;a</span>&gt;;)
+    } <span class="kw">else </span>{
+        <span class="macro">quote!</span>(<span class="kw">pub type </span>#ident = #rhs;)
+    }
+}
+
+<span class="kw">fn </span>define_builtin(name: <span class="kw-2">&amp;</span>witx::Id, builtin: witx::BuiltinType) -&gt; TokenStream {
+    <span class="kw">let </span>ident = names::type_(name);
+    <span class="kw">let </span>built = names::builtin_type(builtin);
+    <span class="macro">quote!</span>(<span class="kw">pub type </span>#ident = #built;)
+}
+
+<span class="kw">fn </span>define_witx_pointer(
+    name: <span class="kw-2">&amp;</span>witx::Id,
+    pointer_type: TokenStream,
+    pointee: <span class="kw-2">&amp;</span>witx::TypeRef,
+) -&gt; TokenStream {
+    <span class="kw">let </span>ident = names::type_(name);
+    <span class="kw">let </span>pointee_type = names::type_ref(pointee, <span class="macro">quote!</span>(<span class="lifetime">&#39;a</span>));
+
+    <span class="macro">quote!</span>(<span class="kw">pub type </span>#ident&lt;<span class="lifetime">&#39;a</span>&gt; = #pointer_type&lt;<span class="lifetime">&#39;a</span>, #pointee_type&gt;;)
+}
+
+<span class="kw">fn </span>define_witx_list(name: <span class="kw-2">&amp;</span>witx::Id, arr_raw: <span class="kw-2">&amp;</span>witx::TypeRef) -&gt; TokenStream {
+    <span class="kw">let </span>ident = names::type_(name);
+    <span class="kw">let </span>pointee_type = names::type_ref(arr_raw, <span class="macro">quote!</span>(<span class="lifetime">&#39;a</span>));
+    <span class="macro">quote!</span>(<span class="kw">pub type </span>#ident&lt;<span class="lifetime">&#39;a</span>&gt; = wiggle::GuestPtr&lt;<span class="lifetime">&#39;a</span>, [#pointee_type]&gt;;)
+}
+
+<span class="kw">pub fn </span>int_repr_tokens(int_repr: witx::IntRepr) -&gt; TokenStream {
+    <span class="kw">match </span>int_repr {
+        witx::IntRepr::U8 =&gt; <span class="macro">quote!</span>(u8),
+        witx::IntRepr::U16 =&gt; <span class="macro">quote!</span>(u16),
+        witx::IntRepr::U32 =&gt; <span class="macro">quote!</span>(u32),
+        witx::IntRepr::U64 =&gt; <span class="macro">quote!</span>(u64),
+    }
+}
+
+<span class="kw">pub trait </span>WiggleType {
+    <span class="kw">fn </span>impls_display(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool;
+}
+
+<span class="kw">impl </span>WiggleType <span class="kw">for </span>witx::TypeRef {
+    <span class="kw">fn </span>impls_display(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+        <span class="kw">match </span><span class="self">self </span>{
+            witx::TypeRef::Name(alias_to) =&gt; (<span class="kw-2">&amp;*</span>alias_to).impls_display(),
+            witx::TypeRef::Value(v) =&gt; (<span class="kw-2">&amp;*</span>v).impls_display(),
+        }
+    }
+}
+
+<span class="kw">impl </span>WiggleType <span class="kw">for </span>witx::NamedType {
+    <span class="kw">fn </span>impls_display(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+        <span class="self">self</span>.tref.impls_display()
+    }
+}
+
+<span class="kw">impl </span>WiggleType <span class="kw">for </span>witx::Type {
+    <span class="kw">fn </span>impls_display(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+        <span class="kw">match </span><span class="self">self </span>{
+            witx::Type::Record(x) =&gt; x.impls_display(),
+            witx::Type::Variant(x) =&gt; x.impls_display(),
+            witx::Type::Handle(x) =&gt; x.impls_display(),
+            witx::Type::Builtin(x) =&gt; x.impls_display(),
+            witx::Type::Pointer { .. }
+            | witx::Type::ConstPointer { .. }
+            | witx::Type::List { .. } =&gt; <span class="bool-val">false</span>,
+        }
+    }
+}
+
+<span class="kw">impl </span>WiggleType <span class="kw">for </span>witx::BuiltinType {
+    <span class="kw">fn </span>impls_display(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+        <span class="bool-val">true
+    </span>}
+}
+
+<span class="kw">impl </span>WiggleType <span class="kw">for </span>witx::InterfaceFuncParam {
+    <span class="kw">fn </span>impls_display(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+        <span class="self">self</span>.tref.impls_display()
+    }
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../../" data-current-crate="wiggle_generate" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

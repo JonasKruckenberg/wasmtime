@@ -1,0 +1,148 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cranelift/reader/src/testfile.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>testfile.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../normalize.css"><link rel="stylesheet" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../ayu.css" disabled><link rel="stylesheet" href="../../dark.css" disabled><link rel="stylesheet" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../cranelift_reader/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../cranelift_reader/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../cranelift_reader/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+</pre><pre class="rust"><code><span class="doccomment">//! Data structures representing a parsed test file.
+//!
+//! A test file is a `.clif` file which contains test commands and settings for running a
+//! file-based test case.
+//!
+
+</span><span class="kw">use </span><span class="kw">crate</span>::error::Location;
+<span class="kw">use </span><span class="kw">crate</span>::isaspec::IsaSpec;
+<span class="kw">use </span><span class="kw">crate</span>::sourcemap::SourceMap;
+<span class="kw">use </span><span class="kw">crate</span>::testcommand::TestCommand;
+<span class="kw">use </span>cranelift_codegen::ir::entities::AnyEntity;
+<span class="kw">use </span>cranelift_codegen::ir::Function;
+
+<span class="doccomment">/// A parsed test case.
+///
+/// This is the result of parsing a `.clif` file which contains a number of test commands and ISA
+/// specs followed by the functions that should be tested.
+</span><span class="kw">pub struct </span>TestFile&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="doccomment">/// `test foo ...` lines.
+    </span><span class="kw">pub </span>commands: Vec&lt;TestCommand&lt;<span class="lifetime">&#39;a</span>&gt;&gt;,
+    <span class="doccomment">/// `isa bar ...` lines.
+    </span><span class="kw">pub </span>isa_spec: IsaSpec,
+    <span class="doccomment">/// `feature ...` lines
+    </span><span class="kw">pub </span>features: Vec&lt;Feature&lt;<span class="lifetime">&#39;a</span>&gt;&gt;,
+    <span class="doccomment">/// Comments appearing before the first function.
+    /// These are all tagged as &#39;Function&#39; scope for lack of a better entity.
+    </span><span class="kw">pub </span>preamble_comments: Vec&lt;Comment&lt;<span class="lifetime">&#39;a</span>&gt;&gt;,
+    <span class="doccomment">/// Parsed functions and additional details about each function.
+    </span><span class="kw">pub </span>functions: Vec&lt;(Function, Details&lt;<span class="lifetime">&#39;a</span>&gt;)&gt;,
+}
+
+<span class="doccomment">/// Additional details about a function parsed from a text string.
+/// These are useful for detecting test commands embedded in comments etc.
+/// The details to not affect the semantics of the function.
+</span><span class="attribute">#[derive(Debug)]
+</span><span class="kw">pub struct </span>Details&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="doccomment">/// Location of the `function` keyword that begins this function.
+    </span><span class="kw">pub </span>location: Location,
+    <span class="doccomment">/// Annotation comments that appeared inside or after the function.
+    </span><span class="kw">pub </span>comments: Vec&lt;Comment&lt;<span class="lifetime">&#39;a</span>&gt;&gt;,
+    <span class="doccomment">/// Mapping of entity numbers to source locations.
+    </span><span class="kw">pub </span>map: SourceMap,
+}
+
+<span class="doccomment">/// A comment in a parsed function.
+///
+/// The comment belongs to the immediately preceding entity, whether that is a block header, and
+/// instruction, or one of the preamble declarations.
+///
+/// Comments appearing inside the function but before the preamble, as well as comments appearing
+/// after the function are tagged as `AnyEntity::Function`.
+</span><span class="attribute">#[derive(Clone, PartialEq, Eq, Debug)]
+</span><span class="kw">pub struct </span>Comment&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="doccomment">/// The entity this comment is attached to.
+    /// Comments always follow their entity.
+    </span><span class="kw">pub </span>entity: AnyEntity,
+    <span class="doccomment">/// Text of the comment, including the leading `;`.
+    </span><span class="kw">pub </span>text: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>str,
+}
+
+<span class="doccomment">/// A cranelift feature in a test file preamble.
+///
+/// This represents the expectation of the test case. Before running any of the
+/// functions of the test file, the feature set should be compared with the
+/// feature set used to compile Cranelift. If there is any differences, then the
+/// test file should be skipped.
+</span><span class="attribute">#[derive(PartialEq, Eq, Debug)]
+</span><span class="kw">pub enum </span>Feature&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="doccomment">/// `feature &quot;...&quot;` lines
+    </span>With(<span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>str),
+    <span class="doccomment">/// `feature ! &quot;...&quot;` lines.
+    </span>Without(<span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>str),
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="cranelift_reader" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

@@ -1,0 +1,384 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/runtime/src/mmap_vec.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>mmap_vec.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../normalize.css"><link rel="stylesheet" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../ayu.css" disabled><link rel="stylesheet" href="../../dark.css" disabled><link rel="stylesheet" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../wasmtime_runtime/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../wasmtime_runtime/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../wasmtime_runtime/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+</pre><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::Mmap;
+<span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>};
+<span class="kw">use </span>std::fs::File;
+<span class="kw">use </span>std::ops::{Deref, DerefMut, Range};
+<span class="kw">use </span>std::path::Path;
+<span class="kw">use </span>std::sync::Arc;
+
+<span class="doccomment">/// A type akin to `Vec&lt;u8&gt;`, but backed by `mmap` and able to be split.
+///
+/// This type is a non-growable owned list of bytes. It can be segmented into
+/// disjoint separately owned views akin to the `split_at` method on slices in
+/// Rust. An `MmapVec` is backed by an OS-level memory allocation and is not
+/// suitable for lots of small allocation (since it works at the page
+/// granularity).
+///
+/// An `MmapVec` is an owned value which means that owners have the ability to
+/// get exclusive access to the underlying bytes, enabling mutation.
+</span><span class="kw">pub struct </span>MmapVec {
+    mmap: Arc&lt;Mmap&gt;,
+    range: Range&lt;usize&gt;,
+}
+
+<span class="kw">impl </span>MmapVec {
+    <span class="doccomment">/// Consumes an existing `mmap` and wraps it up into an `MmapVec`.
+    ///
+    /// The returned `MmapVec` will have the `size` specified, which can be
+    /// smaller than the region mapped by the `Mmap`. The returned `MmapVec`
+    /// will only have at most `size` bytes accessible.
+    </span><span class="kw">pub fn </span>new(mmap: Mmap, size: usize) -&gt; MmapVec {
+        <span class="macro">assert!</span>(size &lt;= mmap.len());
+        MmapVec {
+            mmap: Arc::new(mmap),
+            range: <span class="number">0</span>..size,
+        }
+    }
+
+    <span class="doccomment">/// Creates a new zero-initialized `MmapVec` with the given `size`.
+    ///
+    /// This commit will return a new `MmapVec` suitably sized to hold `size`
+    /// bytes. All bytes will be initialized to zero since this is a fresh OS
+    /// page allocation.
+    </span><span class="kw">pub fn </span>with_capacity(size: usize) -&gt; <span class="prelude-ty">Result</span>&lt;MmapVec&gt; {
+        <span class="prelude-val">Ok</span>(MmapVec::new(Mmap::with_at_least(size)<span class="question-mark">?</span>, size))
+    }
+
+    <span class="doccomment">/// Creates a new `MmapVec` from the contents of an existing `slice`.
+    ///
+    /// A new `MmapVec` is allocated to hold the contents of `slice` and then
+    /// `slice` is copied into the new mmap. It&#39;s recommended to avoid this
+    /// method if possible to avoid the need to copy data around.
+    </span><span class="kw">pub fn </span>from_slice(slice: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;MmapVec&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>result = MmapVec::with_capacity(slice.len())<span class="question-mark">?</span>;
+        result.copy_from_slice(slice);
+        <span class="prelude-val">Ok</span>(result)
+    }
+
+    <span class="doccomment">/// Creates a new `MmapVec` which is the `path` specified mmap&#39;d into
+    /// memory.
+    ///
+    /// This function will attempt to open the file located at `path` and will
+    /// then use that file to learn about its size and map the full contents
+    /// into memory. This will return an error if the file doesn&#39;t exist or if
+    /// it&#39;s too large to be fully mapped into memory.
+    </span><span class="kw">pub fn </span>from_file(path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="prelude-ty">Result</span>&lt;MmapVec&gt; {
+        <span class="kw">let </span>mmap = Mmap::from_file(path)
+            .with_context(|| <span class="macro">format!</span>(<span class="string">&quot;failed to create mmap for file: {}&quot;</span>, path.display()))<span class="question-mark">?</span>;
+        <span class="kw">let </span>len = mmap.len();
+        <span class="prelude-val">Ok</span>(MmapVec::new(mmap, len))
+    }
+
+    <span class="doccomment">/// Returns whether the original mmap was created from a readonly mapping.
+    </span><span class="kw">pub fn </span>is_readonly(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+        <span class="self">self</span>.mmap.is_readonly()
+    }
+
+    <span class="doccomment">/// Splits the collection into two at the given index.
+    ///
+    /// Returns a separate `MmapVec` which shares the underlying mapping, but
+    /// only has access to elements in the range `[at, len)`. After the call,
+    /// the original `MmapVec` will be left with access to the elements in the
+    /// range `[0, at)`.
+    ///
+    /// This is an `O(1)` operation which does not involve copies.
+    </span><span class="kw">pub fn </span>split_off(<span class="kw-2">&amp;mut </span><span class="self">self</span>, at: usize) -&gt; MmapVec {
+        <span class="macro">assert!</span>(at &lt;= <span class="self">self</span>.range.len());
+
+        <span class="comment">// Create a new `MmapVec` which refers to the same underlying mmap, but
+        // has a disjoint range from ours. Our own range is adjusted to be
+        // disjoint just after `ret` is created.
+        </span><span class="kw">let </span>ret = MmapVec {
+            mmap: <span class="self">self</span>.mmap.clone(),
+            range: at..<span class="self">self</span>.range.end,
+        };
+        <span class="self">self</span>.range.end = <span class="self">self</span>.range.start + at;
+        <span class="kw">return </span>ret;
+    }
+
+    <span class="doccomment">/// Makes the specified `range` within this `mmap` to be read/write.
+    </span><span class="kw">pub unsafe fn </span>make_writable(<span class="kw-2">&amp;</span><span class="self">self</span>, range: Range&lt;usize&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        <span class="self">self</span>.mmap
+            .make_writable(range.start + <span class="self">self</span>.range.start..range.end + <span class="self">self</span>.range.start)
+    }
+
+    <span class="doccomment">/// Makes the specified `range` within this `mmap` to be read/execute.
+    </span><span class="kw">pub unsafe fn </span>make_executable(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        range: Range&lt;usize&gt;,
+        enable_branch_protection: bool,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        <span class="self">self</span>.mmap.make_executable(
+            range.start + <span class="self">self</span>.range.start..range.end + <span class="self">self</span>.range.start,
+            enable_branch_protection,
+        )
+    }
+
+    <span class="doccomment">/// Returns the underlying file that this mmap is mapping, if present.
+    </span><span class="kw">pub fn </span>original_file(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Arc&lt;File&gt;&gt; {
+        <span class="self">self</span>.mmap.original_file()
+    }
+
+    <span class="doccomment">/// Returns the offset within the original mmap that this `MmapVec` is
+    /// created from.
+    </span><span class="kw">pub fn </span>original_offset(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+        <span class="self">self</span>.range.start
+    }
+}
+
+<span class="kw">impl </span>Deref <span class="kw">for </span>MmapVec {
+    <span class="kw">type </span>Target = [u8];
+
+    <span class="kw">fn </span>deref(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[u8] {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.mmap.as_slice()[<span class="self">self</span>.range.clone()]
+    }
+}
+
+<span class="kw">impl </span>DerefMut <span class="kw">for </span>MmapVec {
+    <span class="kw">fn </span>deref_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>[u8] {
+        <span class="macro">debug_assert!</span>(!<span class="self">self</span>.is_readonly());
+        <span class="comment">// SAFETY: The underlying mmap is protected behind an `Arc` which means
+        // there there can be many references to it. We are guaranteed, though,
+        // that each reference to the underlying `mmap` has a disjoint `range`
+        // listed that it can access. This means that despite having shared
+        // access to the mmap itself we have exclusive ownership of the bytes
+        // specified in `self.range`. This should allow us to safely hand out
+        // mutable access to these bytes if so desired.
+        </span><span class="kw">unsafe </span>{
+            <span class="kw">let </span>slice = std::slice::from_raw_parts_mut(<span class="self">self</span>.mmap.as_mut_ptr(), <span class="self">self</span>.mmap.len());
+            <span class="kw-2">&amp;mut </span>slice[<span class="self">self</span>.range.clone()]
+        }
+    }
+}
+
+<span class="attribute">#[cfg(test)]
+</span><span class="kw">mod </span>tests {
+    <span class="kw">use </span><span class="kw">super</span>::MmapVec;
+
+    <span class="attribute">#[test]
+    </span><span class="kw">fn </span>smoke() {
+        <span class="kw">let </span><span class="kw-2">mut </span>mmap = MmapVec::with_capacity(<span class="number">10</span>).unwrap();
+        <span class="macro">assert_eq!</span>(mmap.len(), <span class="number">10</span>);
+        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap[..], <span class="kw-2">&amp;</span>[<span class="number">0</span>; <span class="number">10</span>]);
+
+        mmap[<span class="number">0</span>] = <span class="number">1</span>;
+        mmap[<span class="number">2</span>] = <span class="number">3</span>;
+        <span class="macro">assert!</span>(mmap.get(<span class="number">10</span>).is_none());
+        <span class="macro">assert_eq!</span>(mmap[<span class="number">0</span>], <span class="number">1</span>);
+        <span class="macro">assert_eq!</span>(mmap[<span class="number">2</span>], <span class="number">3</span>);
+    }
+
+    <span class="attribute">#[test]
+    </span><span class="kw">fn </span>split_off() {
+        <span class="kw">let </span><span class="kw-2">mut </span>vec = Vec::from([<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]);
+        <span class="kw">let </span><span class="kw-2">mut </span>mmap = MmapVec::from_slice(<span class="kw-2">&amp;</span>vec).unwrap();
+        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap[..], <span class="kw-2">&amp;</span>vec[..]);
+        <span class="comment">// remove nothing; vec length remains 4
+        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap.split_off(<span class="number">4</span>)[..], <span class="kw-2">&amp;</span>vec.split_off(<span class="number">4</span>)[..]);
+        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap[..], <span class="kw-2">&amp;</span>vec[..]);
+        <span class="comment">// remove 1 element; vec length is now 3
+        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap.split_off(<span class="number">3</span>)[..], <span class="kw-2">&amp;</span>vec.split_off(<span class="number">3</span>)[..]);
+        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap[..], <span class="kw-2">&amp;</span>vec[..]);
+        <span class="comment">// remove 2 elements; vec length is now 1
+        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap.split_off(<span class="number">1</span>)[..], <span class="kw-2">&amp;</span>vec.split_off(<span class="number">1</span>)[..]);
+        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap[..], <span class="kw-2">&amp;</span>vec[..]);
+        <span class="comment">// remove last element; vec length is now 0
+        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap.split_off(<span class="number">0</span>)[..], <span class="kw-2">&amp;</span>vec.split_off(<span class="number">0</span>)[..]);
+        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap[..], <span class="kw-2">&amp;</span>vec[..]);
+        <span class="comment">// nothing left to remove, but that&#39;s okay
+        </span><span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap.split_off(<span class="number">0</span>)[..], <span class="kw-2">&amp;</span>vec.split_off(<span class="number">0</span>)[..]);
+        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>mmap[..], <span class="kw-2">&amp;</span>vec[..]);
+    }
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="wasmtime_runtime" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>

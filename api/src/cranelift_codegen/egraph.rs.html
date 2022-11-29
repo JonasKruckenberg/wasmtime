@@ -1,0 +1,860 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cranelift/codegen/src/egraph.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>egraph.rs - source</title><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Regular.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../FiraSans-Medium.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Regular.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceSerif4-Bold.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../SourceCodePro-Semibold.ttf.woff2"><link rel="stylesheet" href="../../normalize.css"><link rel="stylesheet" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" href="../../ayu.css" disabled><link rel="stylesheet" href="../../dark.css" disabled><link rel="stylesheet" href="../../light.css" id="themeStyle"><script id="default-settings" ></script><script src="../../storage.js"></script><script defer src="../../source-script.js"></script><script defer src="../../source-files.js"></script><script defer src="../../main.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="alternate icon" type="image/png" href="../../favicon-16x16.png"><link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><link rel="icon" type="image/svg+xml" href="../../favicon.svg"></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle">&#9776;</button><a class="sidebar-logo" href="../../cranelift_codegen/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a><h2 class="location"></h2></nav><nav class="sidebar"><a class="sidebar-logo" href="../../cranelift_codegen/index.html"><div class="logo-container"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></div></a></nav><main><div class="width-limiter"><div class="sub-container"><a class="sub-logo-container" href="../../cranelift_codegen/index.html"><img class="rust-logo" src="../../rust-logo.svg" alt="logo"></a><nav class="sub"><form class="search-form"><div class="search-container"><span></span><input class="search-input" name="search" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" title="help" tabindex="-1"><button type="button">?</button></div><div id="settings-menu" tabindex="-1"><a href="../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../wheel.svg"></a></div></div></form></nav></div><section id="main-content" class="content"><div class="example-wrap"><pre class="line-numbers"><span id="1">1</span>
+<span id="2">2</span>
+<span id="3">3</span>
+<span id="4">4</span>
+<span id="5">5</span>
+<span id="6">6</span>
+<span id="7">7</span>
+<span id="8">8</span>
+<span id="9">9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
+<span id="76">76</span>
+<span id="77">77</span>
+<span id="78">78</span>
+<span id="79">79</span>
+<span id="80">80</span>
+<span id="81">81</span>
+<span id="82">82</span>
+<span id="83">83</span>
+<span id="84">84</span>
+<span id="85">85</span>
+<span id="86">86</span>
+<span id="87">87</span>
+<span id="88">88</span>
+<span id="89">89</span>
+<span id="90">90</span>
+<span id="91">91</span>
+<span id="92">92</span>
+<span id="93">93</span>
+<span id="94">94</span>
+<span id="95">95</span>
+<span id="96">96</span>
+<span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
+<span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
+<span id="169">169</span>
+<span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
+<span id="217">217</span>
+<span id="218">218</span>
+<span id="219">219</span>
+<span id="220">220</span>
+<span id="221">221</span>
+<span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
+<span id="228">228</span>
+<span id="229">229</span>
+<span id="230">230</span>
+<span id="231">231</span>
+<span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
+<span id="322">322</span>
+<span id="323">323</span>
+<span id="324">324</span>
+<span id="325">325</span>
+<span id="326">326</span>
+<span id="327">327</span>
+<span id="328">328</span>
+<span id="329">329</span>
+<span id="330">330</span>
+<span id="331">331</span>
+<span id="332">332</span>
+<span id="333">333</span>
+<span id="334">334</span>
+<span id="335">335</span>
+<span id="336">336</span>
+<span id="337">337</span>
+<span id="338">338</span>
+<span id="339">339</span>
+<span id="340">340</span>
+<span id="341">341</span>
+<span id="342">342</span>
+<span id="343">343</span>
+<span id="344">344</span>
+<span id="345">345</span>
+<span id="346">346</span>
+<span id="347">347</span>
+<span id="348">348</span>
+<span id="349">349</span>
+<span id="350">350</span>
+<span id="351">351</span>
+<span id="352">352</span>
+<span id="353">353</span>
+<span id="354">354</span>
+<span id="355">355</span>
+<span id="356">356</span>
+<span id="357">357</span>
+<span id="358">358</span>
+<span id="359">359</span>
+<span id="360">360</span>
+<span id="361">361</span>
+<span id="362">362</span>
+<span id="363">363</span>
+<span id="364">364</span>
+<span id="365">365</span>
+<span id="366">366</span>
+<span id="367">367</span>
+<span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
+<span id="373">373</span>
+<span id="374">374</span>
+<span id="375">375</span>
+<span id="376">376</span>
+<span id="377">377</span>
+<span id="378">378</span>
+<span id="379">379</span>
+<span id="380">380</span>
+<span id="381">381</span>
+<span id="382">382</span>
+<span id="383">383</span>
+<span id="384">384</span>
+<span id="385">385</span>
+<span id="386">386</span>
+<span id="387">387</span>
+<span id="388">388</span>
+<span id="389">389</span>
+<span id="390">390</span>
+<span id="391">391</span>
+<span id="392">392</span>
+<span id="393">393</span>
+<span id="394">394</span>
+<span id="395">395</span>
+<span id="396">396</span>
+<span id="397">397</span>
+<span id="398">398</span>
+<span id="399">399</span>
+<span id="400">400</span>
+<span id="401">401</span>
+<span id="402">402</span>
+<span id="403">403</span>
+<span id="404">404</span>
+<span id="405">405</span>
+<span id="406">406</span>
+<span id="407">407</span>
+<span id="408">408</span>
+<span id="409">409</span>
+<span id="410">410</span>
+<span id="411">411</span>
+<span id="412">412</span>
+<span id="413">413</span>
+<span id="414">414</span>
+<span id="415">415</span>
+<span id="416">416</span>
+<span id="417">417</span>
+<span id="418">418</span>
+<span id="419">419</span>
+<span id="420">420</span>
+<span id="421">421</span>
+<span id="422">422</span>
+<span id="423">423</span>
+<span id="424">424</span>
+<span id="425">425</span>
+<span id="426">426</span>
+<span id="427">427</span>
+<span id="428">428</span>
+<span id="429">429</span>
+</pre><pre class="rust"><code><span class="doccomment">//! Egraph-based mid-end optimization framework.
+
+</span><span class="kw">use </span><span class="kw">crate</span>::dominator_tree::DominatorTree;
+<span class="kw">use </span><span class="kw">crate</span>::egraph::stores::PackedMemoryState;
+<span class="kw">use </span><span class="kw">crate</span>::flowgraph::ControlFlowGraph;
+<span class="kw">use </span><span class="kw">crate</span>::loop_analysis::{LoopAnalysis, LoopLevel};
+<span class="kw">use </span><span class="kw">crate</span>::trace;
+<span class="kw">use crate</span>::{
+    fx::{FxHashMap, FxHashSet},
+    inst_predicates::has_side_effect,
+    ir::{Block, Function, Inst, InstructionData, InstructionImms, Opcode, Type},
+};
+<span class="kw">use </span>alloc::vec::Vec;
+<span class="kw">use </span>core::ops::Range;
+<span class="kw">use </span>cranelift_egraph::{EGraph, Id, Language, NewOrExisting};
+<span class="kw">use </span>cranelift_entity::EntityList;
+<span class="kw">use </span>cranelift_entity::SecondaryMap;
+
+<span class="kw">mod </span>domtree;
+<span class="kw">mod </span>elaborate;
+<span class="kw">mod </span>node;
+<span class="kw">mod </span>stores;
+
+<span class="kw">use </span>elaborate::Elaborator;
+<span class="kw">pub use </span>node::{Node, NodeCtx};
+<span class="kw">pub use </span>stores::{AliasAnalysis, MemoryState};
+
+<span class="kw">pub struct </span>FuncEGraph&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="doccomment">/// Dominator tree, used for elaboration pass.
+    </span>domtree: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>DominatorTree,
+    <span class="doccomment">/// Loop analysis results, used for built-in LICM during elaboration.
+    </span>loop_analysis: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>LoopAnalysis,
+    <span class="doccomment">/// Last-store tracker for integrated alias analysis during egraph build.
+    </span>alias_analysis: AliasAnalysis,
+    <span class="doccomment">/// The egraph itself.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) egraph: EGraph&lt;NodeCtx, Analysis&gt;,
+    <span class="doccomment">/// &quot;node context&quot;, containing arenas for node data.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) node_ctx: NodeCtx,
+    <span class="doccomment">/// Ranges in `side_effect_ids` for sequences of side-effecting
+    /// eclasses per block.
+    </span>side_effects: SecondaryMap&lt;Block, Range&lt;u32&gt;&gt;,
+    side_effect_ids: Vec&lt;Id&gt;,
+    <span class="doccomment">/// Map from store instructions to their nodes; used for store-to-load forwarding.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) store_nodes: FxHashMap&lt;Inst, (Type, Id)&gt;,
+    <span class="doccomment">/// Ranges in `blockparam_ids_tys` for sequences of blockparam
+    /// eclass IDs and types per block.
+    </span>blockparams: SecondaryMap&lt;Block, Range&lt;u32&gt;&gt;,
+    blockparam_ids_tys: Vec&lt;(Id, Type)&gt;,
+    <span class="doccomment">/// Which canonical node IDs do we want to rematerialize in each
+    /// block where they&#39;re used?
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) remat_ids: FxHashSet&lt;Id&gt;,
+    <span class="doccomment">/// Which canonical node IDs have an enode whose value subsumes
+    /// all others it&#39;s unioned with?
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) subsume_ids: FxHashSet&lt;Id&gt;,
+    <span class="doccomment">/// Statistics recorded during the process of building,
+    /// optimizing, and lowering out of this egraph.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) stats: Stats,
+    <span class="doccomment">/// Current rewrite-recursion depth. Used to enforce a finite
+    /// limit on rewrite rule application so that we don&#39;t get stuck
+    /// in an infinite chain.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) rewrite_depth: usize,
+}
+
+<span class="attribute">#[derive(Clone, Debug, Default)]
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Stats {
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_created: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_param: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_result: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_pure: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_inst: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_load: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_dedup_query: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_dedup_hit: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_dedup_miss: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_ctor_created: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_ctor_deduped: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_union: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) node_subsume: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) store_map_insert: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) side_effect_nodes: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) rewrite_rule_invoked: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) rewrite_depth_limit: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) store_to_load_forward: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) elaborate_visit_node: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) elaborate_memoize_hit: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) elaborate_memoize_miss: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) elaborate_memoize_miss_remat: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) elaborate_licm_hoist: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) elaborate_func: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) elaborate_func_pre_insts: u64,
+    <span class="kw">pub</span>(<span class="kw">crate</span>) elaborate_func_post_insts: u64,
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">&#39;a</span>&gt; FuncEGraph&lt;<span class="lifetime">&#39;a</span>&gt; {
+    <span class="doccomment">/// Create a new EGraph for the given function. Requires the
+    /// domtree to be precomputed as well; the domtree is used for
+    /// scheduling when lowering out of the egraph.
+    </span><span class="kw">pub fn </span>new(
+        func: <span class="kw-2">&amp;</span>Function,
+        domtree: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>DominatorTree,
+        loop_analysis: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a </span>LoopAnalysis,
+        cfg: <span class="kw-2">&amp;</span>ControlFlowGraph,
+    ) -&gt; FuncEGraph&lt;<span class="lifetime">&#39;a</span>&gt; {
+        <span class="kw">let </span>num_values = func.dfg.num_values();
+        <span class="kw">let </span>num_blocks = func.dfg.num_blocks();
+        <span class="kw">let </span>node_count_estimate = num_values * <span class="number">2</span>;
+        <span class="kw">let </span>alias_analysis = AliasAnalysis::new(func, cfg);
+        <span class="kw">let </span><span class="kw-2">mut </span>this = <span class="self">Self </span>{
+            domtree,
+            loop_analysis,
+            alias_analysis,
+            egraph: EGraph::with_capacity(node_count_estimate, <span class="prelude-val">Some</span>(Analysis)),
+            node_ctx: NodeCtx::with_capacity_for_dfg(<span class="kw-2">&amp;</span>func.dfg),
+            side_effects: SecondaryMap::with_capacity(num_blocks),
+            side_effect_ids: Vec::with_capacity(node_count_estimate),
+            store_nodes: FxHashMap::default(),
+            blockparams: SecondaryMap::with_capacity(num_blocks),
+            blockparam_ids_tys: Vec::with_capacity(num_blocks * <span class="number">10</span>),
+            remat_ids: FxHashSet::default(),
+            subsume_ids: FxHashSet::default(),
+            stats: Default::default(),
+            rewrite_depth: <span class="number">0</span>,
+        };
+        this.store_nodes.reserve(func.dfg.num_values() / <span class="number">8</span>);
+        this.remat_ids.reserve(func.dfg.num_values() / <span class="number">4</span>);
+        this.subsume_ids.reserve(func.dfg.num_values() / <span class="number">4</span>);
+        this.build(func);
+        this
+    }
+
+    <span class="kw">fn </span>build(<span class="kw-2">&amp;mut </span><span class="self">self</span>, func: <span class="kw-2">&amp;</span>Function) {
+        <span class="comment">// Mapping of SSA `Value` to eclass ID.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>value_to_id = FxHashMap::default();
+
+        <span class="comment">// For each block in RPO, create an enode for block entry, for
+        // each block param, and for each instruction.
+        </span><span class="kw">for </span><span class="kw-2">&amp;</span>block <span class="kw">in </span><span class="self">self</span>.domtree.cfg_postorder().iter().rev() {
+            <span class="kw">let </span>loop_level = <span class="self">self</span>.loop_analysis.loop_level(block);
+            <span class="kw">let </span>blockparam_start =
+                u32::try_from(<span class="self">self</span>.blockparam_ids_tys.len()).expect(<span class="string">&quot;Overflow in blockparam count&quot;</span>);
+            <span class="kw">for </span>(i, <span class="kw-2">&amp;</span>value) <span class="kw">in </span>func.dfg.block_params(block).iter().enumerate() {
+                <span class="kw">let </span>ty = func.dfg.value_type(value);
+                <span class="kw">let </span>param = <span class="self">self
+                    </span>.egraph
+                    .add(
+                        Node::Param {
+                            block,
+                            index: i
+                                .try_into()
+                                .expect(<span class="string">&quot;blockparam index should fit in Node::Param&quot;</span>),
+                            ty,
+                            loop_level,
+                        },
+                        <span class="kw-2">&amp;mut </span><span class="self">self</span>.node_ctx,
+                    )
+                    .get();
+                value_to_id.insert(value, param);
+                <span class="self">self</span>.blockparam_ids_tys.push((param, ty));
+                <span class="self">self</span>.stats.node_created += <span class="number">1</span>;
+                <span class="self">self</span>.stats.node_param += <span class="number">1</span>;
+            }
+            <span class="kw">let </span>blockparam_end =
+                u32::try_from(<span class="self">self</span>.blockparam_ids_tys.len()).expect(<span class="string">&quot;Overflow in blockparam count&quot;</span>);
+            <span class="self">self</span>.blockparams[block] = blockparam_start..blockparam_end;
+
+            <span class="kw">let </span>side_effect_start =
+                u32::try_from(<span class="self">self</span>.side_effect_ids.len()).expect(<span class="string">&quot;Overflow in side-effect count&quot;</span>);
+            <span class="kw">for </span>inst <span class="kw">in </span>func.layout.block_insts(block) {
+                <span class="comment">// Build args from SSA values.
+                </span><span class="kw">let </span>args = EntityList::from_iter(
+                    func.dfg.inst_args(inst).iter().map(|<span class="kw-2">&amp;</span>arg| {
+                        <span class="kw">let </span>arg = func.dfg.resolve_aliases(arg);
+                        <span class="kw-2">*</span>value_to_id
+                            .get(<span class="kw-2">&amp;</span>arg)
+                            .expect(<span class="string">&quot;Must have seen def before this use&quot;</span>)
+                    }),
+                    <span class="kw-2">&amp;mut </span><span class="self">self</span>.node_ctx.args,
+                );
+
+                <span class="kw">let </span>results = func.dfg.inst_results(inst);
+                <span class="kw">let </span>ty = <span class="kw">if </span>results.len() == <span class="number">1 </span>{
+                    func.dfg.value_type(results[<span class="number">0</span>])
+                } <span class="kw">else </span>{
+                    <span class="kw">crate</span>::ir::types::INVALID
+                };
+
+                <span class="kw">let </span>load_mem_state = <span class="self">self</span>.alias_analysis.get_state_for_load(inst);
+                <span class="kw">let </span>is_readonly_load = <span class="kw">match </span>func.dfg[inst] {
+                    InstructionData::Load {
+                        opcode: Opcode::Load,
+                        flags,
+                        ..
+                    } =&gt; flags.readonly() &amp;&amp; flags.notrap(),
+                    <span class="kw">_ </span>=&gt; <span class="bool-val">false</span>,
+                };
+
+                <span class="comment">// Create the egraph node.
+                </span><span class="kw">let </span>op = InstructionImms::from(<span class="kw-2">&amp;</span>func.dfg[inst]);
+                <span class="kw">let </span>opcode = op.opcode();
+                <span class="kw">let </span>srcloc = func.srclocs[inst];
+                <span class="kw">let </span>arity = u16::try_from(results.len())
+                    .expect(<span class="string">&quot;More than 2^16 results from an instruction&quot;</span>);
+
+                <span class="kw">let </span>node = <span class="kw">if </span>is_readonly_load {
+                    <span class="self">self</span>.stats.node_created += <span class="number">1</span>;
+                    <span class="self">self</span>.stats.node_pure += <span class="number">1</span>;
+                    Node::Pure {
+                        op,
+                        args,
+                        ty,
+                        arity,
+                    }
+                } <span class="kw">else if let </span><span class="prelude-val">Some</span>(load_mem_state) = load_mem_state {
+                    <span class="kw">let </span>addr = args.as_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.node_ctx.args)[<span class="number">0</span>];
+                    <span class="macro">trace!</span>(<span class="string">&quot;load at inst {} has mem state {:?}&quot;</span>, inst, load_mem_state);
+                    <span class="self">self</span>.stats.node_created += <span class="number">1</span>;
+                    <span class="self">self</span>.stats.node_load += <span class="number">1</span>;
+                    Node::Load {
+                        op,
+                        ty,
+                        addr,
+                        mem_state: load_mem_state,
+                        srcloc,
+                    }
+                } <span class="kw">else if </span>has_side_effect(func, inst) || opcode.can_load() {
+                    <span class="self">self</span>.stats.node_created += <span class="number">1</span>;
+                    <span class="self">self</span>.stats.node_inst += <span class="number">1</span>;
+                    Node::Inst {
+                        op,
+                        args,
+                        ty,
+                        arity,
+                        srcloc,
+                        loop_level,
+                    }
+                } <span class="kw">else </span>{
+                    <span class="self">self</span>.stats.node_created += <span class="number">1</span>;
+                    <span class="self">self</span>.stats.node_pure += <span class="number">1</span>;
+                    Node::Pure {
+                        op,
+                        args,
+                        ty,
+                        arity,
+                    }
+                };
+                <span class="kw">let </span>dedup_needed = <span class="self">self</span>.node_ctx.needs_dedup(<span class="kw-2">&amp;</span>node);
+                <span class="kw">let </span>is_pure = <span class="macro">matches!</span>(node, Node::Pure { .. });
+
+                <span class="kw">let </span><span class="kw-2">mut </span>id = <span class="self">self</span>.egraph.add(node, <span class="kw-2">&amp;mut </span><span class="self">self</span>.node_ctx);
+
+                <span class="kw">if </span>dedup_needed {
+                    <span class="self">self</span>.stats.node_dedup_query += <span class="number">1</span>;
+                    <span class="kw">match </span>id {
+                        NewOrExisting::New(<span class="kw">_</span>) =&gt; {
+                            <span class="self">self</span>.stats.node_dedup_miss += <span class="number">1</span>;
+                        }
+                        NewOrExisting::Existing(<span class="kw">_</span>) =&gt; {
+                            <span class="self">self</span>.stats.node_dedup_hit += <span class="number">1</span>;
+                        }
+                    }
+                }
+
+                <span class="kw">if </span>opcode == Opcode::Store {
+                    <span class="kw">let </span>store_data_ty = func.dfg.value_type(func.dfg.inst_args(inst)[<span class="number">0</span>]);
+                    <span class="self">self</span>.store_nodes.insert(inst, (store_data_ty, id.get()));
+                    <span class="self">self</span>.stats.store_map_insert += <span class="number">1</span>;
+                }
+
+                <span class="comment">// Loads that did not already merge into an existing
+                // load: try to forward from a store (store-to-load
+                // forwarding).
+                </span><span class="kw">if let </span>NewOrExisting::New(new_id) = id {
+                    <span class="kw">if </span>load_mem_state.is_some() {
+                        <span class="kw">let </span>opt_id = <span class="kw">crate</span>::opts::store_to_load(new_id, <span class="self">self</span>);
+                        <span class="macro">trace!</span>(<span class="string">&quot;store_to_load: {} -&gt; {}&quot;</span>, new_id, opt_id);
+                        <span class="kw">if </span>opt_id != new_id {
+                            id = NewOrExisting::Existing(opt_id);
+                        }
+                    }
+                }
+
+                <span class="comment">// Now either optimize (for new pure nodes), or add to
+                // the side-effecting list (for all other new nodes).
+                </span><span class="kw">let </span>id = <span class="kw">match </span>id {
+                    NewOrExisting::Existing(id) =&gt; id,
+                    NewOrExisting::New(id) <span class="kw">if </span>is_pure =&gt; {
+                        <span class="comment">// Apply all optimization rules immediately; the
+                        // aegraph (acyclic egraph) works best when we do
+                        // this so all uses pick up the eclass with all
+                        // possible enodes.
+                        </span><span class="kw">crate</span>::opts::optimize_eclass(id, <span class="self">self</span>)
+                    }
+                    NewOrExisting::New(id) =&gt; {
+                        <span class="self">self</span>.side_effect_ids.push(id);
+                        <span class="self">self</span>.stats.side_effect_nodes += <span class="number">1</span>;
+                        id
+                    }
+                };
+
+                <span class="comment">// Create results and save in Value-&gt;Id map.
+                </span><span class="kw">match </span>results {
+                    <span class="kw-2">&amp;</span>[] =&gt; {}
+                    <span class="kw-2">&amp;</span>[one_result] =&gt; {
+                        <span class="macro">trace!</span>(<span class="string">&quot;build: value {} -&gt; id {}&quot;</span>, one_result, id);
+                        value_to_id.insert(one_result, id);
+                    }
+                    many_results =&gt; {
+                        <span class="macro">debug_assert!</span>(many_results.len() &gt; <span class="number">1</span>);
+                        <span class="kw">for </span>(i, <span class="kw-2">&amp;</span>result) <span class="kw">in </span>many_results.iter().enumerate() {
+                            <span class="kw">let </span>ty = func.dfg.value_type(result);
+                            <span class="kw">let </span>projection = <span class="self">self
+                                </span>.egraph
+                                .add(
+                                    Node::Result {
+                                        value: id,
+                                        result: i,
+                                        ty,
+                                    },
+                                    <span class="kw-2">&amp;mut </span><span class="self">self</span>.node_ctx,
+                                )
+                                .get();
+                            <span class="self">self</span>.stats.node_created += <span class="number">1</span>;
+                            <span class="self">self</span>.stats.node_result += <span class="number">1</span>;
+                            <span class="macro">trace!</span>(<span class="string">&quot;build: value {} -&gt; id {}&quot;</span>, result, projection);
+                            value_to_id.insert(result, projection);
+                        }
+                    }
+                }
+            }
+
+            <span class="kw">let </span>side_effect_end =
+                u32::try_from(<span class="self">self</span>.side_effect_ids.len()).expect(<span class="string">&quot;Overflow in side-effect count&quot;</span>);
+            <span class="kw">let </span>side_effect_range = side_effect_start..side_effect_end;
+            <span class="self">self</span>.side_effects[block] = side_effect_range;
+        }
+    }
+
+    <span class="doccomment">/// Scoped elaboration: compute a final ordering of op computation
+    /// for each block and replace the given Func body.
+    ///
+    /// This works in concert with the domtree. We do a preorder
+    /// traversal of the domtree, tracking a scoped map from Id to
+    /// (new) Value. The map&#39;s scopes correspond to levels in the
+    /// domtree.
+    ///
+    /// At each block, we iterate forward over the side-effecting
+    /// eclasses, and recursively generate their arg eclasses, then
+    /// emit the ops themselves.
+    ///
+    /// To use an eclass in a given block, we first look it up in the
+    /// scoped map, and get the Value if already present. If not, we
+    /// need to generate it. We emit the extracted enode for this
+    /// eclass after recursively generating its args. Eclasses are
+    /// thus computed &quot;as late as possible&quot;, but then memoized into
+    /// the Id-to-Value map and available to all dominated blocks and
+    /// for the rest of this block. (This subsumes GVN.)
+    </span><span class="kw">pub fn </span>elaborate(<span class="kw-2">&amp;mut </span><span class="self">self</span>, func: <span class="kw-2">&amp;mut </span>Function) {
+        <span class="kw">let </span><span class="kw-2">mut </span>elab = Elaborator::new(
+            func,
+            <span class="self">self</span>.domtree,
+            <span class="self">self</span>.loop_analysis,
+            <span class="kw-2">&amp;</span><span class="self">self</span>.egraph,
+            <span class="kw-2">&amp;</span><span class="self">self</span>.node_ctx,
+            <span class="kw-2">&amp;</span><span class="self">self</span>.remat_ids,
+            <span class="kw-2">&amp;mut </span><span class="self">self</span>.stats,
+        );
+        elab.elaborate(
+            |block| {
+                <span class="kw">let </span>blockparam_range = <span class="self">self</span>.blockparams[block].clone();
+                <span class="kw-2">&amp;</span><span class="self">self</span>.blockparam_ids_tys
+                    [blockparam_range.start <span class="kw">as </span>usize..blockparam_range.end <span class="kw">as </span>usize]
+            },
+            |block| {
+                <span class="kw">let </span>side_effect_range = <span class="self">self</span>.side_effects[block].clone();
+                <span class="kw-2">&amp;</span><span class="self">self</span>.side_effect_ids
+                    [side_effect_range.start <span class="kw">as </span>usize..side_effect_range.end <span class="kw">as </span>usize]
+            },
+        );
+    }
+}
+
+<span class="doccomment">/// State for egraph analysis that computes all needed properties.
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Analysis;
+
+<span class="doccomment">/// Analysis results for each eclass id.
+</span><span class="attribute">#[derive(Clone, Debug)]
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>AnalysisValue {
+    <span class="kw">pub</span>(<span class="kw">crate</span>) loop_level: LoopLevel,
+}
+
+<span class="kw">impl </span>Default <span class="kw">for </span>AnalysisValue {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            loop_level: LoopLevel::root(),
+        }
+    }
+}
+
+<span class="kw">impl </span>cranelift_egraph::Analysis <span class="kw">for </span>Analysis {
+    <span class="kw">type </span>L = NodeCtx;
+    <span class="kw">type </span>Value = AnalysisValue;
+
+    <span class="kw">fn </span>for_node(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        ctx: <span class="kw-2">&amp;</span>NodeCtx,
+        n: <span class="kw-2">&amp;</span>Node,
+        values: <span class="kw-2">&amp;</span>SecondaryMap&lt;Id, AnalysisValue&gt;,
+    ) -&gt; AnalysisValue {
+        <span class="kw">let </span>loop_level = <span class="kw">match </span>n {
+            <span class="kw-2">&amp;</span>Node::Pure { <span class="kw-2">ref </span>args, .. } =&gt; args
+                .as_slice(<span class="kw-2">&amp;</span>ctx.args)
+                .iter()
+                .map(|<span class="kw-2">&amp;</span>arg| values[arg].loop_level)
+                .max()
+                .unwrap_or(LoopLevel::root()),
+            <span class="kw-2">&amp;</span>Node::Load { addr, .. } =&gt; values[addr].loop_level,
+            <span class="kw-2">&amp;</span>Node::Result { value, .. } =&gt; values[value].loop_level,
+            <span class="kw-2">&amp;</span>Node::Inst { loop_level, .. } | <span class="kw-2">&amp;</span>Node::Param { loop_level, .. } =&gt; loop_level,
+        };
+
+        AnalysisValue { loop_level }
+    }
+
+    <span class="kw">fn </span>meet(<span class="kw-2">&amp;</span><span class="self">self</span>, _ctx: <span class="kw-2">&amp;</span>NodeCtx, v1: <span class="kw-2">&amp;</span>AnalysisValue, v2: <span class="kw-2">&amp;</span>AnalysisValue) -&gt; AnalysisValue {
+        AnalysisValue {
+            loop_level: std::cmp::max(v1.loop_level, v2.loop_level),
+        }
+    }
+}
+</code></pre></div>
+</section></div></main><div id="rustdoc-vars" data-root-path="../../" data-current-crate="cranelift_codegen" data-themes="ayu,dark,light" data-resource-suffix="" data-rustdoc-version="1.65.0-nightly (78a891d36 2022-09-06)" ></div></body></html>
