@@ -33,6 +33,6 @@ target-lexicon = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["cranelift-codegen/std", "cranelift-frontend/std", "wasmtime-types/std"]
+std = ["cranelift-codegen/std", "cranelift-frontend/std", "wasmtime-types/std", "wasmparser/std"]
 core = ["cranelift-codegen/core", "cranelift-frontend/core", "hashbrown"]
 enable-serde = ["serde", "serde_derive"]

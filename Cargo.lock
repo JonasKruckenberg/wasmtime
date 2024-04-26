@@ -616,6 +616,7 @@ dependencies = [
  "similar",
  "smallvec",
  "souper-ir",
+ "spin",
  "target-lexicon",
 ]
 
@@ -664,12 +665,12 @@ dependencies = [
  "gimli",
  "log",
  "num_cpus",
+ "onlyerror",
  "serde",
  "serde_derive",
  "similar",
  "smallvec",
  "target-lexicon",
- "thiserror",
  "toml",
  "wat",
 ]
@@ -708,8 +709,8 @@ dependencies = [
  "cranelift-reader",
  "libm",
  "log",
+ "onlyerror",
  "smallvec",
- "thiserror",
 ]
 
 [[package]]
@@ -821,13 +822,13 @@ dependencies = [
  "fxhash",
  "indicatif",
  "log",
+ "onlyerror",
  "pretty_env_logger",
  "rayon",
  "regalloc2",
  "serde",
  "similar",
  "target-lexicon",
- "thiserror",
  "toml",
  "walkdir",
 ]
@@ -840,7 +841,6 @@ dependencies = [
  "cranelift-entity",
  "cranelift-frontend",
  "hashbrown 0.14.3",
- "itertools 0.12.1",
  "log",
  "serde",
  "serde_derive",
@@ -872,7 +872,7 @@ dependencies = [
  "clap",
  "criterion-plot",
  "is-terminal",
- "itertools 0.10.5",
+ "itertools",
  "num-traits",
  "once_cell",
  "oorandom",
@@ -893,7 +893,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
- "itertools 0.10.5",
+ "itertools",
 ]
 
 [[package]]
@@ -1130,12 +1130,6 @@ name = "example-wasi-wasm"
 version = "0.0.0"
 
 [[package]]
-name = "fallible-iterator"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
-
-[[package]]
 name = "fastrand"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1346,9 +1340,7 @@ version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fb8d784f27acf97159b40fc4db5ecd8aa23b9ad5ef69cdd136d3bc80665f0c0"
 dependencies = [
- "fallible-iterator",
  "indexmap 2.0.0",
- "stable_deref_trait",
 ]
 
 [[package]]
@@ -1645,15 +1637,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "itoa"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1876,6 +1859,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "myn"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51eb7addae0a5fbc6616160ee79bb7244eb644e2d18becf2f8f03603e06de63a"
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1965,6 +1954,15 @@ name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
+
+[[package]]
+name = "onlyerror"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c26d4ea2ccd9b7acedc478853805606e60c5b7b7aedfc1c54ed6d1fdc0587db"
+dependencies = [
+ "myn",
+]
 
 [[package]]
 name = "oorandom"
@@ -2609,21 +2607,15 @@ dependencies = [
 
 [[package]]
 name = "spin"
-version = "0.9.4"
+version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f6002a767bff9e83f8eeecf883ecb8011875a21ae8da43bffb817a57e78cc09"
+checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 
 [[package]]
 name = "sptr"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b9b39299b249ad65f3b7e96443bad61c02ca5cd3589f46cb6d610a0fd6c0d6a"
-
-[[package]]
-name = "stable_deref_trait"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "static_assertions"
@@ -3167,12 +3159,12 @@ dependencies = [
  "libc",
  "log",
  "once_cell",
+ "onlyerror",
  "rustix",
  "system-interface",
  "tempfile",
  "test-log",
  "test-programs-artifacts",
- "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3657,8 +3649,8 @@ dependencies = [
  "gimli",
  "log",
  "object 0.33.0",
+ "onlyerror",
  "target-lexicon",
- "thiserror",
  "wasmparser 0.206.0",
  "wasmtime-environ",
  "wasmtime-versioned-export-macros",
@@ -3677,12 +3669,12 @@ dependencies = [
  "indexmap 2.0.0",
  "log",
  "object 0.33.0",
+ "onlyerror",
  "postcard",
  "rustc-demangle",
  "serde",
  "serde_derive",
  "target-lexicon",
- "thiserror",
  "wasm-encoder 0.206.0",
  "wasmparser 0.206.0",
  "wasmprinter",
@@ -3851,10 +3843,10 @@ name = "wasmtime-types"
 version = "21.0.0"
 dependencies = [
  "cranelift-entity",
+ "onlyerror",
  "serde",
  "serde_derive",
  "smallvec",
- "thiserror",
  "wasmparser 0.206.0",
 ]
 
@@ -3885,12 +3877,12 @@ dependencies = [
  "io-extras",
  "io-lifetimes",
  "once_cell",
+ "onlyerror",
  "rustix",
  "system-interface",
  "tempfile",
  "test-log",
  "test-programs-artifacts",
- "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -3932,10 +3924,10 @@ version = "21.0.0"
 dependencies = [
  "anyhow",
  "cap-std",
+ "onlyerror",
  "openvino",
  "ort",
  "test-programs-artifacts",
- "thiserror",
  "tracing",
  "walkdir",
  "wasi-common",
@@ -4064,8 +4056,8 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bitflags 2.4.1",
+ "onlyerror",
  "proptest",
- "thiserror",
  "tokio",
  "tracing",
  "wasmtime",
@@ -4104,8 +4096,8 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "env_logger",
+ "onlyerror",
  "proptest",
- "thiserror",
  "tracing",
  "tracing-subscriber",
  "wiggle",

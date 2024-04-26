@@ -21,4 +21,4 @@ workspace = true
 
 [features]
 default = ["std"]
-std = ["onlyerror/std", "wasmparser/std"]
+std = ["onlyerror/std", "wasmparser/std", "wasmparser/std"]

@@ -49,7 +49,7 @@ wat = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_derive = { workspace = true }
 serde_json = { workspace = true }
-wasmparser = { workspace = true }
+wasmparser = { workspace = true, features = ["std"] }
 tracing = { workspace = true }
 log = { workspace = true }
 humantime = { workspace = true }
@@ -246,7 +246,7 @@ rustix = "0.38.31"
 wit-bindgen = { version = "0.22.0", default-features = false }
 
 # wasm-tools family:
-wasmparser = "0.206.0"
+wasmparser = { version = "0.206.0", default-features = false }
 wat = "1.206.0"
 wast = "206.0.0"
 wasmprinter = "0.206.0"

@@ -11,7 +11,7 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
-wasmparser = { workspace = true }
+wasmparser = { workspace = true, features = ["std"] }
 smallvec = { workspace = true }
 anyhow = { workspace = true }
 target-lexicon = { workspace = true, features = ["std"] }

@@ -34,7 +34,7 @@ wasmtime-component-macro = { workspace = true, optional = true }
 wasmtime-component-util = { workspace = true, optional = true }
 wasmtime-slab = { workspace = true, optional = true }
 target-lexicon = { workspace = true }
-wasmparser = { workspace = true }
+wasmparser = { workspace = true, features = ["std"] }
 wasm-encoder = { workspace = true, optional = true }
 anyhow = { workspace = true }
 libc = { workspace = true }
