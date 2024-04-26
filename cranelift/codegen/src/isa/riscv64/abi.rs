@@ -19,9 +19,11 @@ use crate::CodegenResult;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use regalloc2::{MachineEnv, PReg, PRegSet};
-
 use smallvec::{smallvec, SmallVec};
+#[cfg(feature = "std")]
 use std::sync::OnceLock;
+#[cfg(feature = "core")]
+use spin::Once;
 
 /// Support for the Riscv64 ABI from the callee side (within a function body).
 pub(crate) type Riscv64Callee = Callee<Riscv64MachineDeps>;
@@ -67,7 +69,7 @@ impl RiscvFlags {
 
             // Due to a limitation in regalloc2, we can't support types
             // larger than 1024 bytes. So limit that here.
-            return std::cmp::min(size, 1024);
+            return core::cmp::min(size, 1024);
         }
 
         return 0;
@@ -151,7 +153,7 @@ impl ABIMachineSpec for Riscv64MachineDeps {
                     // Compute size and 16-byte stack alignment happens
                     // separately after all args.
                     let size = reg_ty.bits() / 8;
-                    let size = std::cmp::max(size, 8);
+                    let size = core::cmp::max(size, 8);
                     // Align.
                     debug_assert!(size.is_power_of_two());
                     next_stack = align_to(next_stack, size);
@@ -704,9 +706,16 @@ impl ABIMachineSpec for Riscv64MachineDeps {
         s.nominal_sp_to_fp
     }
 
+    #[cfg(feature = "std")]
     fn get_machine_env(_flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
         static MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
         MACHINE_ENV.get_or_init(create_reg_enviroment)
+    }
+
+    #[cfg(feature = "core")]
+    fn get_machine_env(_flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
+        static MACHINE_ENV: Once<MachineEnv> = Once::new();
+        MACHINE_ENV.call_once( create_reg_enviroment)
     }
 
     fn get_regs_clobbered_by_call(_call_conv_of_callee: isa::CallConv) -> PRegSet {

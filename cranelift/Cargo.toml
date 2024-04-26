@@ -36,7 +36,7 @@ target-lexicon = { workspace = true, features = ["std"] }
 pretty_env_logger = { workspace = true }
 rayon = { version = "1", optional = true }
 indicatif = "0.13.0"
-thiserror = { workspace = true }
+onlyerror = { workspace = true }
 walkdir = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true, features = ['default'] }
@@ -49,7 +49,8 @@ fxhash = "0.2.1"
 regalloc2 = { workspace = true, features = ["trace-log"] }
 
 [features]
-default = ["disas", "cranelift-codegen/all-arch", "cranelift-codegen/trace-log", "souper-harvest"]
+default = ["std", "disas", "cranelift-codegen/all-arch", "cranelift-codegen/trace-log", "souper-harvest"]
+std = ["onlyerror/std"]
 disas = ["capstone"]
 souper-harvest = ["cranelift-codegen/souper-harvest", "rayon"]
 all-arch = ["cranelift-codegen/all-arch"]

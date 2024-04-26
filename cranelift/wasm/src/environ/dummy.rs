@@ -20,9 +20,9 @@ use cranelift_codegen::ir::{types::*, UserFuncName};
 use cranelift_codegen::isa::{CallConv, TargetFrontendConfig};
 use cranelift_entity::{EntityRef, PrimaryMap, SecondaryMap};
 use cranelift_frontend::FunctionBuilder;
-use std::boxed::Box;
-use std::string::String;
-use std::vec::Vec;
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::vec::Vec;
 use wasmparser::{FuncValidator, FunctionBody, ValidatorResources, WasmFeatures};
 use wasmtime_types::wasm_unsupported;
 

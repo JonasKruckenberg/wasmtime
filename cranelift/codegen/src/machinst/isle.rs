@@ -2,14 +2,16 @@ use crate::ir::{BlockCall, Value, ValueList};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use smallvec::SmallVec;
-use std::cell::Cell;
+use core::cell::Cell;
 
 pub use super::MachLabel;
 use super::RetPair;
 pub use crate::ir::{
     condcodes::CondCode, dynamic_to_fixed, Constant, DynamicStackSlot, ExternalName, FuncRef,
-    GlobalValue, Immediate, SigRef, StackSlot,
+    GlobalValue, Immediate, SigRef,
 };
+#[cfg(feature = "std")]
+pub use crate::ir::StackSlot;
 pub use crate::isa::{unwind::UnwindInst, TargetIsa};
 pub use crate::machinst::{
     ABIArg, ABIArgSlot, InputSourceInst, Lower, LowerBackend, RealReg, Reg, RelocDistance, Sig,
@@ -94,7 +96,7 @@ macro_rules! isle_lower_prelude_methods {
 
         #[inline]
         fn output_builder_new(&mut self) -> InstOutputBuilder {
-            std::cell::Cell::new(InstOutput::new())
+            core::cell::Cell::new(InstOutput::new())
         }
 
         #[inline]
@@ -225,7 +227,7 @@ macro_rules! isle_lower_prelude_methods {
             let inst = self.def_inst(val)?;
             let constant = self.lower_ctx.get_constant(inst)? as i64;
             let ty = self.lower_ctx.output_ty(inst, 0);
-            let shift_amt = std::cmp::max(0, 64 - self.ty_bits(ty));
+            let shift_amt = core::cmp::max(0, 64 - self.ty_bits(ty));
             Some((constant << shift_amt) >> shift_amt)
         }
 
@@ -681,7 +683,7 @@ macro_rules! isle_lower_prelude_methods {
             &mut self,
             targets: &MachLabelSlice,
         ) -> Option<(MachLabel, BoxVecMachLabel)> {
-            use std::boxed::Box;
+            use alloc::boxed::Box;
             if targets.is_empty() {
                 return None;
             }

@@ -788,16 +788,19 @@ impl Ieee32 {
     }
 
     /// Returns the square root of self.
+    #[cfg(feature = "std")]
     pub fn sqrt(self) -> Self {
         Self::with_float(self.as_f32().sqrt())
     }
 
     /// Computes the absolute value of self.
+    #[cfg(feature = "std")]
     pub fn abs(self) -> Self {
         Self::with_float(self.as_f32().abs())
     }
 
     /// Returns a number composed of the magnitude of self and the sign of sign.
+    #[cfg(feature = "std")]
     pub fn copysign(self, sign: Self) -> Self {
         Self::with_float(self.as_f32().copysign(sign.as_f32()))
     }
@@ -813,22 +816,26 @@ impl Ieee32 {
     }
 
     /// Returns the smallest integer greater than or equal to `self`.
+    #[cfg(feature = "std")]
     pub fn ceil(self) -> Self {
         Self::with_float(self.as_f32().ceil())
     }
 
     /// Returns the largest integer less than or equal to `self`.
+    #[cfg(feature = "std")]
     pub fn floor(self) -> Self {
         Self::with_float(self.as_f32().floor())
     }
 
     /// Returns the integer part of `self`. This means that non-integer numbers are always truncated towards zero.
+    #[cfg(feature = "std")]
     pub fn trunc(self) -> Self {
         Self::with_float(self.as_f32().trunc())
     }
 
     /// Returns the nearest integer to `self`. Rounds half-way cases to the number
     /// with an even least significant digit.
+    #[cfg(feature = "std")]
     pub fn round_ties_even(self) -> Self {
         // TODO: Replace with the native implementation once
         // https://github.com/rust-lang/rust/issues/96710 is stabilized
@@ -1006,16 +1013,19 @@ impl Ieee64 {
     }
 
     /// Returns the square root of self.
+    #[cfg(feature = "std")]
     pub fn sqrt(self) -> Self {
         Self::with_float(self.as_f64().sqrt())
     }
 
     /// Computes the absolute value of self.
+    #[cfg(feature = "std")]
     pub fn abs(self) -> Self {
         Self::with_float(self.as_f64().abs())
     }
 
     /// Returns a number composed of the magnitude of self and the sign of sign.
+    #[cfg(feature = "std")]
     pub fn copysign(self, sign: Self) -> Self {
         Self::with_float(self.as_f64().copysign(sign.as_f64()))
     }
@@ -1031,22 +1041,26 @@ impl Ieee64 {
     }
 
     /// Returns the smallest integer greater than or equal to `self`.
+    #[cfg(feature = "std")]
     pub fn ceil(self) -> Self {
         Self::with_float(self.as_f64().ceil())
     }
 
     /// Returns the largest integer less than or equal to `self`.
+    #[cfg(feature = "std")]
     pub fn floor(self) -> Self {
         Self::with_float(self.as_f64().floor())
     }
 
     /// Returns the integer part of `self`. This means that non-integer numbers are always truncated towards zero.
+    #[cfg(feature = "std")]
     pub fn trunc(self) -> Self {
         Self::with_float(self.as_f64().trunc())
     }
 
     /// Returns the nearest integer to `self`. Rounds half-way cases to the number
     /// with an even least significant digit.
+    #[cfg(feature = "std")]
     pub fn round_ties_even(self) -> Self {
         // TODO: Replace with the native implementation once
         // https://github.com/rust-lang/rust/issues/96710 is stabilized

@@ -81,7 +81,10 @@ use crate::{CodegenError, CodegenResult};
 use alloc::vec::Vec;
 use regalloc2::{MachineEnv, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use std::sync::OnceLock;
+#[cfg(feature = "std")]
+use alloc::sync::OnceLock;
+#[cfg(feature = "core")]
+use spin::Once;
 
 // We use a generic implementation that factors out ABI commonalities.
 
@@ -304,11 +307,11 @@ impl ABIMachineSpec for S390xMachineDeps {
                 // Compute size. Every argument or return value takes a slot of
                 // at least 8 bytes.
                 let size = (ty_bits(param.value_type) / 8) as u32;
-                let slot_size = std::cmp::max(size, 8);
+                let slot_size = core::cmp::max(size, 8);
 
                 // Align the stack slot.
                 debug_assert!(slot_size.is_power_of_two());
-                let slot_align = std::cmp::min(slot_size, 8);
+                let slot_align = core::cmp::min(slot_size, 8);
                 next_stack = align_to(next_stack, slot_align);
 
                 // If the type is actually of smaller size (and the argument
@@ -786,8 +789,15 @@ impl ABIMachineSpec for S390xMachineDeps {
         s.initial_sp_offset
     }
 
+    #[cfg(feature = "std")]
     fn get_machine_env(_flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
         static MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
+        MACHINE_ENV.get_or_init(create_machine_env)
+    }
+
+    #[cfg(feature = "core")]
+    fn get_machine_env(_flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
+        static MACHINE_ENV: Once<MachineEnv> = Once::new();
         MACHINE_ENV.get_or_init(create_machine_env)
     }
 

@@ -16,16 +16,16 @@ workspace = true
 
 [dependencies]
 wasmparser = { workspace = true }
+#itertools = "0.12.0"
+log = { workspace = true }
+smallvec = { workspace = true }
 cranelift-codegen = { workspace = true }
 cranelift-entity = { workspace = true }
 cranelift-frontend = { workspace = true }
 wasmtime-types = { workspace = true }
-hashbrown = { workspace = true, optional = true }
-itertools = "0.12.0"
-log = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_derive = { workspace = true, optional = true }
-smallvec = { workspace = true }
+hashbrown = { workspace = true, optional = true }
 
 [dev-dependencies]
 wat = { workspace = true }
@@ -33,6 +33,6 @@ target-lexicon = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["cranelift-codegen/std", "cranelift-frontend/std"]
-core = ["hashbrown", "cranelift-codegen/core", "cranelift-frontend/core"]
+std = ["cranelift-codegen/std", "cranelift-frontend/std", "wasmtime-types/std"]
+core = ["cranelift-codegen/core", "cranelift-frontend/core", "hashbrown"]
 enable-serde = ["serde", "serde_derive"]

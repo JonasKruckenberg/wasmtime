@@ -14,7 +14,7 @@ include = ["src/**/*", "README.md", "LICENSE"]
 workspace = true
 
 [dependencies]
-thiserror = { workspace = true }
+onlyerror = { workspace = true }
 witx = { version = "0.9.1", optional = true }
 wiggle-macro = { workspace = true }
 tracing = { workspace = true }

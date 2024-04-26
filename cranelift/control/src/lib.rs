@@ -33,6 +33,7 @@
 //!
 //! [arbitrary]: ControlPlane#method.arbitrary
 //! [default]: ControlPlane#method.default
+#![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(not(feature = "chaos"))]
 mod zero_sized;

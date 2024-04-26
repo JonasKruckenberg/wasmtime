@@ -7,26 +7,25 @@ use cranelift_frontend::FunctionBuilder;
 use wasmparser::{FuncValidator, WasmModuleResources};
 
 /// Get the parameter and result types for the given Wasm blocktype.
-pub fn blocktype_params_results<'a, T>(
-    validator: &'a FuncValidator<T>,
+pub fn blocktype_params_results<T>(
+    validator: &FuncValidator<T>,
     ty: wasmparser::BlockType,
-) -> WasmResult<(
-    impl ExactSizeIterator<Item = wasmparser::ValType> + Clone + 'a,
-    impl ExactSizeIterator<Item = wasmparser::ValType> + Clone + 'a,
-)>
-where
-    T: WasmModuleResources,
+) -> (BlockTypeParamsOrReturns, BlockTypeParamsOrReturns)
+    where
+        T: WasmModuleResources,
 {
-    return Ok(match ty {
-        wasmparser::BlockType::Empty => (
-            itertools::Either::Left(std::iter::empty()),
-            itertools::Either::Left(None.into_iter()),
+    use wasmparser::BlockType;
+
+    match ty {
+        BlockType::Empty => (
+            BlockTypeParamsOrReturns::Empty,
+            BlockTypeParamsOrReturns::Empty,
         ),
-        wasmparser::BlockType::Type(ty) => (
-            itertools::Either::Left(std::iter::empty()),
-            itertools::Either::Left(Some(ty).into_iter()),
+        BlockType::Type(ty) => (
+            BlockTypeParamsOrReturns::Empty,
+            BlockTypeParamsOrReturns::One(ty),
         ),
-        wasmparser::BlockType::FuncType(ty_index) => {
+        BlockType::FuncType(ty_index) => {
             let ty = validator
                 .resources()
                 .sub_type_at(ty_index)
@@ -34,12 +33,50 @@ where
                 .unwrap_func();
 
             (
-                itertools::Either::Right(ty.params().iter().copied()),
-                itertools::Either::Right(ty.results().iter().copied()),
+                BlockTypeParamsOrReturns::Many(ty.params(), 0),
+                BlockTypeParamsOrReturns::Many(ty.results(), 0),
             )
         }
-    });
+    }
 }
+
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub enum BlockTypeParamsOrReturns<'a> {
+    Empty,
+    One(wasmparser::ValType),
+    Many(&'a [wasmparser::ValType], usize),
+}
+
+impl<'a> Iterator for BlockTypeParamsOrReturns<'a> {
+    type Item = wasmparser::ValType;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            BlockTypeParamsOrReturns::Empty => None,
+            BlockTypeParamsOrReturns::One(ty) => {
+                let ty = *ty;
+                *self = Self::Empty;
+                Some(ty)
+            }
+            BlockTypeParamsOrReturns::Many(slice, offset) => {
+                let val = *slice.get(*offset)?;
+                *offset += 1;
+                Some(val)
+            }
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            BlockTypeParamsOrReturns::Empty => (0, Some(0)),
+            BlockTypeParamsOrReturns::One(_) => (1, Some(1)),
+            BlockTypeParamsOrReturns::Many(slice, _) => (slice.len(), Some(slice.len())),
+        }
+    }
+}
+
+impl<'a> ExactSizeIterator for BlockTypeParamsOrReturns<'a> {}
 
 /// Create a `Block` with the given Wasm parameters.
 pub fn block_with_params<PE: TargetEnvironment + ?Sized>(

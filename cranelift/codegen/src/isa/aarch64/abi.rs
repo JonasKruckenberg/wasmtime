@@ -16,7 +16,10 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use regalloc2::{MachineEnv, PReg, PRegSet};
 use smallvec::{smallvec, SmallVec};
+#[cfg(feature = "std")]
 use std::sync::OnceLock;
+#[cfg(feature = "core")]
+use spin::Once;
 
 // We use a generic implementation that factors out AArch64 and x64 ABI commonalities, because
 // these ABIs are very similar.
@@ -324,7 +327,7 @@ impl ABIMachineSpec for AArch64MachineDeps {
             } else {
                 // Every arg takes a minimum slot of 8 bytes. (16-byte stack
                 // alignment happens separately after all args.)
-                std::cmp::max(size, 8)
+                core::cmp::max(size, 8)
             };
 
             // Align the stack slot.
@@ -1154,6 +1157,7 @@ impl ABIMachineSpec for AArch64MachineDeps {
         s.nominal_sp_to_fp
     }
 
+    #[cfg(feature = "std")]
     fn get_machine_env(flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
         if flags.enable_pinned_reg() {
             static MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
@@ -1161,6 +1165,17 @@ impl ABIMachineSpec for AArch64MachineDeps {
         } else {
             static MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
             MACHINE_ENV.get_or_init(|| create_reg_env(false))
+        }
+    }
+
+    #[cfg(feature = "core")]
+    fn get_machine_env(flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
+        if flags.enable_pinned_reg() {
+            static MACHINE_ENV: Once<MachineEnv> = Once::new();
+            MACHINE_ENV.call_once(|| create_reg_env(true))
+        } else {
+            static MACHINE_ENV: Once<MachineEnv> = Once::new();
+            MACHINE_ENV.call_once(|| create_reg_env(false))
         }
     }
 

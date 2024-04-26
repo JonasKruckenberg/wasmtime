@@ -17,8 +17,8 @@ workspace = true
 cranelift-codegen = { workspace = true }
 target-lexicon = { workspace = true }
 log = { workspace = true }
-hashbrown = { workspace = true, optional = true }
 smallvec = { workspace = true }
+hashbrown = { workspace = true, optional = true }
 
 [dev-dependencies]
 similar = { workspace = true }

@@ -7,14 +7,9 @@
 //! The main function of this module is [`translate_module`](fn.translate_module.html).
 
 #![deny(missing_docs)]
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(not(feature = "std"))]
-#[macro_use]
-extern crate alloc as std;
-#[cfg(feature = "std")]
-#[macro_use]
-extern crate std;
+extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 use hashbrown::{

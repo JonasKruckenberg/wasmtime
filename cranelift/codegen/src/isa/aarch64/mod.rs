@@ -4,10 +4,10 @@ use crate::dominator_tree::DominatorTree;
 use crate::ir::{Function, Type};
 use crate::isa::aarch64::settings as aarch64_settings;
 #[cfg(feature = "unwind")]
-use crate::isa::unwind::systemv;
+use crate::{isa::unwind::systemv, machinst::{CompiledCode, Reg}};
 use crate::isa::{Builder as IsaBuilder, FunctionAlignment, TargetIsa};
 use crate::machinst::{
-    compile, CompiledCode, CompiledCodeStencil, MachInst, MachTextSectionBuilder, Reg, SigSet,
+    compile, CompiledCodeStencil, MachInst, MachTextSectionBuilder, SigSet,
     TextSectionBuilder, VCode,
 };
 use crate::result::CodegenResult;
@@ -15,7 +15,9 @@ use crate::settings as shared_settings;
 use alloc::{boxed::Box, vec::Vec};
 use core::fmt;
 use cranelift_control::ControlPlane;
-use target_lexicon::{Aarch64Architecture, Architecture, OperatingSystem, Triple};
+#[cfg(feature = "unwind")]
+use target_lexicon::OperatingSystem;
+use target_lexicon::{Aarch64Architecture, Architecture, Triple};
 
 // New backend:
 mod abi;

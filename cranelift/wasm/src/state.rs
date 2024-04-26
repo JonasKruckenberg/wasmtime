@@ -7,7 +7,7 @@ use crate::environ::{FuncEnvironment, GlobalVariable};
 use crate::{FuncIndex, GlobalIndex, Heap, MemoryIndex, TypeIndex, WasmResult};
 use crate::{HashMap, Occupied, Vacant};
 use cranelift_codegen::ir::{self, Block, Inst, Value};
-use std::vec::Vec;
+use alloc::vec::Vec;
 
 /// Information about the presence of an associated `else` for an `if`, or the
 /// lack thereof.

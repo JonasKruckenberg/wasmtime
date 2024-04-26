@@ -58,7 +58,7 @@ use cranelift_control::ControlPlane;
 use cranelift_entity::PrimaryMap;
 use regalloc2::{Allocation, VReg};
 use smallvec::{smallvec, SmallVec};
-use std::string::String;
+use alloc::string::String;
 
 #[cfg(feature = "enable-serde")]
 use serde_derive::{Deserialize, Serialize};
@@ -386,7 +386,7 @@ impl<T: CompilePhase> CompiledCodeBase<T> {
         params: Option<&crate::ir::function::FunctionParameters>,
         cs: &capstone::Capstone,
     ) -> Result<String, anyhow::Error> {
-        use std::fmt::Write;
+        use core::fmt::Write;
 
         let mut buf = String::new();
 

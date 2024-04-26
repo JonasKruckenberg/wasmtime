@@ -18,8 +18,8 @@ use cranelift_codegen::ir::{self, InstBuilder, Type};
 use cranelift_codegen::isa::TargetFrontendConfig;
 use cranelift_entity::PrimaryMap;
 use cranelift_frontend::FunctionBuilder;
-use std::boxed::Box;
-use std::string::ToString;
+use alloc::boxed::Box;
+use alloc::string::ToString;
 use wasmparser::{FuncValidator, FunctionBody, Operator, ValidatorResources, WasmFeatures};
 use wasmtime_types::{ConstExpr, ModuleInternedTypeIndex};
 

@@ -25,8 +25,8 @@ use crate::{
 };
 use crate::{isa, isle_common_prelude_methods};
 use regalloc2::PReg;
-use std::boxed::Box;
-use std::vec::Vec;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 type BoxCallInfo = Box<CallInfo>;
 type BoxCallIndInfo = Box<CallIndInfo>;

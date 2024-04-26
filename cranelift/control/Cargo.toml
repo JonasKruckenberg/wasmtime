@@ -10,11 +10,11 @@ keywords = ["fuzz", "test"]
 edition.workspace = true
 
 [dependencies]
-arbitrary = { workspace = true }
+arbitrary = { workspace = true, optional = true }
 
 [features]
-
+std = ["arbitrary"]
 # Turn on chaos mode.
 # Without this feature, a zero-sized dummy will be compiled
 # for the control plane.
-chaos = []
+chaos = ["std"]

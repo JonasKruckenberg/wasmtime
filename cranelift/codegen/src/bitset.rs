@@ -17,7 +17,7 @@ use core::ops::{Add, BitOr, Shl, Sub};
 )]
 pub struct BitSet<T>(pub T);
 
-impl<T> std::fmt::Debug for BitSet<T>
+impl<T> core::fmt::Debug for BitSet<T>
 where
     T: Into<u32>
         + From<u8>
@@ -29,9 +29,9 @@ where
         + Copy,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let mut s = f.debug_struct(std::any::type_name::<Self>());
+        let mut s = f.debug_struct(core::any::type_name::<Self>());
         for i in 0..Self::bits() {
-            use std::string::ToString;
+            use alloc::string::ToString;
             let i = u32::try_from(i).unwrap();
             s.field(&i.to_string(), &self.contains(i));
         }

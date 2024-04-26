@@ -1,10 +1,10 @@
-use thiserror::Error;
+use alloc::string::String;
 
 /// A WebAssembly translation error.
 ///
 /// When a WebAssembly function can't be translated, one of these error codes will be returned
 /// to describe the failure.
-#[derive(Error, Debug)]
+#[derive(onlyerror::Error, Debug)]
 pub enum WasmError {
     /// The input WebAssembly code is invalid.
     ///
@@ -42,7 +42,7 @@ pub enum WasmError {
 /// on the arguments to this macro.
 #[macro_export]
 macro_rules! wasm_unsupported {
-    ($($arg:tt)*) => { $crate::WasmError::Unsupported(format!($($arg)*)) }
+    ($($arg:tt)*) => { $crate::WasmError::Unsupported(::alloc::format!($($arg)*)) }
 }
 
 impl From<wasmparser::BinaryReaderError> for WasmError {
