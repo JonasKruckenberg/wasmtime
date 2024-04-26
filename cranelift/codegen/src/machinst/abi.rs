@@ -1453,9 +1453,8 @@ impl<M: ABIMachineSpec> Callee<M> {
     }
 
     /// Get the ABI-dependent MachineEnv for managing register allocation.
-    pub fn machine_env(&self, sigs: &SigSet) -> &MachineEnv {
+    pub fn machine_env(&self) -> &MachineEnv {
         &self.machine_env
-        // M::get_machine_env(&self.flags, self.call_conv(sigs))
     }
 
     /// The offsets of all sized stack slots (not spill slots) for debuginfo purposes.
