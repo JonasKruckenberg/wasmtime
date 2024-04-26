@@ -23,7 +23,7 @@ use crate::{
     binemit::CodeOffset,
     ir::{
         immediates::*, types::*, AtomicRmwOp, BlockCall, ExternalName, Inst, InstructionData,
-        MemFlags, TrapCode, Value, ValueList,
+        MemFlags, TrapCode, Value, ValueList, StackSlot
     },
     isa::aarch64::abi::AArch64CallSite,
     isa::aarch64::inst::args::{ShiftOp, ShiftOpShiftImm},

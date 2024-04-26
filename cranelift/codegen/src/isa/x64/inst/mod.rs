@@ -14,7 +14,7 @@ use alloc::boxed::Box;
 use regalloc2::{Allocation, PRegSet, VReg};
 use smallvec::{smallvec, SmallVec};
 use core::fmt::{self, Write};
-use core::string::{String, ToString};
+use alloc::string::{String, ToString};
 
 pub mod args;
 mod emit;

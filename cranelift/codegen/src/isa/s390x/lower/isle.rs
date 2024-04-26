@@ -19,7 +19,7 @@ use crate::{
     ir::{
         condcodes::*, immediates::*, types::*, ArgumentExtension, ArgumentPurpose, AtomicRmwOp,
         BlockCall, Endianness, Inst, InstructionData, KnownSymbol, LibCall, MemFlags, Opcode,
-        TrapCode, Value, ValueList,
+        TrapCode, Value, ValueList, StackSlot
     },
     isa::CallConv,
     machinst::abi::ABIMachineSpec,

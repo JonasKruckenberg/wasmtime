@@ -15,7 +15,7 @@ use crate::{
         condcodes::{FloatCC, IntCC},
         immediates::*,
         types::*,
-        BlockCall, Inst, InstructionData, MemFlags, Opcode, TrapCode, Value, ValueList,
+        BlockCall, Inst, InstructionData, MemFlags, Opcode, TrapCode, Value, ValueList, StackSlot
     },
     isa::x64::{
         abi::X64CallSite,
