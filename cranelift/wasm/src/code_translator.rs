@@ -3609,6 +3609,23 @@ fn pop3_with_bitcast(
     (bitcast_a, bitcast_b, bitcast_c)
 }
 
+struct ZipEq<A, IA: Iterator<Item = A>, B, IB: Iterator<Item = B>> {
+    a: IA,
+    b: IB
+}
+
+impl<A, IA: Iterator<Item = A>, B, IB: Iterator<Item = B>> Iterator for ZipEq<A, IA, B, IB> {
+    type Item = (A, B);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match (self.a.next(), self.b.next()) {
+            (Some(a), Some(b)) => Some((a, b)),
+            (None, None) => None,
+            _ => panic!("iterators are different in length")
+        }
+    }
+}
+
 fn bitcast_arguments<'a>(
     builder: &FunctionBuilder,
     arguments: &'a mut [Value],
@@ -3624,7 +3641,10 @@ fn bitcast_arguments<'a>(
 
     // The `param_predicate` is required to select exactly as many
     // elements of `params` as there are elements in `arguments`.
-    let pairs = filtered_param_types.zip(arguments.iter_mut());
+    let pairs = ZipEq {
+        a: filtered_param_types,
+        b: arguments.iter_mut()
+    };
 
     // The arguments which need to be bitcasted are those which have some vector type but the type
     // expected by the parameter is not the same vector type as that of the provided argument.
