@@ -179,14 +179,14 @@ use crate::machinst::{
 };
 use crate::trace;
 use crate::{timing, VCodeConstantData};
+use alloc::collections::BinaryHeap;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::cmp::Ordering;
+use core::mem;
 use cranelift_control::ControlPlane;
 use cranelift_entity::{entity_impl, PrimaryMap};
 use smallvec::SmallVec;
-use core::cmp::Ordering;
-use alloc::collections::BinaryHeap;
-use core::mem;
-use alloc::string::String;
-use alloc::vec::Vec;
 
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};

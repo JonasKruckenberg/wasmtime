@@ -48,13 +48,16 @@ pub use crate::isa::call_conv::CallConv;
 
 use crate::flowgraph;
 use crate::ir::{self, Function, Type};
-#[cfg(feature = "unwind")]
-use crate::{isa::unwind::{systemv::RegisterMappingError, UnwindInfoKind}, machinst::CompiledCode};
 use crate::machinst::{CompiledCodeStencil, TextSectionBuilder};
 use crate::settings;
 use crate::settings::Configurable;
 use crate::settings::SetResult;
 use crate::CodegenResult;
+#[cfg(feature = "unwind")]
+use crate::{
+    isa::unwind::{systemv::RegisterMappingError, UnwindInfoKind},
+    machinst::CompiledCode,
+};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::fmt;
 use core::fmt::{Debug, Formatter};

@@ -19,7 +19,7 @@ use crate::{
     ir::{
         condcodes::*, immediates::*, types::*, ArgumentExtension, ArgumentPurpose, AtomicRmwOp,
         BlockCall, Endianness, Inst, InstructionData, KnownSymbol, LibCall, MemFlags, Opcode,
-        TrapCode, Value, ValueList, StackSlot
+        StackSlot, TrapCode, Value, ValueList,
     },
     isa::CallConv,
     machinst::abi::ABIMachineSpec,
@@ -28,11 +28,11 @@ use crate::{
         VCodeConstant, VCodeConstantData,
     },
 };
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::cell::Cell;
 use regalloc2::PReg;
 use smallvec::smallvec;
-use alloc::boxed::Box;
-use core::cell::Cell;
-use alloc::vec::Vec;
 
 /// Information describing a library call to be emitted.
 pub struct LibCallInfo {

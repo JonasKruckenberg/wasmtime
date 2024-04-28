@@ -13,10 +13,10 @@ use crate::{
     DataIndex, ElemIndex, FuncIndex, GlobalIndex, Memory, MemoryIndex, TableIndex, Tag, TagIndex,
     TypeIndex, WasmError, WasmResult,
 };
-use cranelift_entity::packed_option::ReservedValue;
-use cranelift_entity::EntityRef;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use cranelift_entity::packed_option::ReservedValue;
+use cranelift_entity::EntityRef;
 use wasmparser::{
     Data, DataKind, DataSectionReader, Element, ElementItems, ElementKind, ElementSectionReader,
     Export, ExportSectionReader, ExternalKind, FunctionSectionReader, GlobalSectionReader,
@@ -229,7 +229,10 @@ fn read_elems(items: &ElementItems) -> WasmResult<Box<[FuncIndex]>> {
                     Operator::RefNull { .. } => FuncIndex::reserved_value(),
                     Operator::RefFunc { function_index } => FuncIndex::from_u32(function_index),
                     s => {
-                        return Err(wasm_unsupported!("unsupported init expr in element section: {:?}",s));
+                        return Err(wasm_unsupported!(
+                            "unsupported init expr in element section: {:?}",
+                            s
+                        ));
                     }
                 };
                 elems.push(idx);

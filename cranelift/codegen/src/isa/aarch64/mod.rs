@@ -3,15 +3,18 @@
 use crate::dominator_tree::DominatorTree;
 use crate::ir::{Function, Type};
 use crate::isa::aarch64::settings as aarch64_settings;
-#[cfg(feature = "unwind")]
-use crate::{isa::unwind::systemv, machinst::{CompiledCode, Reg}};
 use crate::isa::{Builder as IsaBuilder, FunctionAlignment, TargetIsa};
 use crate::machinst::{
-    compile, CompiledCodeStencil, MachInst, MachTextSectionBuilder, SigSet,
-    TextSectionBuilder, VCode,
+    compile, CompiledCodeStencil, MachInst, MachTextSectionBuilder, SigSet, TextSectionBuilder,
+    VCode,
 };
 use crate::result::CodegenResult;
 use crate::settings as shared_settings;
+#[cfg(feature = "unwind")]
+use crate::{
+    isa::unwind::systemv,
+    machinst::{CompiledCode, Reg},
+};
 use alloc::{boxed::Box, vec::Vec};
 use core::fmt;
 use cranelift_control::ControlPlane;

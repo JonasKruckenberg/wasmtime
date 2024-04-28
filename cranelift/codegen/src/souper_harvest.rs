@@ -24,12 +24,12 @@
 //! is complete we return the translation of `x` as the root of left-hand side
 //! candidate.
 
-use crate::ir;
-use souper_ir::ast;
 use crate::hash_map::{HashMap, HashSet};
+use crate::ir;
 use alloc::string::String;
-use std::sync::mpsc;
 use alloc::vec::Vec;
+use souper_ir::ast;
+use std::sync::mpsc;
 
 /// Harvest Souper left-hand side candidates from the given function.
 ///

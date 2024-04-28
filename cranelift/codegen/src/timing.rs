@@ -2,14 +2,14 @@
 //!
 //! This modules provides facilities for timing the execution of individual compilation passes.
 
-use core::fmt;
-use core::any::Any;
 use alloc::boxed::Box;
+use core::any::Any;
+use core::fmt;
 
-#[cfg(feature = "timing")]
-pub use enabled::*;
 #[cfg(not(feature = "timing"))]
 pub(crate) use disabled::*;
+#[cfg(feature = "timing")]
+pub use enabled::*;
 
 // Each pass that can be timed is predefined with the `define_passes!` macro. Each pass has a
 // snake_case name and a plain text description used when printing out the timing report.
@@ -125,9 +125,9 @@ pub struct DefaultProfiler;
 
 #[cfg(feature = "timing")]
 mod enabled {
-    use super::{DefaultProfiler, Pass, Profiler, PASS_TIME, NUM_PASSES, DESCRIPTIONS};
-    use core::any::Any;
+    use super::{DefaultProfiler, Pass, Profiler, DESCRIPTIONS, NUM_PASSES, PASS_TIME};
     use alloc::boxed::Box;
+    use core::any::Any;
     use core::cell::Cell;
     use core::fmt;
     use std::mem;
@@ -277,8 +277,8 @@ mod enabled {
 #[cfg(not(feature = "timing"))]
 mod disabled {
     use super::{DefaultProfiler, Pass, Profiler};
-    use core::any::Any;
     use alloc::boxed::Box;
+    use core::any::Any;
 
     pub(crate) fn start_pass(_pass: Pass) {}
 

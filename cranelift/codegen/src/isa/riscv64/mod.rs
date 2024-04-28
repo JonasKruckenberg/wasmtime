@@ -5,13 +5,13 @@ use crate::ir::{Function, Type};
 use crate::isa::riscv64::settings as riscv_settings;
 use crate::isa::{Builder as IsaBuilder, FunctionAlignment, OwnedTargetIsa, TargetIsa};
 #[cfg(feature = "unwind")]
+use crate::machinst::CompiledCode;
+#[cfg(feature = "unwind")]
 use crate::machinst::Reg;
 use crate::machinst::{
-    compile, CompiledCodeStencil, MachInst, MachTextSectionBuilder, SigSet,
-    TextSectionBuilder, VCode,
+    compile, CompiledCodeStencil, MachInst, MachTextSectionBuilder, SigSet, TextSectionBuilder,
+    VCode,
 };
-#[cfg(feature = "unwind")]
-use crate::machinst::CompiledCode;
 use crate::result::CodegenResult;
 use crate::settings::{self as shared_settings, Flags};
 use crate::{ir, CodegenError};

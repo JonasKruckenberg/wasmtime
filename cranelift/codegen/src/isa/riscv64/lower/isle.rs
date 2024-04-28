@@ -24,9 +24,9 @@ use crate::{
     machinst::{ArgPair, InstOutput},
 };
 use crate::{isa, isle_common_prelude_methods};
-use regalloc2::PReg;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use regalloc2::PReg;
 
 type BoxCallInfo = Box<CallInfo>;
 type BoxCallIndInfo = Box<CallIndInfo>;

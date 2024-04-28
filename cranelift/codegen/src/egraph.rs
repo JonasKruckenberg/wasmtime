@@ -19,11 +19,11 @@ use crate::settings::Flags;
 use crate::trace;
 use crate::unionfind::UnionFind;
 use core::cmp::Ordering;
+use core::hash::Hasher;
 use cranelift_control::ControlPlane;
 use cranelift_entity::packed_option::ReservedValue;
 use cranelift_entity::SecondaryMap;
 use smallvec::SmallVec;
-use core::hash::Hasher;
 
 mod cost;
 mod elaborate;

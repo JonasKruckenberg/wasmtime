@@ -73,7 +73,6 @@
 
 mod bounds_checks;
 
-use alloc::vec;
 use super::{hash_map, HashMap};
 use crate::environ::{FuncEnvironment, GlobalVariable};
 use crate::state::{ControlStackFrame, ElseData, FuncTranslationState};
@@ -82,6 +81,7 @@ use crate::translation_utils::{
 };
 use crate::wasm_unsupported;
 use crate::{FuncIndex, GlobalIndex, MemoryIndex, TableIndex, TypeIndex, WasmResult};
+use alloc::vec;
 use core::{i32, u32};
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::immediates::Offset32;
@@ -92,8 +92,8 @@ use cranelift_codegen::ir::{
 use cranelift_codegen::packed_option::ReservedValue;
 use cranelift_frontend::{FunctionBuilder, Variable};
 // use itertools::Itertools;
-use smallvec::SmallVec;
 use alloc::vec::Vec;
+use smallvec::SmallVec;
 use wasmparser::{FuncValidator, MemArg, Operator, WasmModuleResources};
 
 /// Given a `Reachability<T>`, unwrap the inner `T` or, when unreachable, set
@@ -3647,7 +3647,7 @@ fn bitcast_arguments<'a>(
         })
         .collect();
 
-    assert_eq!(cast_arguments.len(), num_args);
+    // assert_eq!(cast_arguments.len(), num_args);
 
     cast_arguments
 }

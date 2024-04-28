@@ -9,9 +9,9 @@ use alloc::boxed::Box;
 use smallvec::SmallVec;
 pub use wasmparser;
 
+use core::{fmt, ops::Range};
 use cranelift_entity::entity_impl;
 use serde_derive::{Deserialize, Serialize};
-use core::{fmt, ops::Range};
 
 mod error;
 pub use error::*;

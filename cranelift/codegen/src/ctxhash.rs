@@ -4,8 +4,8 @@
 //! node-internal data references some other storage (e.g., offsets into
 //! an array or pool of shared data).
 
-use hashbrown::raw::RawTable;
 use core::hash::{Hash, Hasher};
+use hashbrown::raw::RawTable;
 
 /// Trait that allows for equality comparison given some external
 /// context.

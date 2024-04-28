@@ -8,10 +8,10 @@ use crate::ir::MemFlags;
 use crate::isa::x64::inst::regs::pretty_print_reg;
 use crate::isa::x64::inst::Inst;
 use crate::machinst::*;
+use alloc::string::String;
+use core::fmt;
 use regalloc2::VReg;
 use smallvec::{smallvec, SmallVec};
-use core::fmt;
-use alloc::string::String;
 
 pub use crate::isa::x64::lower::isle::generated_code::DivSignedness;
 

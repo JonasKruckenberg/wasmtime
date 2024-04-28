@@ -15,7 +15,7 @@ use crate::{
         condcodes::{FloatCC, IntCC},
         immediates::*,
         types::*,
-        BlockCall, Inst, InstructionData, MemFlags, Opcode, TrapCode, Value, ValueList, StackSlot
+        BlockCall, Inst, InstructionData, MemFlags, Opcode, StackSlot, TrapCode, Value, ValueList,
     },
     isa::x64::{
         abi::X64CallSite,
@@ -26,9 +26,9 @@ use crate::{
         VCodeConstant, VCodeConstantData,
     },
 };
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use regalloc2::PReg;
-use alloc::boxed::Box;
 
 /// Type representing out-of-line data for calls. This type optional because the
 /// call instruction is also used by Winch to emit calls, but the

@@ -31,10 +31,10 @@ use regalloc2::{
     PRegSet, RegClass,
 };
 
-use cranelift_entity::{entity_impl, Keys};
 use crate::hash_map::Entry;
 use crate::hash_map::HashMap;
 use core::fmt;
+use cranelift_entity::{entity_impl, Keys};
 
 /// Index referring to an instruction in VCode.
 pub type InsnIndex = regalloc2::Inst;
@@ -1156,10 +1156,10 @@ impl<I: VCodeInst> VCode<I> {
                 let sp_offset = self.abi.get_spillslot_offset(slot);
                 let sp_to_caller_sp_offset = self.abi.nominal_sp_to_caller_sp_offset();
                 #[cfg(feature = "unwind")]
-                    let caller_sp_to_cfa_offset =
+                let caller_sp_to_cfa_offset =
                     crate::isa::unwind::systemv::caller_sp_to_cfa_offset();
                 #[cfg(not(feature = "unwind"))]
-                    let caller_sp_to_cfa_offset = 0; // TODO is this right?
+                let caller_sp_to_cfa_offset = 0; // TODO is this right?
                 let cfa_to_sp_offset = -((sp_to_caller_sp_offset + caller_sp_to_cfa_offset) as i64);
                 LabelValueLoc::CFAOffset(cfa_to_sp_offset + sp_offset)
             };

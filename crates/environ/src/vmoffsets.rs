@@ -678,7 +678,7 @@ impl<P: PtrSize> VMOffsets<P> {
         self.type_ids
     }
 
-    /// The offset of the `tables` array.
+    /// The offset of the `functions` array.
     #[inline]
     pub fn vmctx_imported_functions_begin(&self) -> u32 {
         self.imported_functions

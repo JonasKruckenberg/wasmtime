@@ -12,12 +12,12 @@ use crate::{settings, CodegenError, CodegenResult};
 
 pub use crate::ir::condcodes::FloatCC;
 
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::fmt::Write;
 use regalloc2::{PRegSet, RegClass, VReg};
 use smallvec::{smallvec, SmallVec};
-use alloc::boxed::Box;
-use core::fmt::Write;
-use alloc::string::{String, ToString};
 
 pub mod regs;
 pub use self::regs::*;

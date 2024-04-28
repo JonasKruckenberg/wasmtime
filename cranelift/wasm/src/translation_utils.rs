@@ -11,8 +11,8 @@ pub fn blocktype_params_results<T>(
     validator: &FuncValidator<T>,
     ty: wasmparser::BlockType,
 ) -> (BlockTypeParamsOrReturns, BlockTypeParamsOrReturns)
-    where
-        T: WasmModuleResources,
+where
+    T: WasmModuleResources,
 {
     use wasmparser::BlockType;
 

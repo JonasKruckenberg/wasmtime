@@ -1,17 +1,17 @@
 use crate::ir::{BlockCall, Value, ValueList};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use smallvec::SmallVec;
 use core::cell::Cell;
+use smallvec::SmallVec;
 
 pub use super::MachLabel;
 use super::RetPair;
+#[cfg(feature = "std")]
+pub use crate::ir::StackSlot;
 pub use crate::ir::{
     condcodes::CondCode, dynamic_to_fixed, Constant, DynamicStackSlot, ExternalName, FuncRef,
     GlobalValue, Immediate, SigRef,
 };
-#[cfg(feature = "std")]
-pub use crate::ir::StackSlot;
 pub use crate::isa::{unwind::UnwindInst, TargetIsa};
 pub use crate::machinst::{
     ABIArg, ABIArgSlot, InputSourceInst, Lower, LowerBackend, RealReg, Reg, RelocDistance, Sig,

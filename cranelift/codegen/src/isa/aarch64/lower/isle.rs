@@ -23,16 +23,16 @@ use crate::{
     binemit::CodeOffset,
     ir::{
         immediates::*, types::*, AtomicRmwOp, BlockCall, ExternalName, Inst, InstructionData,
-        MemFlags, TrapCode, Value, ValueList, StackSlot
+        MemFlags, StackSlot, TrapCode, Value, ValueList,
     },
     isa::aarch64::abi::AArch64CallSite,
     isa::aarch64::inst::args::{ShiftOp, ShiftOpShiftImm},
     isa::aarch64::inst::SImm7Scaled,
     machinst::{abi::ArgPair, ty_bits, InstOutput, MachInst, VCodeConstant, VCodeConstantData},
 };
-use regalloc2::PReg;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use regalloc2::PReg;
 
 type BoxCallInfo = Box<CallInfo>;
 type BoxCallIndInfo = Box<CallIndInfo>;
