@@ -5,6 +5,7 @@ use crate::ctxhash::{CtxEq, CtxHash, CtxHashMap};
 use crate::cursor::{Cursor, CursorPosition, FuncCursor};
 use crate::dominator_tree::{DominatorTree, DominatorTreePreorder};
 use crate::egraph::elaborate::Elaborator;
+use crate::fx::FxHashSet;
 use crate::inst_predicates::{is_mergeable_for_egraph, is_pure_for_egraph};
 use crate::ir::pcc::Fact;
 use crate::ir::{
@@ -18,12 +19,11 @@ use crate::settings::Flags;
 use crate::trace;
 use crate::unionfind::UnionFind;
 use core::cmp::Ordering;
+use core::hash::Hasher;
 use cranelift_control::ControlPlane;
 use cranelift_entity::packed_option::ReservedValue;
 use cranelift_entity::SecondaryMap;
-use rustc_hash::FxHashSet;
 use smallvec::SmallVec;
-use std::hash::Hasher;
 
 mod cost;
 mod elaborate;
@@ -277,7 +277,7 @@ where
         // A pure node always has exactly one result.
         let orig_value = self.func.dfg.first_result(inst);
 
-        let mut optimized_values = std::mem::take(&mut self.optimized_values);
+        let mut optimized_values = core::mem::take(&mut self.optimized_values);
 
         // Limit rewrite depth. When we apply optimization rules, they
         // may create new nodes (values) and those are, recursively,
@@ -805,7 +805,7 @@ impl<'a> CtxEq<(Type, InstructionData), (Type, InstructionData)> for GVNContext<
 
 impl<'a> CtxHash<(Type, InstructionData)> for GVNContext<'a> {
     fn ctx_hash<H: Hasher>(&self, state: &mut H, (ty, inst): &(Type, InstructionData)) {
-        std::hash::Hash::hash(&ty, state);
+        core::hash::Hash::hash(&ty, state);
         inst.hash(state, self.value_lists, |value| self.union_find.find(value));
     }
 }

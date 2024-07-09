@@ -12,14 +12,14 @@ use crate::{
     Table, TableIndex, Tag, TagIndex, TypeConvert, TypeIndex, WasmError, WasmFuncType,
     WasmHeapType, WasmResult,
 };
+use alloc::boxed::Box;
+use alloc::string::ToString;
 use cranelift_codegen::cursor::FuncCursor;
 use cranelift_codegen::ir::immediates::Offset32;
 use cranelift_codegen::ir::{self, InstBuilder, Type};
 use cranelift_codegen::isa::TargetFrontendConfig;
 use cranelift_entity::PrimaryMap;
 use cranelift_frontend::FunctionBuilder;
-use std::boxed::Box;
-use std::string::ToString;
 use wasmparser::{FuncValidator, FunctionBody, Operator, ValidatorResources, WasmFeatures};
 use wasmtime_types::{ConstExpr, ModuleInternedTypeIndex};
 

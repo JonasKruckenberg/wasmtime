@@ -23,7 +23,7 @@
 //! # #[macro_use] extern crate target_lexicon;
 //! use cranelift_codegen::isa;
 //! use cranelift_codegen::settings::{self, Configurable};
-//! use std::str::FromStr;
+//! use core::str::FromStr;
 //! use target_lexicon::Triple;
 //!
 //! let shared_builder = settings::builder();
@@ -50,7 +50,9 @@ use crate::flowgraph;
 use crate::ir::{self, Function, Type};
 #[cfg(feature = "unwind")]
 use crate::isa::unwind::{systemv::RegisterMappingError, UnwindInfoKind};
-use crate::machinst::{CompiledCode, CompiledCodeStencil, TextSectionBuilder};
+#[cfg(feature = "std")]
+use crate::machinst::CompiledCode;
+use crate::machinst::{CompiledCodeStencil, TextSectionBuilder};
 use crate::settings;
 use crate::settings::Configurable;
 use crate::settings::SetResult;
@@ -131,7 +133,7 @@ pub enum LookupError {
 
 // This is manually implementing Error and Display instead of using thiserror to reduce the amount
 // of dependencies used by Cranelift.
-impl std::error::Error for LookupError {}
+impl core::error::Error for LookupError {}
 
 impl fmt::Display for LookupError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {

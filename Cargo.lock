@@ -600,10 +600,11 @@ dependencies = [
  "env_logger",
  "gimli",
  "hashbrown 0.14.3",
+ "libm",
  "log",
  "postcard",
  "regalloc2",
- "rustc-hash",
+ "rustc-hash 2.0.0",
  "serde",
  "serde_derive",
  "sha2",
@@ -818,7 +819,7 @@ dependencies = [
  "pretty_env_logger",
  "rayon",
  "regalloc2",
- "rustc-hash",
+ "rustc-hash 2.0.0",
  "serde",
  "similar",
  "target-lexicon",
@@ -835,7 +836,6 @@ dependencies = [
  "cranelift-entity",
  "cranelift-frontend",
  "hashbrown 0.14.3",
- "itertools 0.12.1",
  "log",
  "serde",
  "serde_derive",
@@ -867,7 +867,7 @@ dependencies = [
  "clap",
  "criterion-plot",
  "is-terminal",
- "itertools 0.10.5",
+ "itertools",
  "num-traits",
  "once_cell",
  "oorandom",
@@ -887,7 +887,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
- "itertools 0.10.5",
+ "itertools",
 ]
 
 [[package]]
@@ -1643,15 +1643,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "itoa"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1736,9 +1727,9 @@ dependencies = [
 
 [[package]]
 name = "libm"
-version = "0.2.7"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7012b1bbb0719e1097c47611d3898568c546d597c2e74d66f6087edd5233ff4"
+checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
 
 [[package]]
 name = "libtest-mimic"
@@ -2259,7 +2250,7 @@ checksum = "ad156d539c879b7a24a363a2016d77961786e71f48f2e2fc8302a92abd2429a6"
 dependencies = [
  "hashbrown 0.13.2",
  "log",
- "rustc-hash",
+ "rustc-hash 1.1.0",
  "serde",
  "slice-group-by",
  "smallvec",
@@ -2346,6 +2337,12 @@ name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+
+[[package]]
+name = "rustc-hash"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "583034fd73374156e66797ed8e5b0d5690409c9226b22d87cb7f19821c05d152"
 
 [[package]]
 name = "rustix"

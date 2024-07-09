@@ -21,7 +21,6 @@ cranelift-entity = { workspace = true }
 cranelift-frontend = { workspace = true }
 wasmtime-types = { workspace = true }
 hashbrown = { workspace = true, optional = true }
-itertools = "0.12.0"
 log = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_derive = { workspace = true, optional = true }
@@ -33,6 +32,11 @@ target-lexicon = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["cranelift-codegen/std", "cranelift-frontend/std"]
+std = [
+    "cranelift-codegen/std",
+    "cranelift-frontend/std",
+    "wasmtime-types/std",
+    "wasmparser/std",
+]
 core = ["hashbrown", "cranelift-codegen/core", "cranelift-frontend/core"]
 enable-serde = ["serde", "serde_derive"]

@@ -81,7 +81,7 @@ use crate::translation_utils::{
 };
 use crate::wasm_unsupported;
 use crate::{FuncIndex, GlobalIndex, MemoryIndex, TableIndex, TypeIndex, WasmResult};
-use core::{i32, u32};
+use alloc::vec::Vec;
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::immediates::Offset32;
 use cranelift_codegen::ir::types::*;
@@ -90,9 +90,7 @@ use cranelift_codegen::ir::{
 };
 use cranelift_codegen::packed_option::ReservedValue;
 use cranelift_frontend::{FunctionBuilder, Variable};
-use itertools::Itertools;
 use smallvec::SmallVec;
-use std::vec::Vec;
 use wasmparser::{FuncValidator, MemArg, Operator, WasmModuleResources};
 
 /// Given a `Reachability<T>`, unwrap the inner `T` or, when unreachable, set
@@ -262,12 +260,12 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
          *  possible `Block`'s arguments values.
          ***********************************************************************************/
         Operator::Block { blockty } => {
-            let (params, results) = blocktype_params_results(validator, *blockty)?;
+            let (params, results) = blocktype_params_results(validator, *blockty);
             let next = block_with_params(builder, results.clone(), environ)?;
             state.push_block(next, params.len(), results.len());
         }
         Operator::Loop { blockty } => {
-            let (params, results) = blocktype_params_results(validator, *blockty)?;
+            let (params, results) = blocktype_params_results(validator, *blockty);
             let loop_body = block_with_params(builder, params.clone(), environ)?;
             let next = block_with_params(builder, results.clone(), environ)?;
             canonicalise_then_jump(builder, loop_body, state.peekn(params.len()));
@@ -287,7 +285,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let val = state.pop1();
 
             let next_block = builder.create_block();
-            let (params, results) = blocktype_params_results(validator, *blockty)?;
+            let (params, results) = blocktype_params_results(validator, *blockty);
             let (destination, else_data) = if params.clone().eq(results.clone()) {
                 // It is possible there is no `else` block, so we will only
                 // allocate a block for it if/when we find the `else`. For now,
@@ -374,7 +372,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                                 placeholder,
                             } => {
                                 let (params, _results) =
-                                    blocktype_params_results(validator, blocktype)?;
+                                    blocktype_params_results(validator, blocktype);
                                 debug_assert_eq!(params.len(), num_return_values);
                                 let else_block =
                                     block_with_params(builder, params.clone(), environ)?;
@@ -2610,7 +2608,7 @@ fn translate_unreachable_operator<FE: FuncEnvironment + ?Sized>(
                                 placeholder,
                             } => {
                                 let (params, _results) =
-                                    blocktype_params_results(validator, blocktype)?;
+                                    blocktype_params_results(validator, blocktype);
                                 let else_block = block_with_params(builder, params, environ)?;
                                 let frame = state.control_stack.last().unwrap();
                                 frame.truncate_value_stack_to_else_params(&mut state.stack);
@@ -3616,6 +3614,23 @@ fn pop3_with_bitcast(
     (bitcast_a, bitcast_b, bitcast_c)
 }
 
+struct ZipEq<A, IA: Iterator<Item = A>, B, IB: Iterator<Item = B>> {
+    a: IA,
+    b: IB,
+}
+
+impl<A, IA: Iterator<Item = A>, B, IB: Iterator<Item = B>> Iterator for ZipEq<A, IA, B, IB> {
+    type Item = (A, B);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match (self.a.next(), self.b.next()) {
+            (Some(a), Some(b)) => Some((a, b)),
+            (None, None) => None,
+            _ => panic!("iterators are different in length"),
+        }
+    }
+}
+
 fn bitcast_arguments<'a>(
     builder: &FunctionBuilder,
     arguments: &'a mut [Value],
@@ -3628,10 +3643,12 @@ fn bitcast_arguments<'a>(
         .filter(|(i, _)| param_predicate(*i))
         .map(|(_, param)| param.value_type);
 
-    // zip_eq, from the itertools::Itertools trait, is like Iterator::zip but panics if one
-    // iterator ends before the other. The `param_predicate` is required to select exactly as many
+    // The `param_predicate` is required to select exactly as many
     // elements of `params` as there are elements in `arguments`.
-    let pairs = filtered_param_types.zip_eq(arguments.iter_mut());
+    let pairs = ZipEq {
+        a: filtered_param_types,
+        b: arguments.iter_mut(),
+    };
 
     // The arguments which need to be bitcasted are those which have some vector type but the type
     // expected by the parameter is not the same vector type as that of the provided argument.

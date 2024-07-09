@@ -9,11 +9,11 @@ use crate::{settings, CodegenError, CodegenResult};
 
 use crate::machinst::{PrettyPrint, Reg, RegClass, Writable};
 
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::fmt::Write;
 use regalloc2::PRegSet;
 use smallvec::{smallvec, SmallVec};
-use std::fmt::Write;
-use std::string::{String, ToString};
 
 pub(crate) mod regs;
 pub(crate) use self::regs::*;
@@ -154,7 +154,7 @@ fn count_zero_half_words(mut value: u64, num_half_words: u8) -> usize {
 fn inst_size_test() {
     // This test will help with unintentionally growing the size
     // of the Inst enum.
-    assert_eq!(32, std::mem::size_of::<Inst>());
+    assert_eq!(32, core::mem::size_of::<Inst>());
 }
 
 impl Inst {

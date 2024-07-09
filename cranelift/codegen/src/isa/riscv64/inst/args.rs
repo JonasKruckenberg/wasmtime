@@ -8,7 +8,7 @@ use crate::isa::riscv64::lower::isle::generated_code::{
 };
 use crate::machinst::isle::WritableReg;
 
-use std::fmt::Result;
+use core::fmt::Result;
 
 /// A macro for defining a newtype of `Reg` that enforces some invariant about
 /// the wrapped `Reg` (such as that it is of a particular register class).
@@ -57,7 +57,7 @@ macro_rules! newtype_of_reg {
         // NB: We cannot implement `DerefMut` because that would let people do
         // nasty stuff like `*my_xreg.deref_mut() = some_freg`, breaking the
         // invariants that `XReg` provides.
-        impl std::ops::Deref for $newtype_reg {
+        impl core::ops::Deref for $newtype_reg {
             type Target = Reg;
 
             fn deref(&self) -> &Reg {
@@ -342,10 +342,24 @@ impl FliConstant {
             (F32, f) if f == (f32::MIN_POSITIVE as f64) => Self::new(1),
             (F64, f) if f == f64::MIN_POSITIVE => Self::new(1),
 
+            #[cfg(feature = "std")]
             (_, f) if f == 2.0f64.powi(-16) => Self::new(2),
+            #[cfg(feature = "std")]
             (_, f) if f == 2.0f64.powi(-15) => Self::new(3),
+            #[cfg(feature = "std")]
             (_, f) if f == 2.0f64.powi(-8) => Self::new(4),
+            #[cfg(feature = "std")]
             (_, f) if f == 2.0f64.powi(-7) => Self::new(5),
+
+            #[cfg(feature = "core")]
+            (_, f) if f == libm::pow(2.0, -16.0) => Self::new(2),
+            #[cfg(feature = "core")]
+            (_, f) if f == libm::pow(2.0, -15.0) => Self::new(3),
+            #[cfg(feature = "core")]
+            (_, f) if f == libm::pow(2.0, -8.0) => Self::new(4),
+            #[cfg(feature = "core")]
+            (_, f) if f == libm::pow(2.0, -7.0) => Self::new(5),
+
             (_, f) if f == 0.0625 => Self::new(6),
             (_, f) if f == 0.125 => Self::new(7),
             (_, f) if f == 0.25 => Self::new(8),

@@ -23,7 +23,7 @@ cpp_demangle = { version = "0.4.3", optional = true }
 cranelift-entity = { workspace = true }
 cranelift-bitset = { workspace = true, features = ['enable-serde'] }
 wasmtime-types = { workspace = true }
-wasmparser = { workspace = true, features = ['validate', 'serde'] }
+wasmparser = { workspace = true, features = ['std', 'validate', 'serde'] }
 indexmap = { workspace = true, features = ["serde"] }
 serde = { workspace = true }
 serde_derive = { workspace = true }
@@ -51,18 +51,18 @@ component-model = ["dep:wasmtime-component-util", "dep:semver"]
 demangle = ['std', 'dep:rustc-demangle', 'dep:cpp_demangle']
 gc = []
 compile = [
-  'gimli/write',
-  'object/write_core',
-  'std',
-  "dep:wasm-encoder",
-  "dep:wasmprinter",
+    'gimli/write',
+    'object/write_core',
+    'std',
+    "dep:wasm-encoder",
+    "dep:wasmprinter",
 ]
 threads = ['std']
 wmemcheck = ['std']
 std = [
-  'wasmtime-types/std',
-  'anyhow/std',
-  'object/std',
-  'wasmparser/std',
-  'indexmap/std',
+    'wasmtime-types/std',
+    'anyhow/std',
+    'object/std',
+    'wasmparser/std',
+    'indexmap/std',
 ]

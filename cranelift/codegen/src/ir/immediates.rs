@@ -896,18 +896,39 @@ impl Ieee32 {
     }
 
     /// Returns the square root of self.
+    #[cfg(feature = "std")]
     pub fn sqrt(self) -> Self {
         Self::with_float(self.as_f32().sqrt())
     }
 
     /// Computes the absolute value of self.
+    #[cfg(feature = "std")]
     pub fn abs(self) -> Self {
         Self::with_float(self.as_f32().abs())
     }
 
     /// Returns a number composed of the magnitude of self and the sign of sign.
+    #[cfg(feature = "std")]
     pub fn copysign(self, sign: Self) -> Self {
         Self::with_float(self.as_f32().copysign(sign.as_f32()))
+    }
+
+    /// Returns the square root of self.
+    #[cfg(feature = "core")]
+    pub fn sqrt(self) -> Self {
+        Self::with_float(libm::sqrtf(self.as_f32()))
+    }
+
+    /// Computes the absolute value of self.
+    #[cfg(feature = "core")]
+    pub fn abs(self) -> Self {
+        Self::with_float(libm::fabsf(self.as_f32()))
+    }
+
+    /// Returns a number composed of the magnitude of self and the sign of sign.
+    #[cfg(feature = "core")]
+    pub fn copysign(self, sign: Self) -> Self {
+        Self::with_float(libm::copysignf(self.as_f32(), sign.as_f32()))
     }
 
     /// Returns true if self has a negative sign, including -0.0, NaNs with negative sign bit and negative infinity.
@@ -921,18 +942,39 @@ impl Ieee32 {
     }
 
     /// Returns the smallest integer greater than or equal to `self`.
+    #[cfg(feature = "std")]
     pub fn ceil(self) -> Self {
         Self::with_float(self.as_f32().ceil())
     }
 
     /// Returns the largest integer less than or equal to `self`.
+    #[cfg(feature = "std")]
     pub fn floor(self) -> Self {
         Self::with_float(self.as_f32().floor())
     }
 
     /// Returns the integer part of `self`. This means that non-integer numbers are always truncated towards zero.
+    #[cfg(feature = "std")]
     pub fn trunc(self) -> Self {
         Self::with_float(self.as_f32().trunc())
+    }
+
+    /// Returns the smallest integer greater than or equal to `self`.
+    #[cfg(feature = "core")]
+    pub fn ceil(self) -> Self {
+        Self::with_float(libm::ceilf(self.as_f32()))
+    }
+
+    /// Returns the largest integer less than or equal to `self`.
+    #[cfg(feature = "core")]
+    pub fn floor(self) -> Self {
+        Self::with_float(libm::floorf(self.as_f32()))
+    }
+
+    /// Returns the integer part of `self`. This means that non-integer numbers are always truncated towards zero.
+    #[cfg(feature = "core")]
+    pub fn trunc(self) -> Self {
+        Self::with_float(libm::truncf(self.as_f32()))
     }
 
     /// Returns the nearest integer to `self`. Rounds half-way cases to the number
@@ -947,7 +989,12 @@ impl Ieee32 {
         if e >= 0x7f_u32 + 23 {
             self
         } else {
-            Self::with_float((f.abs() + toint_32 - toint_32).copysign(f))
+            #[cfg(feature = "std")]
+            let f = { (f.abs() + toint_32 - toint_32).copysign(f) };
+            #[cfg(feature = "core")]
+            let f = { libm::copysignf(libm::fabsf(f) + toint_32 - toint_32, f) };
+
+            Self::with_float(f)
         }
     }
 }
@@ -1114,18 +1161,39 @@ impl Ieee64 {
     }
 
     /// Returns the square root of self.
+    #[cfg(feature = "std")]
     pub fn sqrt(self) -> Self {
         Self::with_float(self.as_f64().sqrt())
     }
 
     /// Computes the absolute value of self.
+    #[cfg(feature = "std")]
     pub fn abs(self) -> Self {
         Self::with_float(self.as_f64().abs())
     }
 
     /// Returns a number composed of the magnitude of self and the sign of sign.
+    #[cfg(feature = "std")]
     pub fn copysign(self, sign: Self) -> Self {
         Self::with_float(self.as_f64().copysign(sign.as_f64()))
+    }
+
+    /// Returns the square root of self.
+    #[cfg(feature = "core")]
+    pub fn sqrt(self) -> Self {
+        Self::with_float(libm::sqrt(self.as_f64()))
+    }
+
+    /// Computes the absolute value of self.
+    #[cfg(feature = "core")]
+    pub fn abs(self) -> Self {
+        Self::with_float(libm::fabs(self.as_f64()))
+    }
+
+    /// Returns a number composed of the magnitude of self and the sign of sign.
+    #[cfg(feature = "core")]
+    pub fn copysign(self, sign: Self) -> Self {
+        Self::with_float(libm::copysign(self.as_f64(), sign.as_f64()))
     }
 
     /// Returns true if self has a negative sign, including -0.0, NaNs with negative sign bit and negative infinity.
@@ -1139,18 +1207,39 @@ impl Ieee64 {
     }
 
     /// Returns the smallest integer greater than or equal to `self`.
+    #[cfg(feature = "std")]
     pub fn ceil(self) -> Self {
         Self::with_float(self.as_f64().ceil())
     }
 
     /// Returns the largest integer less than or equal to `self`.
+    #[cfg(feature = "std")]
     pub fn floor(self) -> Self {
         Self::with_float(self.as_f64().floor())
     }
 
     /// Returns the integer part of `self`. This means that non-integer numbers are always truncated towards zero.
+    #[cfg(feature = "std")]
     pub fn trunc(self) -> Self {
         Self::with_float(self.as_f64().trunc())
+    }
+
+    /// Returns the smallest integer greater than or equal to `self`.
+    #[cfg(feature = "core")]
+    pub fn ceil(self) -> Self {
+        Self::with_float(libm::ceil(self.as_f64()))
+    }
+
+    /// Returns the largest integer less than or equal to `self`.
+    #[cfg(feature = "core")]
+    pub fn floor(self) -> Self {
+        Self::with_float(libm::floor(self.as_f64()))
+    }
+
+    /// Returns the integer part of `self`. This means that non-integer numbers are always truncated towards zero.
+    #[cfg(feature = "core")]
+    pub fn trunc(self) -> Self {
+        Self::with_float(libm::trunc(self.as_f64()))
     }
 
     /// Returns the nearest integer to `self`. Rounds half-way cases to the number
@@ -1165,7 +1254,12 @@ impl Ieee64 {
         if e >= 0x3ff_u64 + 52 {
             self
         } else {
-            Self::with_float((f.abs() + toint_64 - toint_64).copysign(f))
+            #[cfg(feature = "std")]
+            let f = { (f.abs() + toint_64 - toint_64).copysign(f) };
+            #[cfg(feature = "core")]
+            let f = { libm::copysign(libm::fabs(f) + toint_64 - toint_64, f) };
+
+            Self::with_float(f)
         }
     }
 }

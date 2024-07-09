@@ -18,12 +18,12 @@ anyhow = { workspace = true }
 log = { workspace = true }
 wasmtime-environ = { workspace = true, features = ['compile'] }
 cranelift-wasm = { workspace = true }
-cranelift-codegen = { workspace = true, features = ["host-arch"] }
+cranelift-codegen = { workspace = true, features = ["std", "host-arch"] }
 cranelift-frontend = { workspace = true }
 cranelift-entity = { workspace = true }
 cranelift-native = { workspace = true }
 cranelift-control = { workspace = true }
-wasmparser = { workspace = true }
+wasmparser = { workspace = true, features = ["std"] }
 target-lexicon = { workspace = true }
 gimli = { workspace = true, features = ['std'] }
 object = { workspace = true, features = ['write', 'std'] }

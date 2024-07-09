@@ -15,9 +15,10 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
-cranelift-bitset = { workspace=true }
+cranelift-bitset = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_derive = { workspace = true, optional = true }
 
 [features]
+std = ["serde/std"]
 enable-serde = ["serde", "serde_derive", "cranelift-bitset/enable-serde"]

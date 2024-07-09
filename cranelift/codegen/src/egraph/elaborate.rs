@@ -4,6 +4,7 @@
 use super::cost::Cost;
 use super::Stats;
 use crate::dominator_tree::DominatorTreePreorder;
+use crate::fx::{FxHashMap, FxHashSet};
 use crate::hash_map::Entry as HashEntry;
 use crate::inst_predicates::is_pure_for_egraph;
 use crate::ir::{Block, Function, Inst, Value, ValueDef};
@@ -13,7 +14,6 @@ use crate::trace;
 use alloc::vec::Vec;
 use cranelift_control::ControlPlane;
 use cranelift_entity::{packed_option::ReservedValue, SecondaryMap};
-use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::{smallvec, SmallVec};
 
 pub(crate) struct Elaborator<'a> {
@@ -81,7 +81,7 @@ impl PartialOrd for BestEntry {
 
 impl Ord for BestEntry {
     #[inline]
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.0.cmp(&other.0).then_with(|| {
             // Note that this comparison is reversed. When costs are equal,
             // prefer the value with the bigger index. This is a heuristic that
@@ -275,10 +275,10 @@ impl<'a> Elaborator<'a> {
                             } else if best[y].1.is_reserved_value() {
                                 best[x]
                             } else {
-                                std::cmp::max(best[x], best[y])
+                                core::cmp::max(best[x], best[y])
                             }
                         } else {
-                            std::cmp::min(best[x], best[y])
+                            core::cmp::min(best[x], best[y])
                         };
                         trace!(
                             " -> best of union({:?}, {:?}) = {:?}",

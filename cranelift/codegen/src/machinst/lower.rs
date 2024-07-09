@@ -6,6 +6,7 @@
 // top of it, e.g. the side-effect/coloring analysis and the scan support.
 
 use crate::entity::SecondaryMap;
+use crate::fx::{FxHashMap, FxHashSet};
 use crate::inst_predicates::{has_lowering_side_effect, is_constant_64bit};
 use crate::ir::pcc::{Fact, FactContext, PccError, PccResult};
 use crate::ir::{
@@ -21,10 +22,9 @@ use crate::machinst::{
 use crate::settings::Flags;
 use crate::{trace, CodegenResult};
 use alloc::vec::Vec;
+use core::fmt::Debug;
 use cranelift_control::ControlPlane;
-use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::{smallvec, SmallVec};
-use std::fmt::Debug;
 
 use super::{VCodeBuildDirection, VRegAllocator};
 

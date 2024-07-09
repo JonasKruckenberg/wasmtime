@@ -1,6 +1,6 @@
 //! Cranelift code generation library.
 #![deny(missing_docs)]
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 // Various bits and pieces of this crate might only be used for one platform or
 // another, but it's not really too useful to learn about that all the time. On
 // CI we build at least one version of this crate with `--features all-arch`
@@ -18,7 +18,7 @@ extern crate alloc;
 extern crate std;
 
 #[cfg(not(feature = "std"))]
-use hashbrown::{hash_map, HashMap};
+use hashbrown::{hash_map, HashMap, HashSet};
 #[cfg(feature = "std")]
 use std::collections::{hash_map, HashMap};
 
@@ -70,6 +70,7 @@ mod constant_hash;
 mod context;
 mod ctxhash;
 mod egraph;
+mod fx;
 mod inst_predicates;
 mod isle_prelude;
 mod iterators;

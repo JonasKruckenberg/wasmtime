@@ -62,10 +62,10 @@
 
 use crate::dominator_tree::DominatorTree;
 use crate::entity::SecondaryMap;
+use crate::fx::{FxHashMap, FxHashSet};
 use crate::inst_predicates::visit_block_succs;
 use crate::ir::{Block, Function, Inst, Opcode};
 use crate::{machinst::*, trace};
-use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Mapping from CLIF BBs to VCode BBs.
 #[derive(Debug)]
@@ -78,7 +78,7 @@ pub struct BlockLoweringOrder {
     lowered_succ_indices: Vec<BlockIndex>,
     /// Ranges in `lowered_succ_indices` giving the successor lists for each lowered
     /// block. Indexed by lowering-order index (`BlockIndex`).
-    lowered_succ_ranges: Vec<(Option<Inst>, std::ops::Range<usize>)>,
+    lowered_succ_ranges: Vec<(Option<Inst>, core::ops::Range<usize>)>,
     /// Cold blocks. These blocks are not reordered in the
     /// `lowered_order` above; the lowered order must respect RPO
     /// (uses after defs) in order for lowering to be

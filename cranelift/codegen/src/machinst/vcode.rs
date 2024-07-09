@@ -17,6 +17,7 @@
 //! See the main module comment in `mod.rs` for more details on the VCode-based
 //! backend pipeline.
 
+use crate::fx::FxHashMap;
 use crate::ir::pcc::*;
 use crate::ir::{self, types, Constant, ConstantData, ValueLabel};
 use crate::machinst::*;
@@ -29,13 +30,12 @@ use regalloc2::{
     Edit, Function as RegallocFunction, InstOrEdit, InstRange, MachineEnv, Operand,
     OperandConstraint, OperandKind, PRegSet, RegClass,
 };
-use rustc_hash::FxHashMap;
 
+use crate::hash_map::Entry;
+use crate::HashMap;
+use core::fmt;
 use core::mem::take;
 use cranelift_entity::{entity_impl, Keys};
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::fmt;
 
 /// Index referring to an instruction in VCode.
 pub type InsnIndex = regalloc2::Inst;
@@ -780,7 +780,7 @@ impl<I: VCodeInst> VCode<I> {
         let mut cur_srcloc = None;
         let mut last_offset = None;
         let mut inst_offsets = vec![];
-        let mut state = I::State::new(&self.abi, std::mem::take(ctrl_plane));
+        let mut state = I::State::new(&self.abi, core::mem::take(ctrl_plane));
 
         let mut disasm = String::new();
 
@@ -921,9 +921,9 @@ impl<I: VCodeInst> VCode<I> {
                                 .safepoint_slots
                                 .binary_search_by(|(progpoint, _alloc)| {
                                     if progpoint.inst() >= iix {
-                                        std::cmp::Ordering::Greater
+                                        core::cmp::Ordering::Greater
                                     } else {
-                                        std::cmp::Ordering::Less
+                                        core::cmp::Ordering::Less
                                     }
                                 })
                                 .unwrap_err();
@@ -1219,8 +1219,12 @@ impl<I: VCodeInst> VCode<I> {
                 let slot = alloc.as_stack().unwrap();
                 let slot_offset = self.abi.get_spillslot_offset(slot);
                 let slot_base_to_caller_sp_offset = self.abi.slot_base_to_caller_sp_offset();
+                #[cfg(feature = "unwind")]
                 let caller_sp_to_cfa_offset =
                     crate::isa::unwind::systemv::caller_sp_to_cfa_offset();
+                #[cfg(not(feature = "unwind"))]
+                let caller_sp_to_cfa_offset = 0; // TODO is this right?
+
                 // NOTE: this is a negative offset because it's relative to the caller's SP
                 let cfa_to_sp_offset =
                     -((slot_base_to_caller_sp_offset + caller_sp_to_cfa_offset) as i64);
@@ -1312,7 +1316,7 @@ impl<I: VCodeInst> VCode<I> {
     }
 }
 
-impl<I: VCodeInst> std::ops::Index<InsnIndex> for VCode<I> {
+impl<I: VCodeInst> core::ops::Index<InsnIndex> for VCode<I> {
     type Output = I;
     fn index(&self, idx: InsnIndex) -> &Self::Output {
         &self.insts[idx.index()]
@@ -1821,7 +1825,7 @@ impl VCodeConstantData {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::mem::size_of;
+    use core::mem::size_of;
 
     #[test]
     fn size_of_constant_structs() {
