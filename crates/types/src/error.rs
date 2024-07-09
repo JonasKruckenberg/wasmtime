@@ -77,5 +77,4 @@ impl fmt::Display for WasmError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for WasmError {}
+impl core::error::Error for WasmError {}
