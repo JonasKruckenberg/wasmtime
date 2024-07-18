@@ -1,8 +1,6 @@
 //! Implementation of the standard x64 ABI.
 
-use core::sync::atomic::{AtomicBool, Ordering};
-
-use crate::ir::{self, types, LibCall, MemFlags, Opcode, Signature, TrapCode};
+use crate::ir::{self, types, LibCall, MemFlags, Signature, TrapCode};
 use crate::ir::{types::*, ExternalName};
 use crate::isa;
 use crate::isa::{unwind::UnwindInst, x64::inst::*, x64::settings as x64_settings, CallConv};
@@ -13,6 +11,7 @@ use crate::{CodegenError, CodegenResult};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use args::*;
+use core::sync::atomic::{AtomicBool, Ordering};
 use regalloc2::{MachineEnv, PReg, PRegSet};
 use smallvec::{smallvec, SmallVec};
 
@@ -592,7 +591,6 @@ impl ABIMachineSpec for X64ABIMachineSpec {
             Writable::from_reg(regs::rax()),
         ));
         insts.push(Inst::CallKnown {
-            opcode: Opcode::Call,
             dest: ExternalName::LibCall(LibCall::Probestack),
             info: Some(Box::new(CallInfo {
                 // No need to include arg here: we are post-regalloc
@@ -803,7 +801,6 @@ impl ABIMachineSpec for X64ABIMachineSpec {
         uses: CallArgList,
         defs: CallRetList,
         clobbers: PRegSet,
-        opcode: ir::Opcode,
         tmp: Writable<Reg>,
         callee_conv: isa::CallConv,
         _caller_conv: isa::CallConv,
@@ -817,7 +814,6 @@ impl ABIMachineSpec for X64ABIMachineSpec {
                     uses,
                     defs,
                     clobbers,
-                    opcode,
                     callee_pop_size,
                     callee_conv,
                 ));
@@ -834,7 +830,6 @@ impl ABIMachineSpec for X64ABIMachineSpec {
                     uses,
                     defs,
                     clobbers,
-                    opcode,
                     callee_pop_size,
                     callee_conv,
                 ));
@@ -845,7 +840,6 @@ impl ABIMachineSpec for X64ABIMachineSpec {
                     uses,
                     defs,
                     clobbers,
-                    opcode,
                     callee_pop_size,
                     callee_conv,
                 ));
@@ -897,7 +891,6 @@ impl ABIMachineSpec for X64ABIMachineSpec {
             ],
             /* defs = */ smallvec![],
             /* clobbers = */ Self::get_regs_clobbered_by_call(call_conv),
-            Opcode::Call,
             callee_pop_size,
             call_conv,
         ));

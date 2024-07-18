@@ -434,7 +434,6 @@ impl ABIMachineSpec for Riscv64MachineDeps {
                 }],
                 defs: smallvec![],
                 clobbers: PRegSet::empty(),
-                opcode: Opcode::Call,
                 callee_callconv: CallConv::SystemV,
                 caller_callconv: CallConv::SystemV,
                 callee_pop_size: 0,
@@ -574,7 +573,6 @@ impl ABIMachineSpec for Riscv64MachineDeps {
         uses: CallArgList,
         defs: CallRetList,
         clobbers: PRegSet,
-        opcode: ir::Opcode,
         tmp: Writable<Reg>,
         callee_conv: isa::CallConv,
         caller_conv: isa::CallConv,
@@ -588,7 +586,6 @@ impl ABIMachineSpec for Riscv64MachineDeps {
                     uses,
                     defs,
                     clobbers,
-                    opcode,
                     caller_callconv: caller_conv,
                     callee_callconv: callee_conv,
                     callee_pop_size,
@@ -606,7 +603,6 @@ impl ABIMachineSpec for Riscv64MachineDeps {
                         uses,
                         defs,
                         clobbers,
-                        opcode,
                         caller_callconv: caller_conv,
                         callee_callconv: callee_conv,
                         callee_pop_size,
@@ -619,7 +615,6 @@ impl ABIMachineSpec for Riscv64MachineDeps {
                     uses,
                     defs,
                     clobbers,
-                    opcode,
                     caller_callconv: caller_conv,
                     callee_callconv: callee_conv,
                     callee_pop_size,
@@ -661,7 +656,6 @@ impl ABIMachineSpec for Riscv64MachineDeps {
                 ],
                 defs: smallvec![],
                 clobbers: Self::get_regs_clobbered_by_call(call_conv),
-                opcode: Opcode::Call,
                 caller_callconv: call_conv,
                 callee_callconv: call_conv,
                 callee_pop_size: 0,
@@ -785,11 +779,9 @@ impl Riscv64ABICallSite {
         self.emit_stack_ret_arg_for_tail_call(ctx);
 
         let dest = self.dest().clone();
-        let opcode = self.opcode();
         let uses = self.take_uses();
         let info = Box::new(ReturnCallInfo {
             uses,
-            opcode,
             new_stack_arg_size,
         });
 

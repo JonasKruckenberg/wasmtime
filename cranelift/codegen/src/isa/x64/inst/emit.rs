@@ -1,4 +1,3 @@
-use crate::ir;
 use crate::ir::immediates::{Ieee32, Ieee64};
 use crate::ir::KnownSymbol;
 use crate::isa::x64::encoding::evex::{EvexInstruction, EvexVectorLength, RegisterOrAmode};
@@ -1596,8 +1595,8 @@ pub(crate) fn emit(
 
         Inst::CallKnown {
             dest,
-            opcode,
             info: call_info,
+            ..
         } => {
             let (stack_map, user_stack_map) = state.take_stack_map();
             if let Some(s) = stack_map {
@@ -1613,9 +1612,7 @@ pub(crate) fn emit(
             // beginning of the immediate field.
             emit_reloc(sink, Reloc::X86CallPCRel4, &dest, -4);
             sink.put4(0);
-            if opcode.is_call() {
-                sink.add_call_site(*opcode);
-            }
+            sink.add_call_site();
 
             // Reclaim the outgoing argument area that was released by the callee, to ensure that
             // StackAMode values are always computed from a consistent SP.
@@ -1648,7 +1645,7 @@ pub(crate) fn emit(
             // beginning of the immediate field.
             emit_reloc(sink, Reloc::X86CallPCRel4, &callee, -4);
             sink.put4(0);
-            sink.add_call_site(ir::Opcode::ReturnCall);
+            sink.add_call_site();
         }
 
         Inst::ReturnCallUnknown {
@@ -1663,13 +1660,13 @@ pub(crate) fn emit(
                 target: RegMem::reg(callee),
             }
             .emit(sink, info, state);
-            sink.add_call_site(ir::Opcode::ReturnCallIndirect);
+            sink.add_call_site();
         }
 
         Inst::CallUnknown {
             dest,
-            opcode,
             info: call_info,
+            ..
         } => {
             let dest = dest.clone();
 
@@ -1712,9 +1709,7 @@ pub(crate) fn emit(
                 sink.push_user_stack_map(state, offset, s);
             }
 
-            if opcode.is_call() {
-                sink.add_call_site(*opcode);
-            }
+            sink.add_call_site();
 
             // Reclaim the outgoing argument area that was released by the callee, to ensure that
             // StackAMode values are always computed from a consistent SP.
@@ -2580,6 +2575,22 @@ pub(crate) fn emit(
                 AvxOpcode::Vfmadd213pd => (true, OpcodeMap::_0F38, 0xA8),
                 AvxOpcode::Vfnmadd132pd => (true, OpcodeMap::_0F38, 0x9C),
                 AvxOpcode::Vfnmadd213pd => (true, OpcodeMap::_0F38, 0xAC),
+                AvxOpcode::Vfmsub132ss => (false, OpcodeMap::_0F38, 0x9B),
+                AvxOpcode::Vfmsub213ss => (false, OpcodeMap::_0F38, 0xAB),
+                AvxOpcode::Vfnmsub132ss => (false, OpcodeMap::_0F38, 0x9F),
+                AvxOpcode::Vfnmsub213ss => (false, OpcodeMap::_0F38, 0xAF),
+                AvxOpcode::Vfmsub132sd => (true, OpcodeMap::_0F38, 0x9B),
+                AvxOpcode::Vfmsub213sd => (true, OpcodeMap::_0F38, 0xAB),
+                AvxOpcode::Vfnmsub132sd => (true, OpcodeMap::_0F38, 0x9F),
+                AvxOpcode::Vfnmsub213sd => (true, OpcodeMap::_0F38, 0xAF),
+                AvxOpcode::Vfmsub132ps => (false, OpcodeMap::_0F38, 0x9A),
+                AvxOpcode::Vfmsub213ps => (false, OpcodeMap::_0F38, 0xAA),
+                AvxOpcode::Vfnmsub132ps => (false, OpcodeMap::_0F38, 0x9E),
+                AvxOpcode::Vfnmsub213ps => (false, OpcodeMap::_0F38, 0xAE),
+                AvxOpcode::Vfmsub132pd => (true, OpcodeMap::_0F38, 0x9A),
+                AvxOpcode::Vfmsub213pd => (true, OpcodeMap::_0F38, 0xAA),
+                AvxOpcode::Vfnmsub132pd => (true, OpcodeMap::_0F38, 0x9E),
+                AvxOpcode::Vfnmsub213pd => (true, OpcodeMap::_0F38, 0xAE),
                 AvxOpcode::Vblendvps => (false, OpcodeMap::_0F3A, 0x4A),
                 AvxOpcode::Vblendvpd => (false, OpcodeMap::_0F3A, 0x4B),
                 AvxOpcode::Vpblendvb => (false, OpcodeMap::_0F3A, 0x4C),
