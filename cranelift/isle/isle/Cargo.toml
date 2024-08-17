@@ -8,12 +8,19 @@ readme = "../README.md"
 repository = "https://github.com/bytecodealliance/wasmtime/tree/main/cranelift/isle"
 version = "0.111.0"
 
-[lints]
-workspace = true
+[lints.rust]
+unused_extern_crates = 'warn'
+trivial_numeric_casts = 'warn'
+unstable_features = 'warn'
+unused_import_braces = 'warn'
+unused-lifetimes = 'warn'
+
+[lints.clippy]
+all = 'allow'
 
 [dependencies]
 codespan-reporting = { version = "0.11.1", optional = true }
-log = { workspace = true, optional = true }
+log = { version = "0.4.8", default-features = false, optional = true }
 
 [dev-dependencies]
 tempfile = "3"
