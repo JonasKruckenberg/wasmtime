@@ -24,3 +24,4 @@ examples/build
 examples/.cache
 *.coredump
 crates/explorer/node_modules
+Cargo.lock
