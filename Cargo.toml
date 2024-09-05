@@ -266,7 +266,7 @@ wit-bindgen = { version = "0.28.0", default-features = false }
 wit-bindgen-rust-macro = { version = "0.28.0", default-features = false }
 
 # wasm-tools family:
-wasmparser = { version = "0.215.0", default-features = false }
+wasmparser = { version = "0.216.0", default-features = false }
 wat = "1.214.0"
 wast = "214.0.0"
 wasmprinter = "0.214.0"
