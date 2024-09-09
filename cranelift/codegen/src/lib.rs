@@ -18,7 +18,7 @@ extern crate alloc;
 extern crate std;
 
 #[cfg(not(feature = "std"))]
-use hashbrown::{hash_map, HashMap};
+use hashbrown::{hash_map, HashMap, HashSet};
 #[cfg(feature = "std")]
 use std::collections::{hash_map, HashMap};
 
@@ -83,6 +83,7 @@ mod scoped_hash_map;
 mod unionfind;
 mod unreachable_code;
 mod value_label;
+mod fx;
 
 #[cfg(feature = "souper-harvest")]
 mod souper_harvest;

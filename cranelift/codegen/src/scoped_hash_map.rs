@@ -5,13 +5,8 @@
 //! values inserted while inside a scope aren't visible outside the scope.
 
 use core::hash::Hash;
-use rustc_hash::FxHashMap;
+use crate::fx::FxHashMap;
 use smallvec::{smallvec, SmallVec};
-
-#[cfg(not(feature = "std"))]
-use crate::fx::FxHasher;
-#[cfg(not(feature = "std"))]
-type Hasher = core::hash::BuildHasherDefault<FxHasher>;
 
 struct Val<V> {
     value: V,
@@ -21,7 +16,10 @@ struct Val<V> {
 
 /// A view into an occupied entry in a `ScopedHashMap`. It is part of the `Entry` enum.
 pub struct OccupiedEntry<'a, K: 'a, V: 'a> {
-    entry: super::hash_map::OccupiedEntry<'a, K, Val<V>>,
+    #[cfg(feature = "std")]
+    entry: crate::hash_map::OccupiedEntry<'a, K, Val<V>>,
+    #[cfg(not(feature = "std"))]
+    entry: crate::hash_map::OccupiedEntry<'a, K, Val<V>, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>,
 }
 
 impl<'a, K, V> OccupiedEntry<'a, K, V> {
@@ -41,11 +39,17 @@ pub struct VacantEntry<'a, K: 'a, V: 'a> {
 /// Where to insert from a `VacantEntry`. May be vacant or occupied in
 /// the underlying map because of lazy (generation-based) deletion.
 enum InsertLoc<'a, K: 'a, V: 'a> {
-    Vacant(super::hash_map::VacantEntry<'a, K, Val<V>>),
-    Occupied(super::hash_map::OccupiedEntry<'a, K, Val<V>>),
+    #[cfg(feature = "std")]
+    Vacant(crate::hash_map::VacantEntry<'a, K, Val<V>>),
+    #[cfg(not(feature = "std"))]
+    Vacant(crate::hash_map::VacantEntry<'a, K, Val<V>, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>),
+    #[cfg(feature = "std")]
+    Occupied(crate::hash_map::OccupiedEntry<'a, K, Val<V>>),
+    #[cfg(not(feature = "std"))]
+    Occupied(crate::hash_map::OccupiedEntry<'a, K, Val<V>, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>),
 }
 
-impl<'a, K, V> VacantEntry<'a, K, V> {
+impl<'a, K, V> VacantEntry<'a, K, V> where K: Hash {
     /// Sets the value of the entry with the `VacantEntry`'s key.
     pub fn insert(self, value: V) {
         let val = Val {

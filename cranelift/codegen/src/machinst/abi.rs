@@ -107,11 +107,11 @@ use crate::CodegenError;
 use crate::{ir, isa};
 use crate::{machinst::*, trace};
 use regalloc2::{MachineEnv, PReg, PRegSet};
-use rustc_hash::FxHashMap;
+use crate::fx::FxHashMap;
 use smallvec::smallvec;
-use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::mem;
+use crate::HashMap;
 
 /// A small vector of instructions (with some reasonable size); appropriate for
 /// a small fixed sequence implementing one operation.
