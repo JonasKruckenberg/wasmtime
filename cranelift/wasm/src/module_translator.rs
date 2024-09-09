@@ -8,7 +8,6 @@ use crate::sections_translator::{
 };
 use crate::WasmResult;
 use cranelift_codegen::timing;
-use std::prelude::v1::*;
 use wasmparser::{Parser, Payload, Validator};
 
 /// Translate a sequence of bytes forming a valid Wasm binary into a list of valid Cranelift IR

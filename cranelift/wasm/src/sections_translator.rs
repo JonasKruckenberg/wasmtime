@@ -92,7 +92,7 @@ pub fn parse_function_section(
     environ: &mut dyn ModuleEnvironment,
 ) -> WasmResult<()> {
     let num_functions = functions.count();
-    if num_functions == std::u32::MAX {
+    if num_functions == u32::MAX {
         // We reserve `u32::MAX` for our own use in cranelift-entity.
         return Err(WasmError::ImplLimitExceeded);
     }
