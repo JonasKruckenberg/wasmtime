@@ -152,7 +152,7 @@ where
     /// # Panics
     ///
     /// Panics if this is called on a function in an asynchronous store. This
-    /// only works with functions defined within a synchonous store. Also
+    /// only works with functions defined within a synchronous store. Also
     /// panics if `store` does not own this function.
     pub fn call(&self, store: impl AsContextMut, params: Params) -> Result<Return> {
         assert!(
@@ -837,7 +837,7 @@ macro_rules! integers {
 
         unsafe impl Lift for $primitive {
             #[inline]
-            #[allow(trivial_numeric_casts)]
+            #[allow(trivial_numeric_casts, clippy::cast_possible_truncation)]
             fn lift(_cx: &mut LiftContext<'_>, ty: InterfaceType, src: &Self::Lower) -> Result<Self> {
                 debug_assert!(matches!(ty, InterfaceType::$ty));
                 Ok(src.$get() as $primitive)
@@ -1110,8 +1110,8 @@ unsafe impl Lower for str {
         debug_assert!(offset % (Self::ALIGN32 as usize) == 0);
         let (ptr, len) = lower_string(cx, self)?;
         // FIXME: needs memory64 handling
-        *cx.get(offset + 0) = (ptr as i32).to_le_bytes();
-        *cx.get(offset + 4) = (len as i32).to_le_bytes();
+        *cx.get(offset + 0) = u32::try_from(ptr).unwrap().to_le_bytes();
+        *cx.get(offset + 4) = u32::try_from(len).unwrap().to_le_bytes();
         Ok(())
     }
 }
@@ -1457,8 +1457,8 @@ where
         };
         debug_assert!(offset % (Self::ALIGN32 as usize) == 0);
         let (ptr, len) = lower_list(cx, elem, self)?;
-        *cx.get(offset + 0) = (ptr as i32).to_le_bytes();
-        *cx.get(offset + 4) = (len as i32).to_le_bytes();
+        *cx.get(offset + 0) = u32::try_from(ptr).unwrap().to_le_bytes();
+        *cx.get(offset + 4) = u32::try_from(len).unwrap().to_le_bytes();
         Ok(())
     }
 }
@@ -1765,7 +1765,7 @@ pub fn typecheck_record(
 
             for (field, &(name, check)) in fields.iter().zip(expected) {
                 check(&field.ty, types)
-                    .with_context(|| format!("type mismatch for field {}", name))?;
+                    .with_context(|| format!("type mismatch for field {name}"))?;
 
                 if field.name != name {
                     bail!("expected record field named {}, found {}", name, field.name);

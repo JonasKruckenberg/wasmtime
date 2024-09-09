@@ -1,14 +1,14 @@
 //! This module defines s390x-specific machine instruction types.
 
 use crate::binemit::{Addend, CodeOffset, Reloc};
-use crate::ir::{types, ExternalName, Opcode, Type};
+use crate::ir::{types, ExternalName, Type};
 use crate::isa::s390x::abi::S390xMachineDeps;
 use crate::isa::{CallConv, FunctionAlignment};
 use crate::machinst::*;
 use crate::{settings, CodegenError, CodegenResult};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use regalloc2::PRegSet;
+use regalloc2::{PReg, PRegSet};
 use smallvec::SmallVec;
 use std::fmt::Write;
 use std::string::{String, ToString};
@@ -34,31 +34,13 @@ pub use crate::isa::s390x::lower::isle::generated_code::{
     VecUnaryOp,
 };
 
-/// Additional information for (direct) Call instructions, left out of line to lower the size of
+/// Additional information for (direct) ReturnCall instructions, left out of line to lower the size of
 /// the Inst enum.
 #[derive(Clone, Debug)]
-pub struct CallInfo {
-    pub dest: ExternalName,
+pub struct ReturnCallInfo<T> {
+    pub dest: T,
     pub uses: CallArgList,
-    pub defs: CallRetList,
-    pub clobbers: PRegSet,
-    pub opcode: Opcode,
-    pub caller_callconv: CallConv,
-    pub callee_callconv: CallConv,
-    pub tls_symbol: Option<SymbolReloc>,
-}
-
-/// Additional information for CallInd instructions, left out of line to lower the size of the Inst
-/// enum.
-#[derive(Clone, Debug)]
-pub struct CallIndInfo {
-    pub rn: Reg,
-    pub uses: CallArgList,
-    pub defs: CallRetList,
-    pub clobbers: PRegSet,
-    pub opcode: Opcode,
-    pub caller_callconv: CallConv,
-    pub callee_callconv: CallConv,
+    pub callee_pop_size: u32,
 }
 
 #[test]
@@ -229,8 +211,11 @@ impl Inst {
             | Inst::VecExtractLane { .. }
             | Inst::VecInsertLaneImm { .. }
             | Inst::VecReplicateLane { .. }
+            | Inst::AllocateArgs { .. }
             | Inst::Call { .. }
             | Inst::CallInd { .. }
+            | Inst::ReturnCall { .. }
+            | Inst::ReturnCallInd { .. }
             | Inst::Args { .. }
             | Inst::Rets { .. }
             | Inst::Ret { .. }
@@ -246,7 +231,8 @@ impl Inst {
             | Inst::LoadAddr { .. }
             | Inst::Loop { .. }
             | Inst::CondBreak { .. }
-            | Inst::Unwind { .. } => InstructionSet::Base,
+            | Inst::Unwind { .. }
+            | Inst::ElfTlsGetOffset { .. } => InstructionSet::Base,
 
             // These depend on the opcode
             Inst::AluRRR { alu_op, .. } => match alu_op {
@@ -340,7 +326,7 @@ impl Inst {
             types::I8 => Inst::Load64ZExt8 { rd: into_reg, mem },
             types::I16 => Inst::Load64ZExt16 { rd: into_reg, mem },
             types::I32 => Inst::Load64ZExt32 { rd: into_reg, mem },
-            types::I64 | types::R64 => Inst::Load64 { rd: into_reg, mem },
+            types::I64 => Inst::Load64 { rd: into_reg, mem },
             types::F32 => Inst::VecLoadLaneUndef {
                 size: 32,
                 rd: into_reg,
@@ -365,7 +351,7 @@ impl Inst {
             types::I8 => Inst::Store8 { rd: from_reg, mem },
             types::I16 => Inst::Store16 { rd: from_reg, mem },
             types::I32 => Inst::Store32 { rd: from_reg, mem },
-            types::I64 | types::R64 => Inst::Store64 { rd: from_reg, mem },
+            types::I64 => Inst::Store64 { rd: from_reg, mem },
             types::F32 => Inst::VecStoreLane {
                 size: 32,
                 rd: from_reg,
@@ -398,7 +384,9 @@ fn memarg_operands(memarg: &mut MemArg, collector: &mut impl OperandVisitor) {
         MemArg::RegOffset { reg, .. } => {
             collector.reg_use(reg);
         }
-        MemArg::InitialSPOffset { .. } | MemArg::SlotOffset { .. } => {}
+        MemArg::InitialSPOffset { .. }
+        | MemArg::NominalSPOffset { .. }
+        | MemArg::SlotOffset { .. } => {}
     }
     // mem_finalize might require %r1 to hold (part of) the address.
     // Conservatively assume this will always be necessary here.
@@ -884,29 +872,72 @@ fn s390x_get_operands(inst: &mut Inst, collector: &mut DenyReuseVisitor<impl Ope
             collector.reg_def(rd);
             collector.reg_use(rn);
         }
-        Inst::Call { link, info } => {
-            let CallInfo { uses, defs, .. } = &mut **info;
+        Inst::AllocateArgs { .. } => {}
+        Inst::Call { link, info, .. } => {
+            let CallInfo {
+                uses,
+                defs,
+                clobbers,
+                ..
+            } = &mut **info;
             for CallArgPair { vreg, preg } in uses {
                 collector.reg_fixed_use(vreg, *preg);
             }
+            let mut clobbers = *clobbers;
+            clobbers.add(link.to_reg().to_real_reg().unwrap().into());
             for CallRetPair { vreg, preg } in defs {
+                clobbers.remove(PReg::from(preg.to_real_reg().unwrap()));
                 collector.reg_fixed_def(vreg, *preg);
             }
-            let mut clobbers = info.clobbers.clone();
-            clobbers.add(link.to_reg().to_real_reg().unwrap().into());
             collector.reg_clobbers(clobbers);
         }
         Inst::CallInd { link, info } => {
-            let CallIndInfo { rn, uses, defs, .. } = &mut **info;
-            collector.reg_use(rn);
+            let CallInfo {
+                dest,
+                uses,
+                defs,
+                clobbers,
+                ..
+            } = &mut **info;
+            collector.reg_use(dest);
             for CallArgPair { vreg, preg } in uses {
                 collector.reg_fixed_use(vreg, *preg);
             }
+            let mut clobbers = *clobbers;
+            clobbers.add(link.to_reg().to_real_reg().unwrap().into());
             for CallRetPair { vreg, preg } in defs {
+                clobbers.remove(PReg::from(preg.to_real_reg().unwrap()));
                 collector.reg_fixed_def(vreg, *preg);
             }
-            let mut clobbers = info.clobbers.clone();
+            collector.reg_clobbers(clobbers);
+        }
+        Inst::ReturnCall { info } => {
+            let ReturnCallInfo { uses, .. } = &mut **info;
+            for CallArgPair { vreg, preg } in uses {
+                collector.reg_fixed_use(vreg, *preg);
+            }
+        }
+        Inst::ReturnCallInd { info } => {
+            let ReturnCallInfo { dest, uses, .. } = &mut **info;
+            collector.reg_use(dest);
+            for CallArgPair { vreg, preg } in uses {
+                collector.reg_fixed_use(vreg, *preg);
+            }
+        }
+        Inst::ElfTlsGetOffset {
+            tls_offset,
+            got,
+            got_offset,
+            link,
+            ..
+        } => {
+            collector.reg_fixed_use(got, gpr(12));
+            collector.reg_fixed_use(got_offset, gpr(2));
+            collector.reg_fixed_def(tls_offset, gpr(2));
+
+            let mut clobbers = S390xMachineDeps::get_regs_clobbered_by_call(CallConv::SystemV);
             clobbers.add(link.to_reg().to_real_reg().unwrap().into());
+            clobbers.remove(gpr_preg(2));
             collector.reg_clobbers(clobbers);
         }
         Inst::Args { args } => {
@@ -1032,8 +1063,9 @@ impl MachInst for Inst {
         // registers.
         match self {
             &Inst::Args { .. } => false,
-            &Inst::Call { ref info, .. } => info.caller_callconv != info.callee_callconv,
-            &Inst::CallInd { ref info, .. } => info.caller_callconv != info.callee_callconv,
+            &Inst::Call { ref info, .. } => info.caller_conv != info.callee_conv,
+            &Inst::CallInd { ref info, .. } => info.caller_conv != info.callee_conv,
+            &Inst::ElfTlsGetOffset { .. } => false,
             _ => true,
         }
     }
@@ -1055,6 +1087,7 @@ impl MachInst for Inst {
     fn is_term(&self) -> MachTerminator {
         match self {
             &Inst::Rets { .. } => MachTerminator::Ret,
+            &Inst::ReturnCall { .. } | &Inst::ReturnCallInd { .. } => MachTerminator::RetCall,
             &Inst::Jump { .. } => MachTerminator::Uncond,
             &Inst::CondBr { .. } => MachTerminator::Cond,
             &Inst::OneWayCondBr { .. } => {
@@ -1105,15 +1138,12 @@ impl MachInst for Inst {
             types::I16 => Ok((&[RegClass::Int], &[types::I16])),
             types::I32 => Ok((&[RegClass::Int], &[types::I32])),
             types::I64 => Ok((&[RegClass::Int], &[types::I64])),
-            types::R32 => panic!("32-bit reftype pointer should never be seen on s390x"),
-            types::R64 => Ok((&[RegClass::Int], &[types::R64])),
             types::F32 => Ok((&[RegClass::Float], &[types::F32])),
             types::F64 => Ok((&[RegClass::Float], &[types::F64])),
             types::I128 => Ok((&[RegClass::Float], &[types::I128])),
             _ if ty.is_vector() && ty.bits() == 128 => Ok((&[RegClass::Float], &[types::I8X16])),
             _ => Err(CodegenError::Unsupported(format!(
-                "Unexpected SSA-value type: {}",
-                ty
+                "Unexpected SSA-value type: {ty}"
             ))),
         }
     }
@@ -1221,7 +1251,7 @@ impl Inst {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
-                format!("{} {}, {}, {}", op, rd, rn, rm)
+                format!("{op} {rd}, {rn}, {rm}")
             }
             &Inst::AluRRSImm16 {
                 alu_op,
@@ -1245,7 +1275,7 @@ impl Inst {
                 };
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
-                format!("{} {}, {}, {}", op, rd, rn, imm)
+                format!("{op} {rd}, {rn}, {imm}")
             }
             &Inst::AluRR { alu_op, rd, ri, rm } => {
                 let op = match alu_op {
@@ -1274,7 +1304,7 @@ impl Inst {
                 };
                 let rd = pretty_print_reg_mod(rd, ri);
                 let rm = pretty_print_reg(rm);
-                format!("{} {}, {}", op, rd, rm)
+                format!("{op} {rd}, {rm}")
             }
             &Inst::AluRX {
                 alu_op,
@@ -1349,7 +1379,7 @@ impl Inst {
                     _ => unreachable!(),
                 };
                 let rd = pretty_print_reg_mod(rd, ri);
-                format!("{} {}, {}", op, rd, imm)
+                format!("{op} {rd}, {imm}")
             }
             &Inst::AluRSImm32 {
                 alu_op,
@@ -1365,7 +1395,7 @@ impl Inst {
                     _ => unreachable!(),
                 };
                 let rd = pretty_print_reg_mod(rd, ri);
-                format!("{} {}, {}", op, rd, imm)
+                format!("{op} {rd}, {imm}")
             }
             &Inst::AluRUImm32 {
                 alu_op,
@@ -1381,7 +1411,7 @@ impl Inst {
                     _ => unreachable!(),
                 };
                 let rd = pretty_print_reg_mod(rd, ri);
-                format!("{} {}, {}", op, rd, imm)
+                format!("{op} {rd}, {imm}")
             }
             &Inst::AluRUImm16Shifted {
                 alu_op,
@@ -1433,43 +1463,43 @@ impl Inst {
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
                 let rd = pretty_print_regpair(rd.to_regpair());
-                format!("{} {}, {}, {}", op, rd, rn, rm)
+                format!("{op} {rd}, {rn}, {rm}")
             }
             &Inst::UMulWide { rd, ri, rn } => {
                 let op = "mlgr";
                 let rn = pretty_print_reg(rn);
                 let rd = pretty_print_regpair_mod_lo(rd, ri);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::SDivMod32 { rd, ri, rn } => {
                 let op = "dsgfr";
                 let rn = pretty_print_reg(rn);
                 let rd = pretty_print_regpair_mod_lo(rd, ri);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::SDivMod64 { rd, ri, rn } => {
                 let op = "dsgr";
                 let rn = pretty_print_reg(rn);
                 let rd = pretty_print_regpair_mod_lo(rd, ri);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::UDivMod32 { rd, ri, rn } => {
                 let op = "dlr";
                 let rn = pretty_print_reg(rn);
                 let rd = pretty_print_regpair_mod(rd, ri);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::UDivMod64 { rd, ri, rn } => {
                 let op = "dlgr";
                 let rn = pretty_print_reg(rn);
                 let rd = pretty_print_regpair_mod(rd, ri);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::Flogr { rd, rn } => {
                 let op = "flogr";
                 let rn = pretty_print_reg(rn);
                 let rd = pretty_print_regpair(rd.to_regpair());
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::ShiftRR {
                 shift_op,
@@ -1495,7 +1525,7 @@ impl Inst {
                 } else {
                     "".to_string()
                 };
-                format!("{} {}, {}, {}{}", op, rd, rn, shift_imm, shift_reg)
+                format!("{op} {rd}, {rn}, {shift_imm}{shift_reg}")
             }
             &Inst::RxSBG {
                 op,
@@ -1565,7 +1595,7 @@ impl Inst {
                 };
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
-                format!("{} {}, {}{}", op, rd, rn, extra)
+                format!("{op} {rd}, {rn}{extra}")
             }
             &Inst::CmpRR { op, rn, rm } => {
                 let op = match op {
@@ -1579,7 +1609,7 @@ impl Inst {
                 };
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
-                format!("{} {}, {}", op, rn, rm)
+                format!("{op} {rn}, {rm}")
             }
             &Inst::CmpRX { op, rn, ref mem } => {
                 let (opcode_rx, opcode_rxy, opcode_ril) = match op {
@@ -1625,7 +1655,7 @@ impl Inst {
                     _ => unreachable!(),
                 };
                 let rn = pretty_print_reg(rn);
-                format!("{} {}, {}", op, rn, imm)
+                format!("{op} {rn}, {imm}")
             }
             &Inst::CmpRSImm32 { op, rn, imm } => {
                 let op = match op {
@@ -1634,7 +1664,7 @@ impl Inst {
                     _ => unreachable!(),
                 };
                 let rn = pretty_print_reg(rn);
-                format!("{} {}, {}", op, rn, imm)
+                format!("{op} {rn}, {imm}")
             }
             &Inst::CmpRUImm32 { op, rn, imm } => {
                 let op = match op {
@@ -1643,7 +1673,7 @@ impl Inst {
                     _ => unreachable!(),
                 };
                 let rn = pretty_print_reg(rn);
-                format!("{} {}, {}", op, rn, imm)
+                format!("{op} {rn}, {imm}")
             }
             &Inst::CmpTrapRR {
                 op, rn, rm, cond, ..
@@ -1658,7 +1688,7 @@ impl Inst {
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
                 let cond = cond.pretty_print_default();
-                format!("{}{} {}, {}", op, cond, rn, rm)
+                format!("{op}{cond} {rn}, {rm}")
             }
             &Inst::CmpTrapRSImm16 {
                 op, rn, imm, cond, ..
@@ -1670,7 +1700,7 @@ impl Inst {
                 };
                 let rn = pretty_print_reg(rn);
                 let cond = cond.pretty_print_default();
-                format!("{}{} {}, {}", op, cond, rn, imm)
+                format!("{op}{cond} {rn}, {imm}")
             }
             &Inst::CmpTrapRUImm16 {
                 op, rn, imm, cond, ..
@@ -1682,7 +1712,7 @@ impl Inst {
                 };
                 let rn = pretty_print_reg(rn);
                 let cond = cond.pretty_print_default();
-                format!("{}{} {}, {}", op, cond, rn, imm)
+                format!("{op}{cond} {rn}, {imm}")
             }
             &Inst::AtomicRmw {
                 alu_op,
@@ -1719,7 +1749,7 @@ impl Inst {
                     },
                 );
                 let mem = mem.pretty_print_default();
-                format!("{}{} {}, {}, {}", mem_str, op, rd, rn, mem)
+                format!("{mem_str}{op} {rd}, {rn}, {mem}")
             }
             &Inst::AtomicCas32 {
                 rd,
@@ -1880,7 +1910,7 @@ impl Inst {
                 };
                 let mem = mem.pretty_print_default();
 
-                format!("{}{} {}, {}", mem_str, op, mem, imm)
+                format!("{mem_str}{op} {mem}, {imm}")
             }
             &Inst::StoreImm16 { imm, ref mem }
             | &Inst::StoreImm32SExt16 { imm, ref mem }
@@ -1905,7 +1935,7 @@ impl Inst {
                 };
                 let mem = mem.pretty_print_default();
 
-                format!("{}{} {}, {}", mem_str, op, mem, imm)
+                format!("{mem_str}{op} {mem}, {imm}")
             }
             &Inst::Mvc {
                 ref dst,
@@ -1939,7 +1969,7 @@ impl Inst {
                 let rt = pretty_print_reg(rt.to_reg());
                 let rt2 = pretty_print_reg(rt2.to_reg());
                 let mem = mem.pretty_print_default();
-                format!("{}lmg {}, {}, {}", mem_str, rt, rt2, mem)
+                format!("{mem_str}lmg {rt}, {rt2}, {mem}")
             }
             &Inst::StoreMultiple64 { rt, rt2, ref mem } => {
                 let mem = mem.clone();
@@ -1957,38 +1987,38 @@ impl Inst {
                 let rt = pretty_print_reg(rt);
                 let rt2 = pretty_print_reg(rt2);
                 let mem = mem.pretty_print_default();
-                format!("{}stmg {}, {}, {}", mem_str, rt, rt2, mem)
+                format!("{mem_str}stmg {rt}, {rt2}, {mem}")
             }
             &Inst::Mov64 { rd, rm } => {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rm = pretty_print_reg(rm);
-                format!("lgr {}, {}", rd, rm)
+                format!("lgr {rd}, {rm}")
             }
             &Inst::MovPReg { rd, rm } => {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rm = show_reg(rm.into());
-                format!("lgr {}, {}", rd, rm)
+                format!("lgr {rd}, {rm}")
             }
             &Inst::Mov32 { rd, rm } => {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rm = pretty_print_reg(rm);
-                format!("lr {}, {}", rd, rm)
+                format!("lr {rd}, {rm}")
             }
             &Inst::Mov32Imm { rd, ref imm } => {
                 let rd = pretty_print_reg(rd.to_reg());
-                format!("iilf {}, {}", rd, imm)
+                format!("iilf {rd}, {imm}")
             }
             &Inst::Mov32SImm16 { rd, ref imm } => {
                 let rd = pretty_print_reg(rd.to_reg());
-                format!("lhi {}, {}", rd, imm)
+                format!("lhi {rd}, {imm}")
             }
             &Inst::Mov64SImm16 { rd, ref imm } => {
                 let rd = pretty_print_reg(rd.to_reg());
-                format!("lghi {}, {}", rd, imm)
+                format!("lghi {rd}, {imm}")
             }
             &Inst::Mov64SImm32 { rd, ref imm } => {
                 let rd = pretty_print_reg(rd.to_reg());
-                format!("lgfi {}, {}", rd, imm)
+                format!("lgfi {rd}, {imm}")
             }
             &Inst::Mov64UImm16Shifted { rd, ref imm } => {
                 let rd = pretty_print_reg(rd.to_reg());
@@ -2032,23 +2062,23 @@ impl Inst {
             }
             &Inst::LoadAR { rd, ar } => {
                 let rd = pretty_print_reg(rd.to_reg());
-                format!("ear {}, %a{}", rd, ar)
+                format!("ear {rd}, %a{ar}")
             }
             &Inst::InsertAR { rd, ri, ar } => {
                 let rd = pretty_print_reg_mod(rd, ri);
-                format!("ear {}, %a{}", rd, ar)
+                format!("ear {rd}, %a{ar}")
             }
             &Inst::CMov32 { rd, cond, ri, rm } => {
                 let rd = pretty_print_reg_mod(rd, ri);
                 let rm = pretty_print_reg(rm);
                 let cond = cond.pretty_print_default();
-                format!("locr{} {}, {}", cond, rd, rm)
+                format!("locr{cond} {rd}, {rm}")
             }
             &Inst::CMov64 { rd, cond, ri, rm } => {
                 let rd = pretty_print_reg_mod(rd, ri);
                 let rm = pretty_print_reg(rm);
                 let cond = cond.pretty_print_default();
-                format!("locgr{} {}, {}", cond, rd, rm)
+                format!("locgr{cond} {rd}, {rm}")
             }
             &Inst::CMov32SImm16 {
                 rd,
@@ -2058,7 +2088,7 @@ impl Inst {
             } => {
                 let rd = pretty_print_reg_mod(rd, ri);
                 let cond = cond.pretty_print_default();
-                format!("lochi{} {}, {}", cond, rd, imm)
+                format!("lochi{cond} {rd}, {imm}")
             }
             &Inst::CMov64SImm16 {
                 rd,
@@ -2068,7 +2098,7 @@ impl Inst {
             } => {
                 let rd = pretty_print_reg_mod(rd, ri);
                 let cond = cond.pretty_print_default();
-                format!("locghi{} {}, {}", cond, rd, imm)
+                format!("locghi{cond} {rd}, {imm}")
             }
             &Inst::FpuMove32 { rd, rn } => {
                 let (rd, rd_fpr) = pretty_print_fpr(rd.to_reg());
@@ -2076,7 +2106,7 @@ impl Inst {
                 if rd_fpr.is_some() && rn_fpr.is_some() {
                     format!("ler {}, {}", rd_fpr.unwrap(), rn_fpr.unwrap())
                 } else {
-                    format!("vlr {}, {}", rd, rn)
+                    format!("vlr {rd}, {rn}")
                 }
             }
             &Inst::FpuMove64 { rd, rn } => {
@@ -2085,7 +2115,7 @@ impl Inst {
                 if rd_fpr.is_some() && rn_fpr.is_some() {
                     format!("ldr {}, {}", rd_fpr.unwrap(), rn_fpr.unwrap())
                 } else {
-                    format!("vlr {}, {}", rd, rn)
+                    format!("vlr {rd}, {rn}")
                 }
             }
             &Inst::FpuCMov32 { rd, cond, rm, .. } => {
@@ -2096,7 +2126,7 @@ impl Inst {
                     format!("j{} 6 ; ler {}, {}", cond, rd_fpr.unwrap(), rm_fpr.unwrap())
                 } else {
                     let cond = cond.invert().pretty_print_default();
-                    format!("j{} 10 ; vlr {}, {}", cond, rd, rm)
+                    format!("j{cond} 10 ; vlr {rd}, {rm}")
                 }
             }
             &Inst::FpuCMov64 { rd, cond, rm, .. } => {
@@ -2107,7 +2137,7 @@ impl Inst {
                     format!("j{} 6 ; ldr {}, {}", cond, rd_fpr.unwrap(), rm_fpr.unwrap())
                 } else {
                     let cond = cond.invert().pretty_print_default();
-                    format!("j{} 10 ; vlr {}, {}", cond, rd, rm)
+                    format!("j{cond} 10 ; vlr {rd}, {rm}")
                 }
             }
             &Inst::FpuRR { fpu_op, rd, rn } => {
@@ -2144,7 +2174,7 @@ impl Inst {
                 } else if op.starts_with('w') {
                     format!("{} {}, {}", op, rd_fpr.unwrap_or(rd), rn_fpr.unwrap_or(rn))
                 } else {
-                    format!("{} {}, {}", op, rd, rn)
+                    format!("{op} {rd}, {rn}")
                 }
             }
             &Inst::FpuRRR { fpu_op, rd, rn, rm } => {
@@ -2203,7 +2233,7 @@ impl Inst {
                         opt_m6
                     )
                 } else {
-                    format!("{} {}, {}, {}{}", op, rd, rn, rm, opt_m6)
+                    format!("{op} {rd}, {rn}, {rm}{opt_m6}")
                 }
             }
             &Inst::FpuRRRR {
@@ -2251,7 +2281,7 @@ impl Inst {
                         ra_fpr.unwrap_or(ra)
                     )
                 } else {
-                    format!("{} {}, {}, {}, {}", op, rd, rn, rm, ra)
+                    format!("{op} {rd}, {rn}, {rm}, {ra}")
                 }
             }
             &Inst::FpuCmp32 { rn, rm } => {
@@ -2373,7 +2403,7 @@ impl Inst {
                         mode
                     )
                 } else {
-                    format!("{} {}, {}, 0, {}", opcode, rd, rn, mode)
+                    format!("{opcode} {rd}, {rn}, 0, {mode}")
                 }
             }
             &Inst::VecRRR { op, rd, rn, rm } => {
@@ -2469,7 +2499,7 @@ impl Inst {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
-                format!("{} {}, {}, {}", op, rd, rn, rm)
+                format!("{op} {rd}, {rn}, {rm}")
             }
             &Inst::VecRR { op, rd, rn } => {
                 let op = match op {
@@ -2508,7 +2538,7 @@ impl Inst {
                 };
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
             &Inst::VecShiftRR {
                 shift_op,
@@ -2542,21 +2572,21 @@ impl Inst {
                 } else {
                     "".to_string()
                 };
-                format!("{} {}, {}, {}{}", op, rd, rn, shift_imm, shift_reg)
+                format!("{op} {rd}, {rn}, {shift_imm}{shift_reg}")
             }
             &Inst::VecSelect { rd, rn, rm, ra } => {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
                 let ra = pretty_print_reg(ra);
-                format!("vsel {}, {}, {}, {}", rd, rn, rm, ra)
+                format!("vsel {rd}, {rn}, {rm}, {ra}")
             }
             &Inst::VecPermute { rd, rn, rm, ra } => {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
                 let ra = pretty_print_reg(ra);
-                format!("vperm {}, {}, {}, {}", rd, rn, rm, ra)
+                format!("vperm {rd}, {rn}, {rm}, {ra}")
             }
             &Inst::VecPermuteDWImm {
                 rd,
@@ -2569,7 +2599,7 @@ impl Inst {
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
                 let m4 = (idx1 & 1) * 4 + (idx2 & 1);
-                format!("vpdi {}, {}, {}, {}", rd, rn, rm, m4)
+                format!("vpdi {rd}, {rn}, {rm}, {m4}")
             }
             &Inst::VecIntCmp { op, rd, rn, rm } | &Inst::VecIntCmpS { op, rd, rn, rm } => {
                 let op = match op {
@@ -2594,7 +2624,7 @@ impl Inst {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
-                format!("{}{} {}, {}, {}", op, s, rd, rn, rm)
+                format!("{op}{s} {rd}, {rn}, {rm}")
             }
             &Inst::VecFloatCmp { op, rd, rn, rm } | &Inst::VecFloatCmpS { op, rd, rn, rm } => {
                 let op = match op {
@@ -2613,7 +2643,7 @@ impl Inst {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
-                format!("{}{} {}, {}, {}", op, s, rd, rn, rm)
+                format!("{op}{s} {rd}, {rn}, {rm}")
             }
             &Inst::VecInt128SCmpHi { tmp, rn, rm } | &Inst::VecInt128UCmpHi { tmp, rn, rm } => {
                 let op = match self {
@@ -2624,10 +2654,7 @@ impl Inst {
                 let tmp = pretty_print_reg(tmp.to_reg());
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
-                format!(
-                    "{} {}, {} ; jne 10 ; vchlgs {}, {}, {}",
-                    op, rm, rn, tmp, rn, rm
-                )
+                format!("{op} {rm}, {rn} ; jne 10 ; vchlgs {tmp}, {rn}, {rm}")
             }
             &Inst::VecLoad { rd, ref mem }
             | &Inst::VecLoadRev { rd, ref mem }
@@ -2663,7 +2690,7 @@ impl Inst {
                     },
                 );
                 let mem = mem.pretty_print_default();
-                format!("{}{} {}, {}", mem_str, opcode, rd, mem)
+                format!("{mem_str}{opcode} {rd}, {mem}")
             }
             &Inst::VecStore { rd, ref mem }
             | &Inst::VecStoreRev { rd, ref mem }
@@ -2699,7 +2726,7 @@ impl Inst {
                     },
                 );
                 let mem = mem.pretty_print_default();
-                format!("{}{} {}, {}", mem_str, opcode, rd, mem)
+                format!("{mem_str}{opcode} {rd}, {mem}")
             }
             &Inst::VecLoadReplicate { size, rd, ref mem }
             | &Inst::VecLoadReplicateRev { size, rd, ref mem } => {
@@ -2728,32 +2755,29 @@ impl Inst {
                     },
                 );
                 let mem = mem.pretty_print_default();
-                format!("{}{} {}, {}", mem_str, opcode, rd, mem)
+                format!("{mem_str}{opcode} {rd}, {mem}")
             }
             &Inst::VecMov { rd, rn } => {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
-                format!("vlr {}, {}", rd, rn)
+                format!("vlr {rd}, {rn}")
             }
             &Inst::VecCMov { rd, cond, ri, rm } => {
                 let rd = pretty_print_reg_mod(rd, ri);
                 let rm = pretty_print_reg(rm);
                 let cond = cond.invert().pretty_print_default();
-                format!("j{} 10 ; vlr {}, {}", cond, rd, rm)
+                format!("j{cond} 10 ; vlr {rd}, {rm}")
             }
             &Inst::MovToVec128 { rd, rn, rm } => {
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
                 let rm = pretty_print_reg(rm);
-                format!("vlvgp {}, {}, {}", rd, rn, rm)
+                format!("vlvgp {rd}, {rn}, {rm}")
             }
             &Inst::VecLoadConst { rd, const_data } => {
                 let rd = pretty_print_reg(rd.to_reg());
                 let tmp = pretty_print_reg(writable_spilltmp_reg().to_reg());
-                format!(
-                    "bras {}, 20 ; data.u128 0x{:032x} ; vl {}, 0({})",
-                    tmp, const_data, rd, tmp
-                )
+                format!("bras {tmp}, 20 ; data.u128 0x{const_data:032x} ; vl {rd}, 0({tmp})")
             }
             &Inst::VecLoadConstReplicate {
                 size,
@@ -2764,7 +2788,7 @@ impl Inst {
                 let tmp = pretty_print_reg(writable_spilltmp_reg().to_reg());
                 let (opcode, data) = match size {
                     32 => ("vlrepf", format!("0x{:08x}", const_data as u32)),
-                    64 => ("vlrepg", format!("0x{:016x}", const_data)),
+                    64 => ("vlrepg", format!("0x{const_data:016x}")),
                     _ => unreachable!(),
                 };
                 format!(
@@ -2780,7 +2804,7 @@ impl Inst {
             }
             &Inst::VecImmByteMask { rd, mask } => {
                 let rd = pretty_print_reg(rd.to_reg());
-                format!("vgbm {}, {}", rd, mask)
+                format!("vgbm {rd}, {mask}")
             }
             &Inst::VecImmBitMask {
                 size,
@@ -2796,7 +2820,7 @@ impl Inst {
                     64 => "vgmg",
                     _ => unreachable!(),
                 };
-                format!("{} {}, {}, {}", op, rd, start_bit, end_bit)
+                format!("{op} {rd}, {start_bit}, {end_bit}")
             }
             &Inst::VecImmReplicate { size, rd, imm } => {
                 let rd = pretty_print_reg(rd.to_reg());
@@ -2807,7 +2831,7 @@ impl Inst {
                     64 => "vrepig",
                     _ => unreachable!(),
                 };
-                format!("{} {}, {}", op, rd, imm)
+                format!("{op} {rd}, {imm}")
             }
             &Inst::VecLoadLane {
                 size,
@@ -2848,7 +2872,7 @@ impl Inst {
                     },
                 );
                 let mem = mem.pretty_print_default();
-                format!("{}{} {}, {}, {}", mem_str, opcode_vrx, rd, mem, lane_imm)
+                format!("{mem_str}{opcode_vrx} {rd}, {mem}, {lane_imm}")
             }
             &Inst::VecLoadLaneUndef {
                 size,
@@ -2907,7 +2931,7 @@ impl Inst {
                         },
                     );
                     let mem = mem.pretty_print_default();
-                    format!("{}{} {}, {}, {}", mem_str, opcode_vrx, rd, mem, lane_imm)
+                    format!("{mem_str}{opcode_vrx} {rd}, {mem}, {lane_imm}")
                 }
             }
             &Inst::VecStoreLane {
@@ -2967,7 +2991,7 @@ impl Inst {
                         },
                     );
                     let mem = mem.pretty_print_default();
-                    format!("{}{} {}, {}, {}", mem_str, opcode_vrx, rd, mem, lane_imm,)
+                    format!("{mem_str}{opcode_vrx} {rd}, {mem}, {lane_imm}",)
                 }
             }
             &Inst::VecInsertLane {
@@ -2992,7 +3016,7 @@ impl Inst {
                 } else {
                     "".to_string()
                 };
-                format!("{} {}, {}, {}{}", op, rd, rn, lane_imm, lane_reg)
+                format!("{op} {rd}, {rn}, {lane_imm}{lane_reg}")
             }
             &Inst::VecInsertLaneUndef {
                 size,
@@ -3019,7 +3043,7 @@ impl Inst {
                 {
                     format!("{} {}, {}", opcode_rre.unwrap(), rd_fpr.unwrap(), rn)
                 } else {
-                    format!("{} {}, {}, {}{}", opcode_vrs, rd, rn, lane_imm, lane_reg)
+                    format!("{opcode_vrs} {rd}, {rn}, {lane_imm}{lane_reg}")
                 }
             }
             &Inst::VecExtractLane {
@@ -3047,7 +3071,7 @@ impl Inst {
                 {
                     format!("{} {}, {}", opcode_rre.unwrap(), rd, rn_fpr.unwrap())
                 } else {
-                    format!("{} {}, {}, {}{}", opcode_vrs, rd, rn, lane_imm, lane_reg)
+                    format!("{opcode_vrs} {rd}, {rn}, {lane_imm}{lane_reg}")
                 }
             }
             &Inst::VecInsertLaneImm {
@@ -3065,7 +3089,7 @@ impl Inst {
                     _ => unreachable!(),
                 };
                 let rd = pretty_print_reg_mod(rd, ri);
-                format!("{} {}, {}, {}", op, rd, imm, lane_imm)
+                format!("{op} {rd}, {imm}, {lane_imm}")
             }
             &Inst::VecReplicateLane {
                 size,
@@ -3082,7 +3106,7 @@ impl Inst {
                 };
                 let rd = pretty_print_reg(rd.to_reg());
                 let rn = pretty_print_reg(rn);
-                format!("{} {}, {}, {}", op, rd, rn, lane_imm)
+                format!("{op} {rd}, {rn}, {lane_imm}")
             }
             &Inst::Extend {
                 rd,
@@ -3106,39 +3130,81 @@ impl Inst {
                     (true, 16, 64) => "lghr",
                     (false, 32, 64) => "llgfr",
                     (true, 32, 64) => "lgfr",
-                    _ => panic!("Unsupported Extend case: {:?}", self),
+                    _ => panic!("Unsupported Extend case: {self:?}"),
                 };
-                format!("{} {}, {}", op, rd, rn)
+                format!("{op} {rd}, {rn}")
             }
-            &Inst::Call { link, ref info, .. } => {
+            &Inst::AllocateArgs { size } => {
+                if let Ok(size) = i16::try_from(size) {
+                    format!("aghi {}, {}", show_reg(stack_reg()), -size)
+                } else {
+                    format!("slgfi {}, {}", show_reg(stack_reg()), size)
+                }
+            }
+            &Inst::Call { link, ref info } => {
                 let link = link.to_reg();
-                let tls_symbol = match &info.tls_symbol {
-                    None => "".to_string(),
-                    Some(SymbolReloc::TlsGd { name }) => {
-                        format!(":tls_gdcall:{}", name.display(None))
-                    }
-                    _ => unreachable!(),
+                let callee_pop_size = if info.callee_pop_size > 0 {
+                    format!(" ; callee_pop_size {}", info.callee_pop_size)
+                } else {
+                    "".to_string()
                 };
                 debug_assert_eq!(link, gpr(14));
                 format!(
                     "brasl {}, {}{}",
                     show_reg(link),
                     info.dest.display(None),
-                    tls_symbol
+                    callee_pop_size
                 )
             }
             &Inst::CallInd { link, ref info, .. } => {
                 let link = link.to_reg();
-                let rn = pretty_print_reg(info.rn);
+                let rn = pretty_print_reg(info.dest);
+                let callee_pop_size = if info.callee_pop_size > 0 {
+                    format!(" ; callee_pop_size {}", info.callee_pop_size)
+                } else {
+                    "".to_string()
+                };
                 debug_assert_eq!(link, gpr(14));
-                format!("basr {}, {}", show_reg(link), rn)
+                format!("basr {}, {}{}", show_reg(link), rn, callee_pop_size)
+            }
+            &Inst::ReturnCall { ref info } => {
+                let callee_pop_size = if info.callee_pop_size > 0 {
+                    format!(" ; callee_pop_size {}", info.callee_pop_size)
+                } else {
+                    "".to_string()
+                };
+                format!("return_call {}{}", info.dest.display(None), callee_pop_size)
+            }
+            &Inst::ReturnCallInd { ref info } => {
+                let rn = pretty_print_reg(info.dest);
+                let callee_pop_size = if info.callee_pop_size > 0 {
+                    format!(" ; callee_pop_size {}", info.callee_pop_size)
+                } else {
+                    "".to_string()
+                };
+                format!("return_call_ind {rn}{callee_pop_size}")
+            }
+            &Inst::ElfTlsGetOffset {
+                ref symbol,
+                ref link,
+                ..
+            } => {
+                let link = link.to_reg();
+                let dest = match &**symbol {
+                    SymbolReloc::TlsGd { name } => {
+                        format!("tls_gdcall:{}", name.display(None))
+                    }
+                    _ => unreachable!(),
+                };
+                debug_assert_eq!(link, gpr(14));
+                format!("brasl {}, {}", show_reg(link), dest)
             }
             &Inst::Args { ref args } => {
                 let mut s = "args".to_string();
                 for arg in args {
                     let preg = pretty_print_reg(arg.preg);
                     let def = pretty_print_reg(arg.vreg.to_reg());
-                    write!(&mut s, " {}={}", def, preg).unwrap();
+                    write!(&mut s, " {def}={preg}").unwrap();
                 }
                 s
             }
@@ -3147,7 +3213,7 @@ impl Inst {
                 for ret in rets {
                     let preg = pretty_print_reg(ret.preg);
                     let vreg = pretty_print_reg(ret.vreg);
-                    write!(&mut s, " {}={}", vreg, preg).unwrap();
+                    write!(&mut s, " {vreg}={preg}").unwrap();
                 }
                 s
             }
@@ -3158,11 +3224,11 @@ impl Inst {
             }
             &Inst::Jump { dest } => {
                 let dest = dest.to_string();
-                format!("jg {}", dest)
+                format!("jg {dest}")
             }
             &Inst::IndirectBr { rn, .. } => {
                 let rn = pretty_print_reg(rn);
-                format!("br {}", rn)
+                format!("br {rn}")
             }
             &Inst::CondBr {
                 taken,
@@ -3172,20 +3238,20 @@ impl Inst {
                 let taken = taken.to_string();
                 let not_taken = not_taken.to_string();
                 let cond = cond.pretty_print_default();
-                format!("jg{} {} ; jg {}", cond, taken, not_taken)
+                format!("jg{cond} {taken} ; jg {not_taken}")
             }
             &Inst::OneWayCondBr { target, cond } => {
                 let target = target.to_string();
                 let cond = cond.pretty_print_default();
-                format!("jg{} {}", cond, target)
+                format!("jg{cond} {target}")
             }
             &Inst::Debugtrap => ".word 0x0001 # debugtrap".to_string(),
             &Inst::Trap { trap_code } => {
-                format!(".word 0x0000 # trap={}", trap_code)
+                format!(".word 0x0000 # trap={trap_code}")
             }
             &Inst::TrapIf { cond, trap_code } => {
                 let cond = cond.pretty_print_default();
-                format!("jg{} .+2 # trap={}", cond, trap_code)
+                format!("jg{cond} .+2 # trap={trap_code}")
             }
             &Inst::JTSequence { ridx, ref targets } => {
                 let ridx = pretty_print_reg(ridx);
@@ -3220,7 +3286,7 @@ impl Inst {
                     }
                     SymbolReloc::TlsGd { name } => format!("{}@tlsgd", name.display(None)),
                 };
-                format!("bras {}, 12 ; data {} ; lg {}, 0({})", tmp, symbol, rd, tmp)
+                format!("bras {tmp}, 12 ; data {symbol} ; lg {rd}, 0({tmp})")
             }
             &Inst::LoadAddr { rd, ref mem } => {
                 let rd = pretty_print_reg(rd.to_reg());
@@ -3244,7 +3310,7 @@ impl Inst {
                 };
                 let mem = mem.pretty_print_default();
 
-                format!("{}{} {}, {}", mem_str, op, rd, mem)
+                format!("{mem_str}{op} {rd}, {mem}")
             }
             &Inst::Loop { ref body, cond } => {
                 let body = body
@@ -3253,18 +3319,18 @@ impl Inst {
                     .collect::<Vec<_>>()
                     .join(" ; ");
                 let cond = cond.pretty_print_default();
-                format!("0: {} ; jg{} 0b ; 1:", body, cond)
+                format!("0: {body} ; jg{cond} 0b ; 1:")
             }
             &Inst::CondBreak { cond } => {
                 let cond = cond.pretty_print_default();
-                format!("jg{} 1f", cond)
+                format!("jg{cond} 1f")
             }
             &Inst::Unwind { ref inst } => {
-                format!("unwind {:?}", inst)
+                format!("unwind {inst:?}")
             }
             &Inst::DummyUse { reg } => {
                 let reg = pretty_print_reg(reg);
-                format!("dummy_use {}", reg)
+                format!("dummy_use {reg}")
             }
         }
     }

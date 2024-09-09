@@ -14,7 +14,7 @@ use crate::machinst::lower::*;
 use crate::machinst::*;
 use crate::result::CodegenResult;
 use crate::settings::Flags;
-use smallvec::smallvec;
+use smallvec::{smallvec, SmallVec};
 use target_lexicon::Triple;
 
 //=============================================================================
@@ -34,8 +34,7 @@ impl Lower<'_, Inst> {
 
 fn is_int_or_ref_ty(ty: Type) -> bool {
     match ty {
-        types::I8 | types::I16 | types::I32 | types::I64 | types::R64 => true,
-        types::R32 => panic!("shouldn't have 32-bits refs on x64"),
+        types::I8 | types::I16 | types::I32 | types::I64 => true,
         _ => false,
     }
 }
@@ -152,8 +151,7 @@ fn emit_vm_call(
     triple: &Triple,
     libcall: LibCall,
     inputs: &[Reg],
-    outputs: &[Writable<Reg>],
-) -> CodegenResult<()> {
+) -> CodegenResult<SmallVec<[Reg; 1]>> {
     let extname = ExternalName::LibCall(libcall);
 
     let dist = if flags.use_colocated_libcalls() {
@@ -182,8 +180,11 @@ fn emit_vm_call(
     }
 
     let mut retval_insts: SmallInstVec<_> = smallvec![];
-    for (i, output) in outputs.iter().enumerate() {
-        retval_insts.extend(abi.gen_retval(ctx, i, ValueRegs::one(*output)).into_iter());
+    let mut outputs: SmallVec<[_; 1]> = smallvec![];
+    for i in 0..ctx.sigs().num_rets(ctx.sigs().abi_sig_for_signature(&sig)) {
+        let (retval_inst, retval_regs) = abi.gen_retval(ctx, i);
+        retval_insts.extend(retval_inst.into_iter());
+        outputs.push(retval_regs.only_reg().unwrap());
     }
 
     abi.emit_call(ctx);
@@ -192,7 +193,7 @@ fn emit_vm_call(
         ctx.emit(inst);
     }
 
-    Ok(())
+    Ok(outputs)
 }
 
 /// Returns whether the given input is a shift by a constant value less or equal than 3.
@@ -289,8 +290,8 @@ fn lower_to_amode(ctx: &mut Lower<Inst>, spec: InsnInput, offset: i32) -> Amode 
 
         return Amode::imm_reg_reg_shift(
             offset,
-            Gpr::new(base).unwrap(),
-            Gpr::new(index).unwrap(),
+            Gpr::unwrap_new(base),
+            Gpr::unwrap_new(index),
             shift,
         )
         .with_flags(flags);

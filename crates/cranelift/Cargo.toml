@@ -9,6 +9,7 @@ documentation = "https://docs.rs/wasmtime-cranelift/"
 categories = ["wasm"]
 keywords = ["webassembly", "wasm"]
 edition.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -27,6 +28,7 @@ wasmparser = { workspace = true }
 target-lexicon = { workspace = true }
 gimli = { workspace = true, features = ['std'] }
 object = { workspace = true, features = ['write', 'std'] }
+smallvec = { workspace = true }
 thiserror = { workspace = true }
 cfg-if = { workspace = true }
 wasmtime-versioned-export-macros = { workspace = true }
@@ -36,6 +38,6 @@ all-arch = ["cranelift-codegen/all-arch"]
 host-arch = ["cranelift-codegen/host-arch"]
 component-model = ["wasmtime-environ/component-model"]
 incremental-cache = ["cranelift-codegen/incremental-cache"]
-wmemcheck = []
+wmemcheck = ["wasmtime-environ/wmemcheck"]
 gc = ["wasmtime-environ/gc"]
 threads = ["wasmtime-environ/threads"]

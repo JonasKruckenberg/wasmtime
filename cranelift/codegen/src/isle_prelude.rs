@@ -24,6 +24,16 @@ macro_rules! isle_common_prelude_methods {
         }
 
         #[inline]
+        fn u16_as_i16(&mut self, x: u16) -> i16 {
+            x as i16
+        }
+
+        #[inline]
+        fn u16_as_u32(&mut self, x: u16) -> u32 {
+            x.into()
+        }
+
+        #[inline]
         fn u16_as_u64(&mut self, x: u16) -> u64 {
             x.into()
         }
@@ -41,6 +51,11 @@ macro_rules! isle_common_prelude_methods {
         #[inline]
         fn u64_as_i32(&mut self, x: u64) -> i32 {
             x as i32
+        }
+
+        #[inline]
+        fn u64_as_i64(&mut self, x: u64) -> i64 {
+            x as i64
         }
 
         #[inline]
@@ -193,9 +208,8 @@ macro_rules! isle_common_prelude_methods {
         }
 
         #[inline]
-        fn i64_sextend_imm64(&mut self, ty: Type, mut x: Imm64) -> i64 {
-            x.sign_extend_from_width(ty.bits());
-            x.bits()
+        fn i64_sextend_imm64(&mut self, ty: Type, x: Imm64) -> i64 {
+            x.sign_extend_from_width(ty.bits()).bits()
         }
 
         #[inline]
@@ -407,7 +421,7 @@ macro_rules! isle_common_prelude_methods {
         #[inline]
         fn ty_int_ref_64(&mut self, ty: Type) -> Option<Type> {
             match ty {
-                I64 | R64 => Some(ty),
+                I64 => Some(ty),
                 _ => None,
             }
         }
@@ -415,7 +429,7 @@ macro_rules! isle_common_prelude_methods {
         #[inline]
         fn ty_int_ref_16_to_64(&mut self, ty: Type) -> Option<Type> {
             match ty {
-                I16 | I32 | I64 | R64 => Some(ty),
+                I16 | I32 | I64 => Some(ty),
                 _ => None,
             }
         }
@@ -436,18 +450,19 @@ macro_rules! isle_common_prelude_methods {
 
         #[inline]
         fn ty_scalar_float(&mut self, ty: Type) -> Option<Type> {
-            match ty {
-                F32 | F64 => Some(ty),
-                _ => None,
+            if ty.is_float() {
+                Some(ty)
+            } else {
+                None
             }
         }
 
         #[inline]
         fn ty_float_or_vec(&mut self, ty: Type) -> Option<Type> {
-            match ty {
-                F32 | F64 => Some(ty),
-                ty if ty.is_vector() => Some(ty),
-                _ => None,
+            if ty.is_float() || ty.is_vector() {
+                Some(ty)
+            } else {
+                None
             }
         }
 
@@ -534,7 +549,7 @@ macro_rules! isle_common_prelude_methods {
         #[inline]
         fn ty_addr64(&mut self, ty: Type) -> Option<Type> {
             match ty {
-                I64 | R64 => Some(ty),
+                I64 => Some(ty),
                 _ => None,
             }
         }
@@ -598,6 +613,10 @@ macro_rules! isle_common_prelude_methods {
             } else {
                 None
             }
+        }
+
+        fn u16_from_ieee16(&mut self, val: Ieee16) -> u16 {
+            val.bits()
         }
 
         fn u32_from_ieee32(&mut self, val: Ieee32) -> u32 {
@@ -896,8 +915,40 @@ macro_rules! isle_common_prelude_methods {
             u32::try_from(val).ok()
         }
 
+        fn u32_as_u16(&mut self, val: u32) -> Option<u16> {
+            val.try_into().ok()
+        }
+
         fn u8_as_i8(&mut self, val: u8) -> i8 {
             val as i8
+        }
+
+        fn u64_as_u8(&mut self, val: u64) -> u8 {
+            val as u8
+        }
+
+        fn u64_as_u16(&mut self, val: u64) -> u16 {
+            val as u16
+        }
+
+        fn u16_try_from_u64(&mut self, val: u64) -> Option<u16> {
+            u16::try_from(val).ok()
+        }
+
+        fn u32_try_from_u64(&mut self, val: u64) -> Option<u32> {
+            u32::try_from(val).ok()
+        }
+
+        fn i8_try_from_u64(&mut self, val: u64) -> Option<i8> {
+            i8::try_from(val).ok()
+        }
+
+        fn i16_try_from_u64(&mut self, val: u64) -> Option<i16> {
+            i16::try_from(val).ok()
+        }
+
+        fn i32_try_from_u64(&mut self, val: u64) -> Option<i32> {
+            i32::try_from(val).ok()
         }
 
         fn u128_replicated_u64(&mut self, val: u128) -> Option<u64> {
@@ -938,8 +989,72 @@ macro_rules! isle_common_prelude_methods {
             }
         }
 
+        fn f16_min(&mut self, a: Ieee16, b: Ieee16) -> Option<Ieee16> {
+            a.minimum(b).non_nan()
+        }
+
+        fn f16_max(&mut self, a: Ieee16, b: Ieee16) -> Option<Ieee16> {
+            a.maximum(b).non_nan()
+        }
+
+        fn f16_neg(&mut self, n: Ieee16) -> Ieee16 {
+            -n
+        }
+
+        fn f16_abs(&mut self, n: Ieee16) -> Ieee16 {
+            n.abs()
+        }
+
+        fn f16_copysign(&mut self, a: Ieee16, b: Ieee16) -> Ieee16 {
+            a.copysign(b)
+        }
+
+        fn f32_add(&mut self, lhs: Ieee32, rhs: Ieee32) -> Option<Ieee32> {
+            (lhs + rhs).non_nan()
+        }
+
+        fn f32_sub(&mut self, lhs: Ieee32, rhs: Ieee32) -> Option<Ieee32> {
+            (lhs - rhs).non_nan()
+        }
+
+        fn f32_mul(&mut self, lhs: Ieee32, rhs: Ieee32) -> Option<Ieee32> {
+            (lhs * rhs).non_nan()
+        }
+
+        fn f32_div(&mut self, lhs: Ieee32, rhs: Ieee32) -> Option<Ieee32> {
+            (lhs / rhs).non_nan()
+        }
+
+        fn f32_sqrt(&mut self, n: Ieee32) -> Option<Ieee32> {
+            n.sqrt().non_nan()
+        }
+
+        fn f32_ceil(&mut self, n: Ieee32) -> Option<Ieee32> {
+            n.ceil().non_nan()
+        }
+
+        fn f32_floor(&mut self, n: Ieee32) -> Option<Ieee32> {
+            n.floor().non_nan()
+        }
+
+        fn f32_trunc(&mut self, n: Ieee32) -> Option<Ieee32> {
+            n.trunc().non_nan()
+        }
+
+        fn f32_nearest(&mut self, n: Ieee32) -> Option<Ieee32> {
+            n.round_ties_even().non_nan()
+        }
+
+        fn f32_min(&mut self, a: Ieee32, b: Ieee32) -> Option<Ieee32> {
+            a.minimum(b).non_nan()
+        }
+
+        fn f32_max(&mut self, a: Ieee32, b: Ieee32) -> Option<Ieee32> {
+            a.maximum(b).non_nan()
+        }
+
         fn f32_neg(&mut self, n: Ieee32) -> Ieee32 {
-            n.neg()
+            -n
         }
 
         fn f32_abs(&mut self, n: Ieee32) -> Ieee32 {
@@ -950,8 +1065,52 @@ macro_rules! isle_common_prelude_methods {
             a.copysign(b)
         }
 
+        fn f64_add(&mut self, lhs: Ieee64, rhs: Ieee64) -> Option<Ieee64> {
+            (lhs + rhs).non_nan()
+        }
+
+        fn f64_sub(&mut self, lhs: Ieee64, rhs: Ieee64) -> Option<Ieee64> {
+            (lhs - rhs).non_nan()
+        }
+
+        fn f64_mul(&mut self, lhs: Ieee64, rhs: Ieee64) -> Option<Ieee64> {
+            (lhs * rhs).non_nan()
+        }
+
+        fn f64_div(&mut self, lhs: Ieee64, rhs: Ieee64) -> Option<Ieee64> {
+            (lhs / rhs).non_nan()
+        }
+
+        fn f64_sqrt(&mut self, n: Ieee64) -> Option<Ieee64> {
+            n.sqrt().non_nan()
+        }
+
+        fn f64_ceil(&mut self, n: Ieee64) -> Option<Ieee64> {
+            n.ceil().non_nan()
+        }
+
+        fn f64_floor(&mut self, n: Ieee64) -> Option<Ieee64> {
+            n.floor().non_nan()
+        }
+
+        fn f64_trunc(&mut self, n: Ieee64) -> Option<Ieee64> {
+            n.trunc().non_nan()
+        }
+
+        fn f64_nearest(&mut self, n: Ieee64) -> Option<Ieee64> {
+            n.round_ties_even().non_nan()
+        }
+
+        fn f64_min(&mut self, a: Ieee64, b: Ieee64) -> Option<Ieee64> {
+            a.minimum(b).non_nan()
+        }
+
+        fn f64_max(&mut self, a: Ieee64, b: Ieee64) -> Option<Ieee64> {
+            a.maximum(b).non_nan()
+        }
+
         fn f64_neg(&mut self, n: Ieee64) -> Ieee64 {
-            n.neg()
+            -n
         }
 
         fn f64_abs(&mut self, n: Ieee64) -> Ieee64 {
@@ -959,6 +1118,26 @@ macro_rules! isle_common_prelude_methods {
         }
 
         fn f64_copysign(&mut self, a: Ieee64, b: Ieee64) -> Ieee64 {
+            a.copysign(b)
+        }
+
+        fn f128_min(&mut self, a: Ieee128, b: Ieee128) -> Option<Ieee128> {
+            a.minimum(b).non_nan()
+        }
+
+        fn f128_max(&mut self, a: Ieee128, b: Ieee128) -> Option<Ieee128> {
+            a.maximum(b).non_nan()
+        }
+
+        fn f128_neg(&mut self, n: Ieee128) -> Ieee128 {
+            -n
+        }
+
+        fn f128_abs(&mut self, n: Ieee128) -> Ieee128 {
+            n.abs()
+        }
+
+        fn f128_copysign(&mut self, a: Ieee128, b: Ieee128) -> Ieee128 {
             a.copysign(b)
         }
     };

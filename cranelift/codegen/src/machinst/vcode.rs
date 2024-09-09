@@ -185,11 +185,6 @@ pub struct VCode<I: VCodeInst> {
     /// immutable across function compilations within the same module.
     emit_info: I::Info,
 
-    /// Reference-typed `regalloc2::VReg`s. The regalloc requires
-    /// these in a dense slice (as opposed to querying the
-    /// reftype-status of each vreg) for efficient iteration.
-    reftyped_vregs: Vec<VReg>,
-
     /// Constants.
     pub(crate) constants: VCodeConstants,
 
@@ -521,8 +516,7 @@ impl<I: VCodeInst> VCodeBuilder<I> {
                 // instructions.
                 assert!(
                     src.is_virtual(),
-                    "the real register {:?} was used as the source of a move instruction",
-                    src
+                    "the real register {src:?} was used as the source of a move instruction"
                 );
                 assert!(
                     dst.to_reg().is_virtual(),
@@ -544,25 +538,11 @@ impl<I: VCodeInst> VCodeBuilder<I> {
     pub fn build(mut self, mut vregs: VRegAllocator<I>) -> VCode<I> {
         self.vcode.vreg_types = take(&mut vregs.vreg_types);
         self.vcode.facts = take(&mut vregs.facts);
-        self.vcode.reftyped_vregs = take(&mut vregs.reftyped_vregs);
 
         if self.direction == VCodeBuildDirection::Backward {
             self.reverse_and_finalize(&vregs);
         }
         self.collect_operands(&vregs);
-
-        // Apply register aliases to the `reftyped_vregs` list since this list
-        // will be returned directly to `regalloc2` eventually and all
-        // operands/results of instructions will use the alias-resolved vregs
-        // from `regalloc2`'s perspective.
-        //
-        // Also note that `reftyped_vregs` can't have duplicates, so after the
-        // aliases are applied duplicates are removed.
-        for reg in self.vcode.reftyped_vregs.iter_mut() {
-            *reg = vregs.resolve_vreg_alias(*reg);
-        }
-        self.vcode.reftyped_vregs.sort();
-        self.vcode.reftyped_vregs.dedup();
 
         self.compute_preds_from_succs();
         self.vcode.debug_value_labels.sort_unstable();
@@ -578,8 +558,6 @@ impl<I: VCodeInst> VCodeBuilder<I> {
         vregs.debug_assert_no_vreg_aliases(self.vcode.block_params.iter().copied());
         // Branch block args are resolved in collect_operands.
         vregs.debug_assert_no_vreg_aliases(self.vcode.branch_block_args.iter().copied());
-        // Reftyped vregs are resolved above in this function.
-        vregs.debug_assert_no_vreg_aliases(self.vcode.reftyped_vregs.iter().copied());
         // Debug value labels are resolved in reverse_and_finalize.
         vregs.debug_assert_no_vreg_aliases(
             self.vcode.debug_value_labels.iter().map(|&(vreg, ..)| vreg),
@@ -611,11 +589,6 @@ impl<I: VCodeInst> VCodeBuilder<I> {
         let old_entry = self.vcode.user_stack_maps.insert(inst, stack_map);
         debug_assert!(old_entry.is_none());
     }
-}
-
-/// Is this type a reference type?
-fn is_reftype(ty: Type) -> bool {
-    ty == types::R64 || ty == types::R32
 }
 
 const NO_INST_OFFSET: CodeOffset = u32::MAX;
@@ -653,7 +626,6 @@ impl<I: VCodeInst> VCode<I> {
             block_order,
             abi,
             emit_info,
-            reftyped_vregs: vec![],
             constants,
             debug_value_labels: vec![],
             facts: vec![],
@@ -912,39 +884,6 @@ impl<I: VCodeInst> VCode<I> {
                         // If this is a safepoint, compute a stack map
                         // and pass it to the emit state.
                         let stack_map_disasm = if self.insts[iix.index()].is_safepoint() {
-                            let mut safepoint_slots: SmallVec<[SpillSlot; 8]> = smallvec![];
-                            // Find the contiguous range of
-                            // (progpoint, allocation) safepoint slot
-                            // records in `regalloc.safepoint_slots`
-                            // for this instruction index.
-                            let safepoint_slots_start = regalloc
-                                .safepoint_slots
-                                .binary_search_by(|(progpoint, _alloc)| {
-                                    if progpoint.inst() >= iix {
-                                        std::cmp::Ordering::Greater
-                                    } else {
-                                        std::cmp::Ordering::Less
-                                    }
-                                })
-                                .unwrap_err();
-
-                            for (_, alloc) in regalloc.safepoint_slots[safepoint_slots_start..]
-                                .iter()
-                                .take_while(|(progpoint, _)| progpoint.inst() == iix)
-                            {
-                                let slot = alloc.as_stack().unwrap();
-                                safepoint_slots.push(slot);
-                            }
-
-                            let stack_map = if safepoint_slots.is_empty() {
-                                None
-                            } else {
-                                Some(
-                                    self.abi
-                                        .spillslots_to_stack_map(&safepoint_slots[..], &state),
-                                )
-                            };
-
                             let (user_stack_map, user_stack_map_disasm) = {
                                 // The `user_stack_maps` is keyed by reverse
                                 // instruction index, so we must flip the
@@ -959,7 +898,7 @@ impl<I: VCodeInst> VCode<I> {
                                 (user_stack_map, user_stack_map_disasm)
                             };
 
-                            state.pre_safepoint(stack_map, user_stack_map);
+                            state.pre_safepoint(user_stack_map);
 
                             user_stack_map_disasm
                         } else {
@@ -1334,7 +1273,7 @@ impl<I: VCodeInst> RegallocFunction for VCode<I> {
 
     fn block_insns(&self, block: BlockIndex) -> InstRange {
         let range = self.block_ranges.get(block.index());
-        InstRange::forward(InsnIndex::new(range.start), InsnIndex::new(range.end))
+        InstRange::new(InsnIndex::new(range.start), InsnIndex::new(range.end))
     }
 
     fn block_succs(&self, block: BlockIndex) -> &[BlockIndex] {
@@ -1381,10 +1320,6 @@ impl<I: VCodeInst> RegallocFunction for VCode<I> {
         }
     }
 
-    fn requires_refs_on_stack(&self, insn: InsnIndex) -> bool {
-        self.insts[insn.index()].is_safepoint()
-    }
-
     fn inst_operands(&self, insn: InsnIndex) -> &[Operand] {
         let range = self.operand_ranges.get(insn.index());
         &self.operands[range]
@@ -1396,10 +1331,6 @@ impl<I: VCodeInst> RegallocFunction for VCode<I> {
 
     fn num_vregs(&self) -> usize {
         self.vreg_types.len()
-    }
-
-    fn reftype_vregs(&self) -> &[VReg] {
-        &self.reftyped_vregs
     }
 
     fn debug_value_labels(&self) -> &[(VReg, InsnIndex, InsnIndex, u32)] {
@@ -1431,7 +1362,7 @@ impl<I: VCodeInst> Debug for VRegAllocator<I> {
 
         for (vreg, fact) in self.facts.iter().enumerate() {
             if let Some(fact) = fact {
-                writeln!(f, "  v{} ! {}", vreg, fact)?;
+                writeln!(f, "  v{vreg} ! {fact}")?;
             }
         }
 
@@ -1455,7 +1386,7 @@ impl<I: VCodeInst> fmt::Debug for VCode<I> {
                 self.block_params(block)
             )?;
             if let Some(bb) = self.bindex_to_bb(block) {
-                writeln!(f, "    (original IR block: {})", bb)?;
+                writeln!(f, "    (original IR block: {bb})")?;
             }
             for (succ_idx, succ) in self.block_succs(block).iter().enumerate() {
                 writeln!(
@@ -1497,11 +1428,6 @@ pub struct VRegAllocator<I> {
     /// VReg IR-level types.
     vreg_types: Vec<Type>,
 
-    /// Reference-typed `regalloc2::VReg`s. The regalloc requires
-    /// these in a dense slice (as opposed to querying the
-    /// reftype-status of each vreg) for efficient iteration.
-    reftyped_vregs: Vec<VReg>,
-
     /// VReg aliases. When the final VCode is built we rewrite all
     /// uses of the keys in this table to their replacement values.
     ///
@@ -1531,7 +1457,6 @@ impl<I: VCodeInst> VRegAllocator<I> {
         vreg_types.resize(first_user_vreg_index(), types::INVALID);
         Self {
             vreg_types,
-            reftyped_vregs: vec![],
             vreg_aliases: FxHashMap::with_capacity_and_hasher(capacity, Default::default()),
             deferred_error: None,
             facts: Vec::with_capacity(capacity),
@@ -1562,9 +1487,6 @@ impl<I: VCodeInst> VRegAllocator<I> {
             let vreg = reg.to_virtual_reg().unwrap();
             debug_assert_eq!(self.vreg_types.len(), vreg.index());
             self.vreg_types.push(reg_ty);
-            if is_reftype(reg_ty) {
-                self.reftyped_vregs.push(vreg.into());
-            }
         }
 
         // Create empty facts for each allocated vreg.

@@ -161,7 +161,7 @@ impl Component {
     #[cfg(any(feature = "cranelift", feature = "winch"))]
     pub fn new(engine: &Engine, bytes: impl AsRef<[u8]>) -> Result<Component> {
         crate::CodeBuilder::new(engine)
-            .wasm(bytes.as_ref(), None)?
+            .wasm_binary_or_text(bytes.as_ref(), None)?
             .compile_component()
     }
 
@@ -173,7 +173,7 @@ impl Component {
     #[cfg(all(feature = "std", any(feature = "cranelift", feature = "winch")))]
     pub fn from_file(engine: &Engine, file: impl AsRef<Path>) -> Result<Component> {
         crate::CodeBuilder::new(engine)
-            .wasm_file(file.as_ref())?
+            .wasm_binary_or_text_file(file.as_ref())?
             .compile_component()
     }
 
@@ -189,8 +189,7 @@ impl Component {
     #[cfg(any(feature = "cranelift", feature = "winch"))]
     pub fn from_binary(engine: &Engine, binary: &[u8]) -> Result<Component> {
         crate::CodeBuilder::new(engine)
-            .wasm(binary, None)?
-            .wat(false)?
+            .wasm_binary(binary, None)?
             .compile_component()
     }
 
@@ -243,7 +242,7 @@ impl Component {
     /// An important point to note here is that the precise type of imports and
     /// exports of a component change when it is instantiated with respect to
     /// resources. For example a [`Component`] represents an un-instantiated
-    /// component meaning that its imported resources are represeted as abstract
+    /// component meaning that its imported resources are represented as abstract
     /// resource types. These abstract types are not equal to any other
     /// component's types.
     ///

@@ -1,7 +1,7 @@
 [package]
 authors = ["The Cranelift Project Developers"]
 name = "cranelift-codegen"
-version = "0.111.0"
+version = "0.113.0"
 description = "Low-level code generator library"
 license = "Apache-2.0 WITH LLVM-exception"
 documentation = "https://docs.rs/cranelift-codegen"
@@ -11,6 +11,7 @@ readme = "README.md"
 keywords = ["compile", "compiler", "jit"]
 build = "build.rs"
 edition.workspace = true
+rust-version.workspace = true
 
 [lints]
 workspace = true
@@ -19,7 +20,7 @@ workspace = true
 anyhow = { workspace = true, optional = true, features = ['std'] }
 bumpalo = "3"
 capstone = { workspace = true, optional = true }
-cranelift-codegen-shared = { path = "./shared", version = "0.111.0" }
+cranelift-codegen-shared = { path = "./shared", version = "0.113.0" }
 cranelift-entity = { workspace = true }
 cranelift-bforest = { workspace = true }
 cranelift-bitset = { workspace = true }
@@ -29,10 +30,11 @@ target-lexicon = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_derive = { workspace = true, optional = true }
+pulley-interpreter = { workspace = true, optional = true }
 postcard = { workspace = true, optional = true }
 gimli = { workspace = true, features = ["write", "std"], optional = true }
 smallvec = { workspace = true }
-regalloc2 = { workspace = true, features = ["checker", "trace-log"] }
+regalloc2 = { workspace = true, features = ["checker"] }
 souper-ir = { version = "2.1.0", optional = true }
 sha2 = { version = "0.10.2", optional = true }
 rustc-hash  = { workspace = true }
@@ -47,8 +49,8 @@ similar = "2.1.0"
 env_logger = { workspace = true }
 
 [build-dependencies]
-cranelift-codegen-meta = { path = "meta", version = "0.111.0" }
-cranelift-isle = { path = "../isle/isle", version = "=0.111.0" }
+cranelift-codegen-meta = { path = "meta", version = "0.113.0" }
+cranelift-isle = { path = "../isle/isle", version = "=0.113.0" }
 
 [features]
 default = ["std", "unwind", "host-arch", "timing"]
@@ -69,7 +71,7 @@ core = []
 disas = ["anyhow", "capstone"]
 
 # Enables detailed logging which can be somewhat expensive.
-trace-log = []
+trace-log = ["regalloc2/trace-log"]
 
 # This enables unwind info generation functionality.
 unwind = ["gimli"]
@@ -80,6 +82,7 @@ x86 = []
 arm64 = []
 s390x = []
 riscv64 = []
+pulley = ["dep:pulley-interpreter", "pulley-interpreter/encode", "pulley-interpreter/disas"]
 # Enable the ISA target for the host machine
 host-arch = []
 
@@ -88,7 +91,8 @@ all-arch = [
     "x86",
     "arm64",
     "s390x",
-    "riscv64"
+    "riscv64",
+    "pulley",
 ]
 
 # For dependent crates that want to serialize some parts of cranelift

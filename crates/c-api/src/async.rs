@@ -126,7 +126,7 @@ async fn invoke_c_async_callback<'a>(
     let (params, out_results) = hostcall_val_storage.split_at_mut(params.len());
 
     // Invoke the C function pointer.
-    // The result will be a continutation which we will wrap in a Future.
+    // The result will be a continuation which we will wrap in a Future.
     let mut caller = wasmtime_caller_t { caller };
     let mut trap = None;
     extern "C" fn panic_callback(_: *mut c_void) -> bool {
@@ -233,7 +233,7 @@ async fn do_func_call_async(
     match result {
         Ok(()) => {
             for (slot, val) in results.iter_mut().zip(wt_results.iter()) {
-                crate::initialize(slot, wasmtime_val_t::from_val(&mut store, val.clone()));
+                crate::initialize(slot, wasmtime_val_t::from_val(&mut store, *val));
             }
             params.truncate(0);
             store.as_context_mut().data_mut().wasm_val_storage = params;

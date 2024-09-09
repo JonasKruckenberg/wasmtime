@@ -36,7 +36,12 @@ fn main() {
         .iter()
         .cloned()
         .filter(|isa| {
-            let env_key = format!("CARGO_FEATURE_{}", isa.to_string().to_uppercase());
+            let env_key = match isa {
+                meta::isa::Isa::Pulley32 | meta::isa::Isa::Pulley64 => {
+                    "CARGO_FEATURE_PULLEY".to_string()
+                }
+                _ => format!("CARGO_FEATURE_{}", isa.to_string().to_uppercase()),
+            };
             all_arch || env::var(env_key).is_ok()
         })
         .collect::<Vec<_>>();
@@ -48,7 +53,7 @@ fn main() {
         // Try to match native target.
         let target_name = target_triple.split('-').next().unwrap();
         let isa = meta::isa_from_arch(&target_name).expect("error when identifying target");
-        println!("cargo:rustc-cfg=feature=\"{}\"", isa);
+        println!("cargo:rustc-cfg=feature=\"{isa}\"");
         isas.push(isa);
     }
 
@@ -82,13 +87,13 @@ fn main() {
     }
 
     if let Err(err) = meta::generate(&isas, &out_dir, isle_dir) {
-        eprintln!("Error: {}", err);
+        eprintln!("Error: {err}");
         process::exit(1);
     }
 
     if &std::env::var("SKIP_ISLE").unwrap_or("0".to_string()) != "1" {
         if let Err(err) = build_isle(crate_dir, isle_dir) {
-            eprintln!("Error: {}", err);
+            eprintln!("Error: {err}");
             process::exit(1);
         }
     }
@@ -121,7 +126,7 @@ fn main() {
         let status = child.wait().unwrap();
         if status.success() {
             let git_rev = git_rev.trim().chars().take(9).collect::<String>();
-            format!("{}-{}", pkg_version, git_rev)
+            format!("{pkg_version}-{git_rev}")
         } else {
             // not a git repo
             pkg_version
@@ -134,8 +139,7 @@ fn main() {
         std::path::Path::new(&out_dir).join("version.rs"),
         format!(
             "/// Version number of this crate. \n\
-            pub const VERSION: &str = \"{}\";",
-            version
+            pub const VERSION: &str = \"{version}\";"
         ),
     )
     .unwrap();
@@ -174,7 +178,7 @@ fn build_isle(
         if let Err(e) = run_compilation(compilation) {
             had_error = true;
             eprintln!("Error building ISLE files:");
-            eprintln!("{:?}", e);
+            eprintln!("{e:?}");
             #[cfg(not(feature = "isle-errors"))]
             {
                 eprintln!("To see a more detailed error report, run: ");
@@ -221,10 +225,7 @@ fn run_compilation(compilation: &IsleCompilation) -> Result<(), Errors> {
     };
 
     let code = rustfmt(&code).unwrap_or_else(|e| {
-        println!(
-            "cargo:warning=Failed to run `rustfmt` on ISLE-generated code: {:?}",
-            e
-        );
+        println!("cargo:warning=Failed to run `rustfmt` on ISLE-generated code: {e:?}");
         code
     });
 
@@ -258,7 +259,7 @@ fn rustfmt(code: &str) -> std::io::Result<String> {
     if !status.success() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            format!("`rustfmt` exited with status {}", status),
+            format!("`rustfmt` exited with status {status}"),
         ));
     }
 

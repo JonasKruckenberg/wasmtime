@@ -2,8 +2,8 @@
 
 pub use emit_state::EmitState;
 
-use crate::binemit::{Addend, CodeOffset, Reloc, StackMap};
-use crate::ir::{types, ExternalName, LibCall, Opcode, TrapCode, Type};
+use crate::binemit::{Addend, CodeOffset, Reloc};
+use crate::ir::{types, ExternalName, LibCall, TrapCode, Type};
 use crate::isa::x64::abi::X64ABIMachineSpec;
 use crate::isa::x64::inst::regs::{pretty_print_reg, show_ireg_sized};
 use crate::isa::x64::settings as x64_settings;
@@ -11,7 +11,6 @@ use crate::isa::{CallConv, FunctionAlignment};
 use crate::{machinst::*, trace};
 use crate::{settings, CodegenError, CodegenResult};
 use alloc::boxed::Box;
-use regalloc2::PRegSet;
 use smallvec::{smallvec, SmallVec};
 use std::fmt::{self, Write};
 use std::string::{String, ToString};
@@ -22,6 +21,7 @@ mod emit_state;
 #[cfg(test)]
 mod emit_tests;
 pub mod regs;
+mod stack_switch;
 pub mod unwind;
 
 use args::*;
@@ -32,26 +32,12 @@ use args::*;
 // `Inst` is defined inside ISLE as `MInst`. We publicly re-export it here.
 pub use super::lower::isle::generated_code::MInst as Inst;
 
-/// Out-of-line data for calls, to keep the size of `Inst` down.
-#[derive(Clone, Debug)]
-pub struct CallInfo {
-    /// Register uses of this call.
-    pub uses: CallArgList,
-    /// Register defs of this call.
-    pub defs: CallRetList,
-    /// Registers clobbered by this call, as per its calling convention.
-    pub clobbers: PRegSet,
-    /// The number of bytes that the callee will pop from the stack for the
-    /// caller, if any. (Used for popping stack arguments with the `tail`
-    /// calling convention.)
-    pub callee_pop_size: u32,
-    /// The calling convention of the callee.
-    pub callee_conv: CallConv,
-}
-
 /// Out-of-line data for return-calls, to keep the size of `Inst` down.
 #[derive(Clone, Debug)]
-pub struct ReturnCallInfo {
+pub struct ReturnCallInfo<T> {
+    /// Where this call is going.
+    pub dest: T,
+
     /// The size of the argument area for this return-call, potentially smaller than that of the
     /// caller, but never larger.
     pub new_stack_arg_size: u32,
@@ -137,6 +123,7 @@ impl Inst {
             | Inst::Setcc { .. }
             | Inst::ShiftR { .. }
             | Inst::SignExtendData { .. }
+            | Inst::StackSwitchBasic { .. }
             | Inst::TrapIf { .. }
             | Inst::TrapIfAnd { .. }
             | Inst::TrapIfOr { .. }
@@ -215,8 +202,8 @@ impl Inst {
         Self::AluRmiR {
             size,
             op,
-            src1: Gpr::new(dst.to_reg()).unwrap(),
-            src2: GprMemImm::new(src).unwrap(),
+            src1: Gpr::unwrap_new(dst.to_reg()),
+            src2: GprMemImm::unwrap_new(src),
             dst: WritableGpr::from_writable_reg(dst).unwrap(),
         }
     }
@@ -238,7 +225,7 @@ impl Inst {
         Self::UnaryRmR {
             size,
             op,
-            src: GprMem::new(src).unwrap(),
+            src: GprMem::unwrap_new(src),
             dst: WritableGpr::from_writable_reg(dst).unwrap(),
         }
     }
@@ -247,7 +234,7 @@ impl Inst {
         debug_assert_eq!(src.to_reg().class(), RegClass::Int);
         Inst::Not {
             size,
-            src: Gpr::new(src.to_reg()).unwrap(),
+            src: Gpr::unwrap_new(src.to_reg()),
             dst: WritableGpr::from_writable_reg(src).unwrap(),
         }
     }
@@ -267,7 +254,7 @@ impl Inst {
             size,
             sign,
             trap,
-            divisor: GprMem::new(divisor).unwrap(),
+            divisor: GprMem::unwrap_new(divisor),
             dividend_lo,
             dividend_hi,
             dst_quotient,
@@ -286,7 +273,7 @@ impl Inst {
         Inst::Div8 {
             sign,
             trap,
-            divisor: GprMem::new(divisor).unwrap(),
+            divisor: GprMem::unwrap_new(divisor),
             dividend,
             dst,
         }
@@ -312,7 +299,7 @@ impl Inst {
         debug_assert!(size.is_one_of(&[OperandSize::Size32, OperandSize::Size64]));
         debug_assert!(src.class() == RegClass::Int);
         debug_assert!(dst.to_reg().class() == RegClass::Int);
-        let src = Gpr::new(src).unwrap();
+        let src = Gpr::unwrap_new(src);
         let dst = WritableGpr::from_writable_reg(dst).unwrap();
         Inst::MovRR { size, src, dst }
     }
@@ -323,7 +310,7 @@ impl Inst {
         debug_assert!(dst.to_reg().class() == RegClass::Float);
         Inst::XmmUnaryRmR {
             op,
-            src: XmmMemAligned::new(src).unwrap(),
+            src: XmmMemAligned::unwrap_new(src),
             dst: WritableXmm::from_writable_reg(dst).unwrap(),
         }
     }
@@ -333,8 +320,8 @@ impl Inst {
         debug_assert!(dst.to_reg().class() == RegClass::Float);
         Inst::XmmRmR {
             op,
-            src1: Xmm::new(dst.to_reg()).unwrap(),
-            src2: XmmMemAligned::new(src).unwrap(),
+            src1: Xmm::unwrap_new(dst.to_reg()),
+            src2: XmmMemAligned::unwrap_new(src),
             dst: WritableXmm::from_writable_reg(dst).unwrap(),
         }
     }
@@ -346,9 +333,9 @@ impl Inst {
         debug_assert!(dst.to_reg().class() == RegClass::Float);
         Inst::XmmRmRVex3 {
             op,
-            src3: XmmMem::new(src3).unwrap(),
-            src2: Xmm::new(src2).unwrap(),
-            src1: Xmm::new(dst.to_reg()).unwrap(),
+            src3: XmmMem::unwrap_new(src3),
+            src2: Xmm::unwrap_new(src2),
+            src1: Xmm::unwrap_new(dst.to_reg()),
             dst: WritableXmm::from_writable_reg(dst).unwrap(),
         }
     }
@@ -357,7 +344,7 @@ impl Inst {
         debug_assert!(src.class() == RegClass::Float);
         Inst::XmmMovRM {
             op,
-            src: Xmm::new(src).unwrap(),
+            src: Xmm::unwrap_new(src),
             dst: dst.into(),
         }
     }
@@ -373,7 +360,7 @@ impl Inst {
         debug_assert!(dst_size.is_one_of(&[OperandSize::Size32, OperandSize::Size64]));
         Inst::XmmToGpr {
             op,
-            src: Xmm::new(src).unwrap(),
+            src: Xmm::unwrap_new(src),
             dst: WritableGpr::from_writable_reg(dst).unwrap(),
             dst_size,
         }
@@ -390,7 +377,7 @@ impl Inst {
         debug_assert!(dst.to_reg().class() == RegClass::Float);
         Inst::GprToXmm {
             op,
-            src: GprMem::new(src).unwrap(),
+            src: GprMem::unwrap_new(src),
             dst: WritableXmm::from_writable_reg(dst).unwrap(),
             src_size,
         }
@@ -399,8 +386,8 @@ impl Inst {
     pub(crate) fn xmm_cmp_rm_r(op: SseOpcode, src1: Reg, src2: RegMem) -> Inst {
         src2.assert_regclass_is(RegClass::Float);
         debug_assert!(src1.class() == RegClass::Float);
-        let src2 = XmmMemAligned::new(src2).unwrap();
-        let src1 = Xmm::new(src1).unwrap();
+        let src2 = XmmMemAligned::unwrap_new(src2);
+        let src1 = Xmm::unwrap_new(src1);
         Inst::XmmCmpRmR { op, src1, src2 }
     }
 
@@ -419,8 +406,8 @@ impl Inst {
         Inst::XmmMinMaxSeq {
             size,
             is_min,
-            lhs: Xmm::new(lhs).unwrap(),
-            rhs: Xmm::new(rhs).unwrap(),
+            lhs: Xmm::unwrap_new(lhs),
+            rhs: Xmm::unwrap_new(rhs),
             dst: WritableXmm::from_writable_reg(dst).unwrap(),
         }
     }
@@ -428,7 +415,7 @@ impl Inst {
     pub(crate) fn movzx_rm_r(ext_mode: ExtMode, src: RegMem, dst: Writable<Reg>) -> Inst {
         src.assert_regclass_is(RegClass::Int);
         debug_assert!(dst.to_reg().class() == RegClass::Int);
-        let src = GprMem::new(src).unwrap();
+        let src = GprMem::unwrap_new(src);
         let dst = WritableGpr::from_writable_reg(dst).unwrap();
         Inst::MovzxRmR { ext_mode, src, dst }
     }
@@ -436,7 +423,7 @@ impl Inst {
     pub(crate) fn movsx_rm_r(ext_mode: ExtMode, src: RegMem, dst: Writable<Reg>) -> Inst {
         src.assert_regclass_is(RegClass::Int);
         debug_assert!(dst.to_reg().class() == RegClass::Int);
-        let src = GprMem::new(src).unwrap();
+        let src = GprMem::unwrap_new(src);
         let dst = WritableGpr::from_writable_reg(dst).unwrap();
         Inst::MovsxRmR { ext_mode, src, dst }
     }
@@ -453,7 +440,7 @@ impl Inst {
         debug_assert!(src.class() == RegClass::Int);
         Inst::MovRM {
             size,
-            src: Gpr::new(src).unwrap(),
+            src: Gpr::unwrap_new(src),
             dst: dst.into(),
         }
     }
@@ -481,7 +468,7 @@ impl Inst {
         Inst::ShiftR {
             size,
             kind,
-            src: Gpr::new(src).unwrap(),
+            src: Gpr::unwrap_new(src),
             num_bits,
             dst: WritableGpr::from_writable_reg(dst).unwrap(),
         }
@@ -494,8 +481,8 @@ impl Inst {
         debug_assert_eq!(src1.class(), RegClass::Int);
         Inst::CmpRmiR {
             size,
-            src1: Gpr::new(src1).unwrap(),
-            src2: GprMemImm::new(src2).unwrap(),
+            src1: Gpr::unwrap_new(src1),
+            src2: GprMemImm::unwrap_new(src2),
             opcode: CmpOpcode::Cmp,
         }
     }
@@ -518,15 +505,15 @@ impl Inst {
         Inst::Cmove {
             size,
             cc,
-            consequent: GprMem::new(src).unwrap(),
-            alternative: Gpr::new(dst.to_reg()).unwrap(),
+            consequent: GprMem::unwrap_new(src),
+            alternative: Gpr::unwrap_new(dst.to_reg()),
             dst: WritableGpr::from_writable_reg(dst).unwrap(),
         }
     }
 
     pub(crate) fn push64(src: RegMemImm) -> Inst {
         src.assert_regclass_is(RegClass::Int);
-        let src = GprMemImm::new(src).unwrap();
+        let src = GprMemImm::unwrap_new(src);
         Inst::Push64 { src }
     }
 
@@ -536,49 +523,13 @@ impl Inst {
         Inst::Pop64 { dst }
     }
 
-    pub(crate) fn call_known(
-        dest: ExternalName,
-        uses: CallArgList,
-        defs: CallRetList,
-        clobbers: PRegSet,
-        opcode: Opcode,
-        callee_pop_size: u32,
-        callee_conv: CallConv,
-    ) -> Inst {
-        Inst::CallKnown {
-            dest,
-            opcode,
-            info: Some(Box::new(CallInfo {
-                uses,
-                defs,
-                clobbers,
-                callee_pop_size,
-                callee_conv,
-            })),
-        }
+    pub(crate) fn call_known(info: Box<CallInfo<ExternalName>>) -> Inst {
+        Inst::CallKnown { info }
     }
 
-    pub(crate) fn call_unknown(
-        dest: RegMem,
-        uses: CallArgList,
-        defs: CallRetList,
-        clobbers: PRegSet,
-        opcode: Opcode,
-        callee_pop_size: u32,
-        callee_conv: CallConv,
-    ) -> Inst {
-        dest.assert_regclass_is(RegClass::Int);
-        Inst::CallUnknown {
-            dest,
-            opcode,
-            info: Some(Box::new(CallInfo {
-                uses,
-                defs,
-                clobbers,
-                callee_pop_size,
-                callee_conv,
-            })),
-        }
+    pub(crate) fn call_unknown(info: Box<CallInfo<RegMem>>) -> Inst {
+        info.dest.assert_regclass_is(RegClass::Int);
+        Inst::CallUnknown { info }
     }
 
     pub(crate) fn ret(stack_bytes_to_pop: u32) -> Inst {
@@ -622,10 +573,9 @@ impl Inst {
                         ExtKind::ZeroExtend => {
                             Inst::movzx_rm_r(ext_mode, RegMem::mem(from_addr), to_reg)
                         }
-                        ExtKind::None => panic!(
-                            "expected an extension kind for extension mode: {:?}",
-                            ext_mode
-                        ),
+                        ExtKind::None => {
+                            panic!("expected an extension kind for extension mode: {ext_mode:?}")
+                        }
                     }
                 } else {
                     // 64-bit values can be moved directly.
@@ -634,11 +584,12 @@ impl Inst {
             }
             RegClass::Float => {
                 let opcode = match ty {
+                    types::F16 => panic!("loading a f16 requires multiple instructions"),
                     types::F32 => SseOpcode::Movss,
                     types::F64 => SseOpcode::Movsd,
                     types::F32X4 => SseOpcode::Movups,
                     types::F64X2 => SseOpcode::Movupd,
-                    _ if ty.is_vector() && ty.bits() == 128 => SseOpcode::Movdqu,
+                    _ if (ty.is_float() || ty.is_vector()) && ty.bits() == 128 => SseOpcode::Movdqu,
                     _ => unimplemented!("unable to load type: {}", ty),
                 };
                 Inst::xmm_unary_rm_r(opcode, RegMem::mem(from_addr), to_reg)
@@ -654,11 +605,12 @@ impl Inst {
             RegClass::Int => Inst::mov_r_m(OperandSize::from_ty(ty), from_reg, to_addr),
             RegClass::Float => {
                 let opcode = match ty {
+                    types::F16 => panic!("storing a f16 requires multiple instructions"),
                     types::F32 => SseOpcode::Movss,
                     types::F64 => SseOpcode::Movsd,
                     types::F32X4 => SseOpcode::Movups,
                     types::F64X2 => SseOpcode::Movupd,
-                    _ if ty.is_vector() && ty.bits() == 128 => SseOpcode::Movdqu,
+                    _ if (ty.is_float() || ty.is_vector()) && ty.bits() == 128 => SseOpcode::Movdqu,
                     _ => unimplemented!("unable to store type: {}", ty),
                 };
                 Inst::xmm_mov_r_m(opcode, from_reg, to_addr)
@@ -1625,6 +1577,7 @@ impl PrettyPrint for Inst {
                 let suffix = match *ty {
                     types::F64 => "sd",
                     types::F32 => "ss",
+                    types::F16 => "ss",
                     types::F32X4 => "aps",
                     types::F64X2 => "apd",
                     _ => "dqa",
@@ -1660,26 +1613,26 @@ impl PrettyPrint for Inst {
                 format!("{op} {dst}")
             }
 
-            Inst::CallKnown { dest, .. } => {
+            Inst::CallKnown { info } => {
                 let op = ljustify("call".to_string());
-                format!("{op} {dest:?}")
+                format!("{op} {:?}", info.dest)
             }
 
-            Inst::CallUnknown { dest, .. } => {
-                let dest = dest.pretty_print(8);
+            Inst::CallUnknown { info } => {
+                let dest = info.dest.pretty_print(8);
                 let op = ljustify("call".to_string());
                 format!("{op} *{dest}")
             }
 
-            Inst::ReturnCallKnown { callee, info } => {
+            Inst::ReturnCallKnown { info } => {
                 let ReturnCallInfo {
                     uses,
                     new_stack_arg_size,
                     tmp,
+                    dest,
                 } = &**info;
                 let tmp = pretty_print_reg(tmp.to_reg().to_reg(), 8);
-                let mut s =
-                    format!("return_call_known {callee:?} ({new_stack_arg_size}) tmp={tmp}");
+                let mut s = format!("return_call_known {dest:?} ({new_stack_arg_size}) tmp={tmp}");
                 for ret in uses {
                     let preg = regs::show_reg(ret.preg);
                     let vreg = pretty_print_reg(ret.vreg, 8);
@@ -1688,13 +1641,14 @@ impl PrettyPrint for Inst {
                 s
             }
 
-            Inst::ReturnCallUnknown { callee, info } => {
+            Inst::ReturnCallUnknown { info } => {
                 let ReturnCallInfo {
                     uses,
                     new_stack_arg_size,
                     tmp,
+                    dest,
                 } = &**info;
-                let callee = pretty_print_reg(*callee, 8);
+                let callee = pretty_print_reg(*dest, 8);
                 let tmp = pretty_print_reg(tmp.to_reg().to_reg(), 8);
                 let mut s =
                     format!("return_call_unknown {callee} ({new_stack_arg_size}) tmp={tmp}");
@@ -1732,6 +1686,19 @@ impl PrettyPrint for Inst {
                     write!(&mut s, " {stack_bytes_to_pop}").unwrap();
                 }
                 s
+            }
+
+            Inst::StackSwitchBasic {
+                store_context_ptr,
+                load_context_ptr,
+                in_payload0,
+                out_payload0,
+            } => {
+                let store_context_ptr = pretty_print_reg(**store_context_ptr, 8);
+                let load_context_ptr = pretty_print_reg(**load_context_ptr, 8);
+                let in_payload0 = pretty_print_reg(**in_payload0, 8);
+                let out_payload0 = pretty_print_reg(*out_payload0.to_reg(), 8);
+                format!("{out_payload0} = stack_switch_basic {store_context_ptr}, {load_context_ptr}, {in_payload0}")
             }
 
             Inst::JmpKnown { dst } => {
@@ -2327,7 +2294,7 @@ fn x64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
             collector.reg_early_def(tmp);
         }
 
-        Inst::CallKnown { dest, info, .. } => {
+        Inst::CallKnown { info } => {
             // Probestack is special and is only inserted after
             // regalloc, so we do not need to represent its ABI to the
             // register allocator. Assert that we don't alter that
@@ -2336,8 +2303,9 @@ fn x64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
                 uses,
                 defs,
                 clobbers,
+                dest,
                 ..
-            } = &mut **info.as_mut().expect("CallInfo is expected in this path");
+            } = &mut **info;
             debug_assert_ne!(*dest, ExternalName::LibCall(LibCall::Probestack));
             for CallArgPair { vreg, preg } in uses {
                 collector.reg_fixed_use(vreg, *preg);
@@ -2348,14 +2316,15 @@ fn x64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
             collector.reg_clobbers(*clobbers);
         }
 
-        Inst::CallUnknown { info, dest, .. } => {
+        Inst::CallUnknown { info } => {
             let CallInfo {
                 uses,
                 defs,
                 clobbers,
                 callee_conv,
+                dest,
                 ..
-            } = &mut **info.as_mut().expect("CallInfo is expected in this path");
+            } = &mut **info;
             match dest {
                 RegMem::Reg { reg } if *callee_conv == CallConv::Winch => {
                     // TODO(https://github.com/bytecodealliance/regalloc2/issues/145):
@@ -2373,26 +2342,51 @@ fn x64_get_operands(inst: &mut Inst, collector: &mut impl OperandVisitor) {
             }
             collector.reg_clobbers(*clobbers);
         }
+        Inst::StackSwitchBasic {
+            store_context_ptr,
+            load_context_ptr,
+            in_payload0,
+            out_payload0,
+        } => {
+            collector.reg_use(load_context_ptr);
+            collector.reg_use(store_context_ptr);
+            collector.reg_fixed_use(in_payload0, stack_switch::payload_register());
+            collector.reg_fixed_def(out_payload0, stack_switch::payload_register());
 
-        Inst::ReturnCallKnown { callee, info } => {
-            let ReturnCallInfo { uses, tmp, .. } = &mut **info;
+            let mut clobbers = crate::isa::x64::abi::ALL_CLOBBERS;
+            // The return/payload reg must not be included in the clobber set
+            clobbers.remove(
+                stack_switch::payload_register()
+                    .to_real_reg()
+                    .unwrap()
+                    .into(),
+            );
+            collector.reg_clobbers(clobbers);
+        }
+
+        Inst::ReturnCallKnown { info } => {
+            let ReturnCallInfo {
+                dest, uses, tmp, ..
+            } = &mut **info;
             collector.reg_fixed_def(tmp, regs::r11());
             // Same as in the `Inst::CallKnown` branch.
-            debug_assert_ne!(*callee, ExternalName::LibCall(LibCall::Probestack));
+            debug_assert_ne!(*dest, ExternalName::LibCall(LibCall::Probestack));
             for CallArgPair { vreg, preg } in uses {
                 collector.reg_fixed_use(vreg, *preg);
             }
         }
 
-        Inst::ReturnCallUnknown { callee, info } => {
-            let ReturnCallInfo { uses, tmp, .. } = &mut **info;
+        Inst::ReturnCallUnknown { info } => {
+            let ReturnCallInfo {
+                dest, uses, tmp, ..
+            } = &mut **info;
 
             // TODO(https://github.com/bytecodealliance/regalloc2/issues/145):
             // This shouldn't be a fixed register constraint, but it's not clear how to
             // pick a register that won't be clobbered by the callee-save restore code
             // emitted with a return_call_indirect. r10 is caller-saved, so this should be
             // safe to use.
-            collector.reg_fixed_use(callee, regs::r10());
+            collector.reg_fixed_use(dest, regs::r10());
 
             collector.reg_fixed_def(tmp, regs::r11());
             for CallArgPair { vreg, preg } in uses {
@@ -2609,9 +2603,9 @@ impl MachInst for Inst {
                 // those, which may write more lanes that we need, but are specified to have
                 // zero-latency.
                 let opcode = match ty {
-                    types::F32 | types::F64 | types::F32X4 => SseOpcode::Movaps,
+                    types::F16 | types::F32 | types::F64 | types::F32X4 => SseOpcode::Movaps,
                     types::F64X2 => SseOpcode::Movapd,
-                    _ if ty.is_vector() && ty.bits() == 128 => SseOpcode::Movdqa,
+                    _ if (ty.is_float() || ty.is_vector()) && ty.bits() == 128 => SseOpcode::Movdqa,
                     _ => unimplemented!("unable to move type: {}", ty),
                 };
                 Inst::xmm_unary_rm_r(opcode, RegMem::reg(src_reg), dst_reg)
@@ -2630,18 +2624,17 @@ impl MachInst for Inst {
             types::I16 => Ok((&[RegClass::Int], &[types::I16])),
             types::I32 => Ok((&[RegClass::Int], &[types::I32])),
             types::I64 => Ok((&[RegClass::Int], &[types::I64])),
-            types::R32 => panic!("32-bit reftype pointer should never be seen on x86-64"),
-            types::R64 => Ok((&[RegClass::Int], &[types::R64])),
+            types::F16 => Ok((&[RegClass::Float], &[types::F16])),
             types::F32 => Ok((&[RegClass::Float], &[types::F32])),
             types::F64 => Ok((&[RegClass::Float], &[types::F64])),
+            types::F128 => Ok((&[RegClass::Float], &[types::F128])),
             types::I128 => Ok((&[RegClass::Int, RegClass::Int], &[types::I64, types::I64])),
             _ if ty.is_vector() => {
                 assert!(ty.bits() <= 128);
                 Ok((&[RegClass::Float], &[types::I8X16]))
             }
             _ => Err(CodegenError::Unsupported(format!(
-                "Unexpected SSA-value type: {}",
-                ty
+                "Unexpected SSA-value type: {ty}"
             ))),
         }
     }

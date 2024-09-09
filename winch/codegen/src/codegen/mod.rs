@@ -1,11 +1,11 @@
 use crate::{
-    abi::{vmctx, ABIOperand, ABISig, RetArea, ABI},
+    abi::{scratch, vmctx, ABIOperand, ABISig, RetArea},
     codegen::BlockSig,
     isa::reg::Reg,
     masm::{
         ExtendKind, IntCmpKind, MacroAssembler, OperandSize, RegImm, SPOffset, ShiftKind, TrapCode,
     },
-    stack::{TypedReg, Val},
+    stack::TypedReg,
 };
 use anyhow::Result;
 use smallvec::SmallVec;
@@ -72,6 +72,10 @@ where
 
     /// Information about the source code location.
     pub source_location: SourceLocation,
+
+    /// Flag indicating whether during translation an unsupported instruction
+    /// was found.
+    pub found_unsupported_instruction: Option<&'static str>,
 }
 
 impl<'a, 'translation, 'data, M> CodeGen<'a, 'translation, 'data, M>
@@ -91,6 +95,7 @@ where
             env,
             source_location: Default::default(),
             control_frames: Default::default(),
+            found_unsupported_instruction: None,
         }
     }
 
@@ -226,6 +231,10 @@ where
                 self,
                 offset,
             ))??;
+
+            if let Some(insn) = self.found_unsupported_instruction {
+                anyhow::bail!("unsupported instruction in Winch: {insn}")
+            }
         }
         validator.finish(body.original_position())?;
         return Ok(());
@@ -329,7 +338,7 @@ where
             .checked_mul(sig_index_bytes.into())
             .unwrap();
         let signatures_base_offset = self.env.vmoffsets.ptr.vmctx_type_ids_array();
-        let scratch = <M::ABI as ABI>::scratch_reg();
+        let scratch = scratch!(M);
         let funcref_sig_offset = self.env.vmoffsets.ptr.vm_func_ref_type_index();
 
         // Load the signatures address into the scratch register.
@@ -408,12 +417,13 @@ where
                     .expect("arg should be associated to a register");
 
                 match &ty {
-                    I32 | I64 | F32 | F64 => self.masm.store(src.into(), addr, ty.into()),
+                    I32 | I64 | F32 | F64 | V128 => self.masm.store(src.into(), addr, ty.into()),
                     Ref(rt) => match rt.heap_type {
-                        WasmHeapType::Func => self.masm.store_ptr(src.into(), addr),
+                        WasmHeapType::Func | WasmHeapType::Extern => {
+                            self.masm.store_ptr(src.into(), addr)
+                        }
                         ht => unimplemented!("Support for WasmHeapType: {ht}"),
                     },
-                    _ => unimplemented!("Support for WasmType {ty}"),
                 }
             });
     }
@@ -443,7 +453,7 @@ where
 
         let addr = if data.imported {
             let global_base = self.masm.address_at_reg(vmctx!(M), data.offset);
-            let scratch = <M::ABI as ABI>::scratch_reg();
+            let scratch = scratch!(M);
             self.masm.load_ptr(global_base, scratch);
             self.masm.address_at_reg(scratch, 0)
         } else {
@@ -585,6 +595,14 @@ where
                 // Move the value of the index to the
                 // index_offset_and_access_size register to perform the overflow
                 // check to avoid clobbering the initial index value.
+                //
+                // We derive size of the operation from the heap type since:
+                //
+                // * This is the first assignment to the
+                // `index_offset_and_access_size` register
+                //
+                // * The memory64 proposal specifies that the index is bound to
+                // the heap type instead of hardcoding it to 32-bits (i32).
                 self.masm.mov(
                     index_reg.into(),
                     index_offset_and_access_size,
@@ -593,11 +611,18 @@ where
                 // Perform
                 // index = index + offset + access_size, trapping if the
                 // addition overflows.
+                //
+                // We use the target's pointer size rather than depending on the heap
+                // type since we want to check for overflow; even though the
+                // offset and access size are guaranteed to be bounded by the heap
+                // type, when added, if used with the wrong operand size, their
+                // result could be clamped, resulting in an erroneus overflow
+                // check.
                 self.masm.checked_uadd(
                     index_offset_and_access_size,
                     index_offset_and_access_size,
                     RegImm::i64(offset_with_access_size as i64),
-                    heap.ty.into(),
+                    ptr_size,
                     TrapCode::HeapOutOfBounds,
                 );
 
@@ -615,7 +640,10 @@ where
                         masm.cmp(
                             index_offset_and_access_size.into(),
                             bounds_reg.into(),
-                            heap.ty.into(),
+                            // We use the pointer size to keep the bounds
+                            // comparison consistent with the result of the
+                            // overflow check above.
+                            ptr_size,
                         );
                         IntCmpKind::GtU
                     },
@@ -699,7 +727,12 @@ where
                         masm.cmp(
                             index_reg,
                             RegImm::i64(adjusted_bounds as i64),
-                            heap.ty.into(),
+                            // Similar to the dynamic heap case, even though the
+                            // offset and access size are bound through the heap
+                            // type, when added they can overflow, resulting in
+                            // an erroneus comparison, therfore we rely on the
+                            // target pointer size.
+                            ptr_size,
                         );
                         IntCmpKind::GtU
                     },
@@ -724,6 +757,7 @@ where
             let dst = match ty {
                 WasmValType::I32 | WasmValType::I64 => self.context.any_gpr(self.masm),
                 WasmValType::F32 | WasmValType::F64 => self.context.any_fpr(self.masm),
+                WasmValType::V128 => self.context.reg_for_type(ty, self.masm),
                 _ => unreachable!(),
             };
 
@@ -754,7 +788,7 @@ where
         base: Reg,
         table_data: &TableData,
     ) -> M::Address {
-        let scratch = <M::ABI as ABI>::scratch_reg();
+        let scratch = scratch!(M);
         let bound = self.context.any_gpr(self.masm);
         let tmp = self.context.any_gpr(self.masm);
         let ptr_size: OperandSize = self.env.ptr_type().into();
@@ -811,7 +845,7 @@ where
 
     /// Retrieves the size of the table, pushing the result to the value stack.
     pub fn emit_compute_table_size(&mut self, table_data: &TableData) {
-        let scratch = <M::ABI as ABI>::scratch_reg();
+        let scratch = scratch!(M);
         let size = self.context.any_gpr(self.masm);
         let ptr_size: OperandSize = self.env.ptr_type().into();
 
@@ -834,7 +868,7 @@ where
     /// Retrieves the size of the memory, pushing the result to the value stack.
     pub fn emit_compute_memory_size(&mut self, heap_data: &HeapData) {
         let size_reg = self.context.any_gpr(self.masm);
-        let scratch = <M::ABI as ABI>::scratch_reg();
+        let scratch = scratch!(M);
 
         let base = if let Some(offset) = heap_data.import_from {
             self.masm
@@ -848,24 +882,17 @@ where
             .masm
             .address_at_reg(base, heap_data.current_length_offset);
         self.masm.load_ptr(size_addr, size_reg);
-        // Prepare the stack to emit a shift to get the size in pages rather
-        // than in bytes.
-        self.context
-            .stack
-            .push(TypedReg::new(heap_data.ty, size_reg).into());
-
+        // Emit a shift to get the size in pages rather than in bytes.
+        let dst = TypedReg::new(heap_data.ty, size_reg);
         let pow = heap_data.page_size_log2;
-
-        // Ensure that the constant is correctly typed according to the heap
-        // type to reduce register pressure when emitting the shift operation.
-        match heap_data.ty {
-            WasmValType::I32 => self.context.stack.push(Val::i32(i32::from(pow))),
-            WasmValType::I64 => self.context.stack.push(Val::i64(i64::from(pow))),
-            _ => unreachable!(),
-        }
-
-        self.masm
-            .shift(&mut self.context, ShiftKind::ShrU, heap_data.ty.into());
+        self.masm.shift_ir(
+            dst.reg,
+            pow as u64,
+            dst.into(),
+            ShiftKind::ShrU,
+            heap_data.ty.into(),
+        );
+        self.context.stack.push(dst.into());
     }
 }
 
@@ -874,5 +901,5 @@ where
 pub fn control_index(depth: u32, control_length: usize) -> usize {
     (control_length - 1)
         .checked_sub(depth as usize)
-        .unwrap_or_else(|| panic!("expected valid control stack frame at index: {}", depth))
+        .unwrap_or_else(|| panic!("expected valid control stack frame at index: {depth}"))
 }

@@ -26,7 +26,7 @@
 //!         // An example of extending the `wasi:cli/command` world with a
 //!         // custom host interface.
 //!         world my-world {
-//!             include wasi:cli/command@0.2.0;
+//!             include wasi:cli/command@0.2.1;
 //!
 //!             import custom-host;
 //!         }
@@ -96,7 +96,7 @@
 ///         // An example of extending the `wasi:cli/command` world with a
 ///         // custom host interface.
 ///         world my-world {
-///             include wasi:cli/command@0.2.0;
+///             include wasi:cli/command@0.2.1;
 ///
 ///             import custom-host;
 ///         }
@@ -318,6 +318,8 @@ pub mod sync {
     ///
     /// ---
     pub use self::generated::CommandPre;
+
+    pub use self::generated::CommandIndices;
 }
 
 mod async_io {
@@ -367,17 +369,15 @@ mod async_io {
                 "[method]descriptor.unlink-file-at",
                 "[method]descriptor.unlock",
                 "[method]descriptor.write",
-                "[method]input-stream.read",
                 "[method]input-stream.blocking-read",
                 "[method]input-stream.blocking-skip",
-                "[method]input-stream.skip",
-                "[method]output-stream.forward",
-                "[method]output-stream.splice",
+                "[drop]input-stream",
                 "[method]output-stream.blocking-splice",
                 "[method]output-stream.blocking-flush",
                 "[method]output-stream.blocking-write",
                 "[method]output-stream.blocking-write-and-flush",
                 "[method]output-stream.blocking-write-zeroes-and-flush",
+                "[drop]output-stream",
                 "[method]directory-entry-stream.read-directory-entry",
                 "poll",
                 "[method]pollable.block",
@@ -559,3 +559,5 @@ pub use self::async_io::Command;
 ///
 /// ---
 pub use self::async_io::CommandPre;
+
+pub use self::async_io::CommandIndices;

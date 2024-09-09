@@ -263,7 +263,7 @@ pub trait Compiler: Send + Sync {
     /// 1. First, the index within `funcs` that is being resolved,
     ///
     /// 2. and next the `RelocationTarget` which is the relocation target to
-    /// resolve.
+    ///    resolve.
     ///
     /// The return value is an index within `funcs` that the relocation points
     /// to.
@@ -346,7 +346,7 @@ pub trait Compiler: Send + Sync {
     /// Get a flag indicating whether branch protection is enabled.
     fn is_branch_protection_enabled(&self) -> bool;
 
-    /// Returns a suitable compiler usable for component-related compliations.
+    /// Returns a suitable compiler usable for component-related compilations.
     ///
     /// Note that the `ComponentCompiler` trait can also be implemented for
     /// `Self` in which case this function would simply return `self`.

@@ -234,7 +234,7 @@ impl<T> Linker<T> {
                 Definition::Module(m) => RuntimeImport::Module(m.clone()),
                 Definition::Func(f) => RuntimeImport::Func(f.clone()),
                 Definition::Resource(t, dtor) => RuntimeImport::Resource {
-                    ty: t.clone(),
+                    ty: *t,
                     _dtor: dtor.clone(),
                     dtor_funcref: component.resource_drop_func_ref(dtor),
                 },
@@ -325,7 +325,7 @@ impl<T> Linker<T> {
             match item_def {
                 TypeDef::ComponentFunc(_) => {
                     let fully_qualified_name = parent_instance
-                        .map(|parent| format!("{}#{}", parent, item_name))
+                        .map(|parent| format!("{parent}#{item_name}"))
                         .unwrap_or_else(|| item_name.to_owned());
                     linker.func_new(&item_name, move |_, _, _| {
                         bail!("unknown import: `{fully_qualified_name}` has not been defined")
@@ -616,6 +616,37 @@ impl<T> LinkerInstance<'_, T> {
         let dtor = Arc::new(crate::func::HostFunc::wrap_inner(
             &self.engine,
             move |mut cx: crate::Caller<'_, T>, (param,): (u32,)| dtor(cx.as_context_mut(), param),
+        ));
+        self.insert(name, Definition::Resource(ty, dtor))?;
+        Ok(())
+    }
+
+    /// Identical to [`Self::resource`], except that it takes an async destructor.
+    #[cfg(feature = "async")]
+    pub fn resource_async<F>(&mut self, name: &str, ty: ResourceType, dtor: F) -> Result<()>
+    where
+        F: for<'a> Fn(
+                StoreContextMut<'a, T>,
+                u32,
+            ) -> Box<dyn Future<Output = Result<()>> + Send + 'a>
+            + Send
+            + Sync
+            + 'static,
+    {
+        assert!(
+            self.engine.config().async_support,
+            "cannot use `resource_async` without enabling async support in the config"
+        );
+        let dtor = Arc::new(crate::func::HostFunc::wrap_inner(
+            &self.engine,
+            move |mut cx: crate::Caller<'_, T>, (param,): (u32,)| {
+                let async_cx = cx.as_context_mut().0.async_cx().expect("async cx");
+                let mut future = Pin::from(dtor(cx.as_context_mut(), param));
+                match unsafe { async_cx.block_on(future.as_mut()) } {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(trap)) | Err(trap) => Err(trap),
+                }
+            },
         ));
         self.insert(name, Definition::Resource(ty, dtor))?;
         Ok(())

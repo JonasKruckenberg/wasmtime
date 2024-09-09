@@ -24,7 +24,7 @@ use wasmtime_environ::{
 mod registry;
 
 pub use registry::{
-    get_wasm_trap, register_code, unregister_code, ModuleRegistry, RegisteredModuleId,
+    lookup_code, register_code, unregister_code, ModuleRegistry, RegisteredModuleId,
 };
 
 /// A compiled WebAssembly module, ready to be instantiated.
@@ -243,7 +243,7 @@ impl Module {
     #[cfg(any(feature = "cranelift", feature = "winch"))]
     pub fn new(engine: &Engine, bytes: impl AsRef<[u8]>) -> Result<Module> {
         crate::CodeBuilder::new(engine)
-            .wasm(bytes.as_ref(), None)?
+            .wasm_binary_or_text(bytes.as_ref(), None)?
             .compile_module()
     }
 
@@ -278,7 +278,7 @@ impl Module {
     #[cfg(all(feature = "std", any(feature = "cranelift", feature = "winch")))]
     pub fn from_file(engine: &Engine, file: impl AsRef<Path>) -> Result<Module> {
         crate::CodeBuilder::new(engine)
-            .wasm_file(file.as_ref())?
+            .wasm_binary_or_text_file(file.as_ref())?
             .compile_module()
     }
 
@@ -316,8 +316,7 @@ impl Module {
     #[cfg(any(feature = "cranelift", feature = "winch"))]
     pub fn from_binary(engine: &Engine, binary: &[u8]) -> Result<Module> {
         crate::CodeBuilder::new(engine)
-            .wasm(binary, None)?
-            .wat(false)?
+            .wasm_binary(binary, None)?
             .compile_module()
     }
 
@@ -351,7 +350,7 @@ impl Module {
         }
 
         crate::CodeBuilder::new(engine)
-            .wasm(&mmap, Some(file.as_ref()))?
+            .wasm_binary_or_text(&mmap[..], Some(file.as_ref()))?
             .compile_module()
     }
 
@@ -514,7 +513,7 @@ impl Module {
     ///
     /// [binary]: https://webassembly.github.io/spec/core/binary/index.html
     pub fn validate(engine: &Engine, binary: &[u8]) -> Result<()> {
-        let mut validator = Validator::new_with_features(engine.config().features);
+        let mut validator = Validator::new_with_features(engine.features());
 
         let mut functions = Vec::new();
         for payload in Parser::new(0).parse_all(binary) {

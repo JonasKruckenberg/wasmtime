@@ -6,16 +6,13 @@ use std::cell::Cell;
 
 pub use super::MachLabel;
 use super::RetPair;
-pub use crate::ir::{
-    condcodes::CondCode, dynamic_to_fixed, Constant, DynamicStackSlot, ExternalName, FuncRef,
-    GlobalValue, Immediate, SigRef, StackSlot,
-};
+pub use crate::ir::{condcodes::CondCode, *};
 pub use crate::isa::{unwind::UnwindInst, TargetIsa};
 pub use crate::machinst::{
-    ABIArg, ABIArgSlot, InputSourceInst, Lower, LowerBackend, RealReg, Reg, RelocDistance, Sig,
-    VCodeInst, Writable,
+    ABIArg, ABIArgSlot, ABIMachineSpec, CallSite, InputSourceInst, Lower, LowerBackend, RealReg,
+    Reg, RelocDistance, Sig, VCodeInst, Writable,
 };
-pub use crate::settings::TlsModel;
+pub use crate::settings::{StackSwitchModel, TlsModel};
 
 pub type Unit = ();
 pub type ValueSlice = (ValueList, usize);
@@ -45,7 +42,10 @@ pub enum RangeView {
 #[doc(hidden)]
 macro_rules! isle_lower_prelude_methods {
     () => {
-        isle_common_prelude_methods!();
+        crate::isle_lower_prelude_methods!(MInst);
+    };
+    ($inst:ty) => {
+        crate::isle_common_prelude_methods!();
 
         #[inline]
         fn value_type(&mut self, val: Value) -> Type {
@@ -253,7 +253,7 @@ macro_rules! isle_lower_prelude_methods {
                         return self.zero_value(arg);
                     }
                     InstructionData::UnaryConst {
-                        opcode: Opcode::Vconst,
+                        opcode: Opcode::Vconst | Opcode::F128const,
                         constant_handle,
                     } => {
                         let constant_data =
@@ -265,6 +265,13 @@ macro_rules! isle_lower_prelude_methods {
                         }
                     }
                     InstructionData::UnaryImm { imm, .. } => {
+                        if imm.bits() == 0 {
+                            return Some(value);
+                        } else {
+                            return None;
+                        }
+                    }
+                    InstructionData::UnaryIeee16 { imm, .. } => {
                         if imm.bits() == 0 {
                             return Some(value);
                         } else {
@@ -331,6 +338,11 @@ macro_rules! isle_lower_prelude_methods {
             } else {
                 None
             }
+        }
+
+        #[inline]
+        fn stack_switch_model(&mut self) -> Option<StackSwitchModel> {
+            Some(self.backend.flags().stack_switch_model())
         }
 
         #[inline]
@@ -509,6 +521,10 @@ macro_rules! isle_lower_prelude_methods {
             }
         }
 
+        fn abi_unwrap_ret_area_ptr(&mut self) -> Reg {
+            self.lower_ctx.abi().ret_area_ptr().unwrap()
+        }
+
         fn abi_stackslot_addr(
             &mut self,
             dst: WritableReg,
@@ -519,6 +535,7 @@ macro_rules! isle_lower_prelude_methods {
             self.lower_ctx
                 .abi()
                 .sized_stackslot_addr(stack_slot, offset, dst)
+                .into()
         }
 
         fn abi_dynamic_stackslot_addr(
@@ -531,7 +548,10 @@ macro_rules! isle_lower_prelude_methods {
                 .abi()
                 .dynamic_stackslot_offsets()
                 .is_valid(stack_slot));
-            self.lower_ctx.abi().dynamic_stackslot_addr(stack_slot, dst)
+            self.lower_ctx
+                .abi()
+                .dynamic_stackslot_addr(stack_slot, dst)
+                .into()
         }
 
         fn real_reg_to_reg(&mut self, reg: RealReg) -> Reg {
@@ -586,7 +606,7 @@ macro_rules! isle_lower_prelude_methods {
 
         #[inline]
         fn gen_move(&mut self, ty: Type, dst: WritableReg, src: Reg) -> MInst {
-            MInst::gen_move(dst, src, ty)
+            <$inst>::gen_move(dst, src, ty).into()
         }
 
         /// Generate the return instruction.
@@ -758,12 +778,11 @@ macro_rules! isle_prelude_caller_methods {
             let caller_conv = self.lower_ctx.abi().call_conv(self.lower_ctx.sigs());
             let sig = &self.lower_ctx.dfg().signatures[sig_ref];
             let num_rets = sig.returns.len();
-            let abi = self.lower_ctx.sigs().abi_sig_for_sig_ref(sig_ref);
             let caller = <$abicaller>::from_func(
                 self.lower_ctx.sigs(),
                 sig_ref,
                 &extname,
-                Opcode::Call,
+                IsTailCall::No,
                 dist,
                 caller_conv,
                 self.backend.flags().clone(),
@@ -774,7 +793,7 @@ macro_rules! isle_prelude_caller_methods {
                 sig.params.len()
             );
 
-            self.gen_call_common(abi, num_rets, caller, args)
+            crate::machinst::isle::gen_call_common(&mut self.lower_ctx, num_rets, caller, args)
         }
 
         fn gen_call_indirect(
@@ -787,12 +806,11 @@ macro_rules! isle_prelude_caller_methods {
             let ptr = self.put_in_reg(val);
             let sig = &self.lower_ctx.dfg().signatures[sig_ref];
             let num_rets = sig.returns.len();
-            let abi = self.lower_ctx.sigs().abi_sig_for_sig_ref(sig_ref);
             let caller = <$abicaller>::from_ptr(
                 self.lower_ctx.sigs(),
                 sig_ref,
                 ptr,
-                Opcode::CallIndirect,
+                IsTailCall::No,
                 caller_conv,
                 self.backend.flags().clone(),
             );
@@ -802,98 +820,62 @@ macro_rules! isle_prelude_caller_methods {
                 sig.params.len()
             );
 
-            self.gen_call_common(abi, num_rets, caller, args)
+            crate::machinst::isle::gen_call_common(&mut self.lower_ctx, num_rets, caller, args)
         }
     };
 }
 
-/// Helpers for the above ISLE prelude implementations. Meant to go
-/// inside the `impl` for the context type, not the trait impl.
-#[macro_export]
-#[doc(hidden)]
-macro_rules! isle_prelude_method_helpers {
-    ($abicaller:ty) => {
-        fn gen_call_common_args(&mut self, call_site: &mut $abicaller, (inputs, off): ValueSlice) {
-            let num_args = call_site.num_args(self.lower_ctx.sigs());
+fn gen_call_common_args<M: ABIMachineSpec>(
+    ctx: &mut Lower<'_, M::I>,
+    call_site: &mut CallSite<M>,
+    (inputs, off): ValueSlice,
+) {
+    let num_args = call_site.num_args(ctx.sigs());
 
-            assert_eq!(
-                inputs.len(&self.lower_ctx.dfg().value_lists) - off,
-                num_args
-            );
-            let mut arg_regs = vec![];
-            for i in 0..num_args {
-                let input = inputs
-                    .get(off + i, &self.lower_ctx.dfg().value_lists)
-                    .unwrap();
-                arg_regs.push(self.put_in_regs(input));
-            }
-            for (i, arg_regs) in arg_regs.iter().enumerate() {
-                call_site.emit_copy_regs_to_buffer(self.lower_ctx, i, *arg_regs);
-            }
-            for (i, arg_regs) in arg_regs.iter().enumerate() {
-                call_site.gen_arg(self.lower_ctx, i, *arg_regs);
-            }
-        }
+    assert_eq!(inputs.len(&ctx.dfg().value_lists) - off, num_args);
+    let mut arg_regs = vec![];
+    for i in 0..num_args {
+        let input = inputs.get(off + i, &ctx.dfg().value_lists).unwrap();
+        arg_regs.push(ctx.put_value_in_regs(input));
+    }
+    for (i, arg_regs) in arg_regs.iter().enumerate() {
+        call_site.emit_copy_regs_to_buffer(ctx, i, *arg_regs);
+    }
+    for (i, arg_regs) in arg_regs.iter().enumerate() {
+        call_site.gen_arg(ctx, i, *arg_regs);
+    }
+}
 
-        fn gen_call_common(
-            &mut self,
-            abi: Sig,
-            num_rets: usize,
-            mut caller: $abicaller,
-            args: ValueSlice,
-        ) -> InstOutput {
-            self.gen_call_common_args(&mut caller, args);
+pub fn gen_call_common<M: ABIMachineSpec>(
+    ctx: &mut Lower<'_, M::I>,
+    num_rets: usize,
+    mut caller: CallSite<M>,
+    args: ValueSlice,
+) -> InstOutput {
+    gen_call_common_args(ctx, &mut caller, args);
 
-            // Handle retvals prior to emitting call, so the
-            // constraints are on the call instruction; but buffer the
-            // instructions till after the call.
-            let mut outputs = InstOutput::new();
-            let mut retval_insts = crate::machinst::abi::SmallInstVec::new();
-            // We take the *last* `num_rets` returns of the sig:
-            // this skips a StructReturn, if any, that is present.
-            let sigdata_num_rets = self.lower_ctx.sigs().num_rets(abi);
-            debug_assert!(num_rets <= sigdata_num_rets);
-            for i in (sigdata_num_rets - num_rets)..sigdata_num_rets {
-                // Borrow `sigdata` again so we don't hold a `self`
-                // borrow across the `&mut self` arg to
-                // `abi_arg_slot_regs()` below.
-                let ret = self.lower_ctx.sigs().get_ret(abi, i);
-                let retval_regs = self.abi_arg_slot_regs(&ret).unwrap();
-                retval_insts.extend(
-                    caller
-                        .gen_retval(self.lower_ctx, i, retval_regs.clone())
-                        .into_iter(),
-                );
-                outputs.push(valueregs::non_writable_value_regs(retval_regs));
-            }
+    // Handle retvals prior to emitting call, so the
+    // constraints are on the call instruction; but buffer the
+    // instructions till after the call.
+    let mut outputs = InstOutput::new();
+    let mut retval_insts = crate::machinst::abi::SmallInstVec::new();
+    // We take the *last* `num_rets` returns of the sig:
+    // this skips a StructReturn, if any, that is present.
+    let sigdata_num_rets = caller.num_rets(ctx.sigs());
+    debug_assert!(num_rets <= sigdata_num_rets);
+    for i in (sigdata_num_rets - num_rets)..sigdata_num_rets {
+        let (retval_inst, retval_regs) = caller.gen_retval(ctx, i);
+        retval_insts.extend(retval_inst.into_iter());
+        outputs.push(retval_regs);
+    }
 
-            caller.emit_call(self.lower_ctx);
+    caller.emit_call(ctx);
 
-            for inst in retval_insts {
-                self.lower_ctx.emit(inst);
-            }
+    for inst in retval_insts {
+        ctx.emit(inst);
+    }
 
-            outputs
-        }
-
-        fn abi_arg_slot_regs(&mut self, arg: &ABIArg) -> Option<WritableValueRegs> {
-            match arg {
-                &ABIArg::Slots { ref slots, .. } => match slots.len() {
-                    1 => {
-                        let a = self.temp_writable_reg(slots[0].get_type());
-                        Some(WritableValueRegs::one(a))
-                    }
-                    2 => {
-                        let a = self.temp_writable_reg(slots[0].get_type());
-                        let b = self.temp_writable_reg(slots[1].get_type());
-                        Some(WritableValueRegs::two(a, b))
-                    }
-                    _ => panic!("Expected to see one or two slots only from {:?}", arg),
-                },
-                _ => None,
-            }
-        }
-    };
+    outputs
 }
 
 /// This structure is used to implement the ISLE-generated `Context` trait and

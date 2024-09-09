@@ -13,7 +13,7 @@ use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::{self, Block, InstBuilder, ValueLabel};
 use cranelift_codegen::timing;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
-use wasmparser::{BinaryReader, FuncValidator, FunctionBody, WasmFeatures, WasmModuleResources};
+use wasmparser::{BinaryReader, FuncValidator, FunctionBody, WasmModuleResources};
 
 /// WebAssembly to Cranelift IR function translator.
 ///
@@ -40,14 +40,7 @@ impl FuncTranslator {
         &mut self.func_ctx
     }
 
-    /// Translate a binary WebAssembly function.
-    ///
-    /// The `code` slice contains the binary WebAssembly *function code* as it appears in the code
-    /// section of a WebAssembly module, not including the initial size of the function code. The
-    /// slice is expected to contain two parts:
-    ///
-    /// - The declaration of *locals*, and
-    /// - The function *body* as an expression.
+    /// Translate a binary WebAssembly function from a `FunctionBody`.
     ///
     /// See [the WebAssembly specification][wasm].
     ///
@@ -57,24 +50,6 @@ impl FuncTranslator {
     /// and `func.name` fields. The signature may contain special-purpose arguments which are not
     /// regarded as WebAssembly local variables. Any signature arguments marked as
     /// `ArgumentPurpose::Normal` are made accessible as WebAssembly local variables.
-    ///
-    pub fn translate<FE: FuncEnvironment + ?Sized>(
-        &mut self,
-        validator: &mut FuncValidator<impl WasmModuleResources>,
-        code: &[u8],
-        code_offset: usize,
-        func: &mut ir::Function,
-        environ: &mut FE,
-    ) -> WasmResult<()> {
-        self.translate_body(
-            validator,
-            FunctionBody::new(BinaryReader::new(code, code_offset, WasmFeatures::all())),
-            func,
-            environ,
-        )
-    }
-
-    /// Translate a binary WebAssembly function from a `FunctionBody`.
     pub fn translate_body<FE: FuncEnvironment + ?Sized>(
         &mut self,
         validator: &mut FuncValidator<impl WasmModuleResources>,
@@ -141,6 +116,10 @@ fn declare_wasm_parameters<FE: FuncEnvironment + ?Sized>(
             builder.declare_var(local, param_type.value_type);
             next_local += 1;
 
+            if environ.param_needs_stack_map(&builder.func.signature, i) {
+                builder.declare_var_needs_stack_map(local);
+            }
+
             let param_value = builder.block_params(entry_block)[i];
             builder.def_var(local, param_value);
         }
@@ -192,45 +171,53 @@ fn declare_locals<FE: FuncEnvironment + ?Sized>(
 ) -> WasmResult<()> {
     // All locals are initialized to 0.
     use wasmparser::ValType::*;
-    let (ty, init) = match wasm_type {
+    let (ty, init, needs_stack_map) = match wasm_type {
         I32 => (
             ir::types::I32,
             Some(builder.ins().iconst(ir::types::I32, 0)),
+            false,
         ),
         I64 => (
             ir::types::I64,
             Some(builder.ins().iconst(ir::types::I64, 0)),
+            false,
         ),
         F32 => (
             ir::types::F32,
             Some(builder.ins().f32const(ir::immediates::Ieee32::with_bits(0))),
+            false,
         ),
         F64 => (
             ir::types::F64,
             Some(builder.ins().f64const(ir::immediates::Ieee64::with_bits(0))),
+            false,
         ),
         V128 => {
             let constant_handle = builder.func.dfg.constants.insert([0; 16].to_vec().into());
             (
                 ir::types::I8X16,
                 Some(builder.ins().vconst(ir::types::I8X16, constant_handle)),
+                false,
             )
         }
         Ref(rt) => {
             let hty = environ.convert_heap_type(rt.heap_type());
-            let ty = environ.reference_type(hty);
+            let (ty, needs_stack_map) = environ.reference_type(hty);
             let init = if rt.is_nullable() {
                 Some(environ.translate_ref_null(builder.cursor(), hty)?)
             } else {
                 None
             };
-            (ty, init)
+            (ty, init, needs_stack_map)
         }
     };
 
     for _ in 0..count {
         let local = Variable::new(*next_local);
         builder.declare_var(local, ty);
+        if needs_stack_map {
+            builder.declare_var_needs_stack_map(local);
+        }
         if let Some(init) = init {
             builder.def_var(local, init);
             builder.set_val_label(init, ValueLabel::new(*next_local));

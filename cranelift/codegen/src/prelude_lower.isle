@@ -870,6 +870,13 @@
 (decl pure partial preserve_frame_pointers () Unit)
 (extern constructor preserve_frame_pointers preserve_frame_pointers)
 
+;; This definition should be kept up to date with the values defined in
+;; cranelift/codegen/meta/src/shared/settings.rs
+(type StackSwitchModel extern (enum (None) (Basic) (UpdateWindowsTib)))
+
+(decl pure partial stack_switch_model () StackSwitchModel)
+(extern constructor stack_switch_model stack_switch_model)
+
 ;;;; Helpers for accessing instruction data ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (decl box_external_name (ExternalName) BoxExternalName)
@@ -1000,6 +1007,10 @@
 ;; Size of the return-value area.
 (decl abi_sized_stack_ret_space (Sig) i64)
 (extern constructor abi_sized_stack_ret_space abi_sized_stack_ret_space)
+
+;; Incoming return area pointer (must be present).
+(decl abi_unwrap_ret_area_ptr () Reg)
+(extern constructor abi_unwrap_ret_area_ptr abi_unwrap_ret_area_ptr)
 
 ;; StackSlot addr
 (decl abi_stackslot_addr (WritableReg StackSlot Offset32) MInst)

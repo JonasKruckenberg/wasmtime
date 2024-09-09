@@ -25,6 +25,10 @@ use wasmtime_wasi_threads::WasiThreadsCtx;
 
 #[cfg(feature = "wasi-http")]
 use wasmtime_wasi_http::WasiHttpCtx;
+#[cfg(feature = "wasi-keyvalue")]
+use wasmtime_wasi_keyvalue::{WasiKeyValue, WasiKeyValueCtx, WasiKeyValueCtxBuilder};
+#[cfg(feature = "wasi-runtime-config")]
+use wasmtime_wasi_runtime_config::{WasiRuntimeConfig, WasiRuntimeConfigVariables};
 
 fn parse_preloads(s: &str) -> Result<(String, PathBuf)> {
     let parts: Vec<&str> = s.splitn(2, '=').collect();
@@ -54,6 +58,15 @@ pub struct RunCommand {
     )]
     pub preloads: Vec<(String, PathBuf)>,
 
+    /// Override the value of `argv[0]`, typically the name of the executable of
+    /// the application being run.
+    ///
+    /// This can be useful to pass in situations where a CLI tool is being
+    /// executed that dispatches its functionality on the value of `argv[0]`
+    /// without needing to rename the original wasm binary.
+    #[arg(long)]
+    pub argv0: Option<String>,
+
     /// The WebAssembly module to run and arguments to pass to it.
     ///
     /// Arguments passed to the wasm module will be configured as WASI CLI
@@ -75,6 +88,7 @@ impl RunCommand {
         self.run.common.init_logging()?;
 
         let mut config = self.run.common.config(None, None)?;
+        config.async_support(true);
 
         if self.run.common.wasm.timeout.is_some() {
             config.epoch_interruption(true);
@@ -136,61 +150,78 @@ impl RunCommand {
             store.set_fuel(fuel)?;
         }
 
-        // Load the preload wasm modules.
-        let mut modules = Vec::new();
-        if let RunTarget::Core(m) = &main {
-            modules.push((String::new(), m.clone()));
-        }
-        for (name, path) in self.preloads.iter() {
-            // Read the wasm module binary either as `*.wat` or a raw binary
-            let module = match self.run.load_module(&engine, path)? {
-                RunTarget::Core(m) => m,
-                #[cfg(feature = "component-model")]
-                RunTarget::Component(_) => bail!("components cannot be loaded with `--preload`"),
-            };
-            modules.push((name.clone(), module.clone()));
+        // Always run the module asynchronously to ensure that the module can be
+        // interrupted, even if it is blocking on I/O or a timeout or something.
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_time()
+            .enable_io()
+            .build()?;
 
-            // Add the module's functions to the linker.
-            match &mut linker {
-                #[cfg(feature = "cranelift")]
-                CliLinker::Core(linker) => {
-                    linker.module(&mut store, name, &module).context(format!(
-                        "failed to process preload `{}` at `{}`",
-                        name,
-                        path.display()
-                    ))?;
+        let dur = self
+            .run
+            .common
+            .wasm
+            .timeout
+            .unwrap_or(std::time::Duration::MAX);
+        let result = runtime.block_on(async {
+            tokio::time::timeout(dur, async {
+                // Load the preload wasm modules.
+                let mut modules = Vec::new();
+                if let RunTarget::Core(m) = &main {
+                    modules.push((String::new(), m.clone()));
                 }
-                #[cfg(not(feature = "cranelift"))]
-                CliLinker::Core(_) => {
-                    bail!("support for --preload disabled at compile time");
-                }
-                #[cfg(feature = "component-model")]
-                CliLinker::Component(_) => {
-                    bail!("--preload cannot be used with components");
-                }
-            }
-        }
+                for (name, path) in self.preloads.iter() {
+                    // Read the wasm module binary either as `*.wat` or a raw binary
+                    let module = match self.run.load_module(&engine, path)? {
+                        RunTarget::Core(m) => m,
+                        #[cfg(feature = "component-model")]
+                        RunTarget::Component(_) => {
+                            bail!("components cannot be loaded with `--preload`")
+                        }
+                    };
+                    modules.push((name.clone(), module.clone()));
 
-        // Pre-emptively initialize and install a Tokio runtime ambiently in the
-        // environment when executing the module. Without this whenever a WASI
-        // call is made that needs to block on a future a Tokio runtime is
-        // configured and entered, and this appears to be slower than simply
-        // picking an existing runtime out of the environment and using that.
-        // The goal of this is to improve the performance of WASI-related
-        // operations that block in the CLI since the CLI doesn't use async to
-        // invoke WebAssembly.
-        let result = wasmtime_wasi::runtime::with_ambient_tokio_runtime(|| {
-            self.load_main_module(&mut store, &mut linker, &main, modules)
-                .with_context(|| {
-                    format!(
-                        "failed to run main module `{}`",
-                        self.module_and_args[0].to_string_lossy()
-                    )
-                })
+                    // Add the module's functions to the linker.
+                    match &mut linker {
+                        #[cfg(feature = "cranelift")]
+                        CliLinker::Core(linker) => {
+                            linker
+                                .module_async(&mut store, name, &module)
+                                .await
+                                .context(format!(
+                                    "failed to process preload `{}` at `{}`",
+                                    name,
+                                    path.display()
+                                ))?;
+                        }
+                        #[cfg(not(feature = "cranelift"))]
+                        CliLinker::Core(_) => {
+                            bail!("support for --preload disabled at compile time");
+                        }
+                        #[cfg(feature = "component-model")]
+                        CliLinker::Component(_) => {
+                            bail!("--preload cannot be used with components");
+                        }
+                    }
+                }
+
+                self.load_main_module(&mut store, &mut linker, &main, modules)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to run main module `{}`",
+                            self.module_and_args[0].to_string_lossy()
+                        )
+                    })
+            })
+            .await
         });
 
         // Load the main wasm module.
-        match result {
+        match result.unwrap_or_else(|elapsed| {
+            Err(anyhow::Error::from(wasmtime::Trap::Interrupt))
+                .with_context(|| format!("timed out after {elapsed}"))
+        }) {
             Ok(()) => (),
             Err(e) => {
                 // Exit the process if Wasmtime understands the error;
@@ -233,7 +264,10 @@ impl RunCommand {
             // For argv[0], which is the program name. Only include the base
             // name of the main wasm module, to avoid leaking path information.
             let arg = if i == 0 {
-                Path::new(arg).components().next_back().unwrap().as_os_str()
+                match &self.argv0 {
+                    Some(s) => s.as_ref(),
+                    None => Path::new(arg).components().next_back().unwrap().as_os_str(),
+                }
             } else {
                 arg.as_ref()
             };
@@ -351,7 +385,7 @@ impl RunCommand {
         });
     }
 
-    fn load_main_module(
+    async fn load_main_module(
         &self,
         store: &mut Store<Host>,
         linker: &mut CliLinker,
@@ -361,28 +395,25 @@ impl RunCommand {
         // The main module might be allowed to have unknown imports, which
         // should be defined as traps:
         if self.run.common.wasm.unknown_imports_trap == Some(true) {
-            #[cfg(feature = "cranelift")]
             match linker {
                 CliLinker::Core(linker) => {
                     linker.define_unknown_imports_as_traps(module.unwrap_core())?;
                 }
-                _ => bail!("cannot use `--trap-unknown-imports` with components"),
+                #[cfg(feature = "component-model")]
+                CliLinker::Component(linker) => {
+                    linker.define_unknown_imports_as_traps(module.unwrap_component())?;
+                }
             }
-            #[cfg(not(feature = "cranelift"))]
-            bail!("support for `unknown-imports-trap` disabled at compile time");
         }
 
         // ...or as default values.
         if self.run.common.wasm.unknown_imports_default == Some(true) {
-            #[cfg(feature = "cranelift")]
             match linker {
                 CliLinker::Core(linker) => {
                     linker.define_unknown_imports_as_default_values(module.unwrap_core())?;
                 }
                 _ => bail!("cannot use `--default-values-unknown-imports` with components"),
             }
-            #[cfg(not(feature = "cranelift"))]
-            bail!("support for `unknown-imports-trap` disabled at compile time");
         }
 
         let finish_epoch_handler = self.setup_epoch_handler(store, modules)?;
@@ -390,15 +421,20 @@ impl RunCommand {
         let result = match linker {
             CliLinker::Core(linker) => {
                 let module = module.unwrap_core();
-                let instance = linker.instantiate(&mut *store, &module).context(format!(
-                    "failed to instantiate {:?}",
-                    self.module_and_args[0]
-                ))?;
+                let instance = linker
+                    .instantiate_async(&mut *store, &module)
+                    .await
+                    .context(format!(
+                        "failed to instantiate {:?}",
+                        self.module_and_args[0]
+                    ))?;
 
                 // If `_initialize` is present, meaning a reactor, then invoke
                 // the function.
                 if let Some(func) = instance.get_func(&mut *store, "_initialize") {
-                    func.typed::<(), ()>(&store)?.call(&mut *store, ())?;
+                    func.typed::<(), ()>(&store)?
+                        .call_async(&mut *store, ())
+                        .await?;
                 }
 
                 // Look for the specific function provided or otherwise look for
@@ -416,7 +452,7 @@ impl RunCommand {
                 };
 
                 match func {
-                    Some(func) => self.invoke_func(store, func),
+                    Some(func) => self.invoke_func(store, func).await,
                     None => Ok(()),
                 }
             }
@@ -428,14 +464,16 @@ impl RunCommand {
 
                 let component = module.unwrap_component();
 
-                let command = wasmtime_wasi::bindings::sync::Command::instantiate(
+                let command = wasmtime_wasi::bindings::Command::instantiate_async(
                     &mut *store,
                     component,
                     linker,
-                )?;
+                )
+                .await?;
                 let result = command
                     .wasi_cli_run()
                     .call_run(&mut *store)
+                    .await
                     .context("failed to invoke `run` function")
                     .map_err(|e| self.handle_core_dump(&mut *store, e));
 
@@ -452,7 +490,7 @@ impl RunCommand {
         result
     }
 
-    fn invoke_func(&self, store: &mut Store<Host>, func: Func) -> Result<()> {
+    async fn invoke_func(&self, store: &mut Store<Host>, func: Func) -> Result<()> {
         let ty = func.ty(&store);
         if ty.params().len() > 0 {
             eprintln!(
@@ -492,10 +530,11 @@ impl RunCommand {
         // out, if there are any.
         let mut results = vec![Val::null_func_ref(); ty.results().len()];
         let invoke_res = func
-            .call(&mut *store, &values, &mut results)
+            .call_async(&mut *store, &values, &mut results)
+            .await
             .with_context(|| {
                 if let Some(name) = &self.invoke {
-                    format!("failed to invoke `{}`", name)
+                    format!("failed to invoke `{name}`")
                 } else {
                     format!("failed to invoke command default")
                 }
@@ -514,8 +553,8 @@ impl RunCommand {
 
         for result in results {
             match result {
-                Val::I32(i) => println!("{}", i),
-                Val::I64(i) => println!("{}", i),
+                Val::I32(i) => println!("{i}"),
+                Val::I64(i) => println!("{i}"),
                 Val::F32(f) => println!("{}", f32::from_bits(f)),
                 Val::F64(f) => println!("{}", f64::from_bits(f)),
                 Val::V128(i) => println!("{}", i.as_u128()),
@@ -545,10 +584,10 @@ impl RunCommand {
             .unwrap_or_else(|| "unknown");
 
         if let Err(coredump_err) = write_core_dump(store, &err, &source_name, coredump_path) {
-            eprintln!("warning: coredump failed to generate: {}", coredump_err);
+            eprintln!("warning: coredump failed to generate: {coredump_err}");
             err
         } else {
-            err.context(format!("core dumped at {}", coredump_path))
+            err.context(format!("core dumped at {coredump_path}"))
         }
     }
 
@@ -587,7 +626,7 @@ impl RunCommand {
                         // are enabled, then use the historical preview1
                         // implementation.
                         (Some(false), _) | (None, Some(true)) => {
-                            wasi_common::sync::add_to_linker(linker, |host| {
+                            wasi_common::tokio::add_to_linker(linker, |host| {
                                 host.preview1_ctx.as_mut().unwrap()
                             })?;
                             self.set_preview1_ctx(store)?;
@@ -600,11 +639,11 @@ impl RunCommand {
                         // default-disabled in the future.
                         (Some(true), _) | (None, Some(false) | None) => {
                             if self.run.common.wasi.preview0 != Some(false) {
-                                wasmtime_wasi::preview0::add_to_linker_sync(linker, |t| {
+                                wasmtime_wasi::preview0::add_to_linker_async(linker, |t| {
                                     t.preview2_ctx()
                                 })?;
                             }
-                            wasmtime_wasi::preview1::add_to_linker_sync(linker, |t| {
+                            wasmtime_wasi::preview1::add_to_linker_async(linker, |t| {
                                 t.preview2_ctx()
                             })?;
                             self.set_preview2_ctx(store)?;
@@ -613,7 +652,7 @@ impl RunCommand {
                 }
                 #[cfg(feature = "component-model")]
                 CliLinker::Component(linker) => {
-                    wasmtime_wasi::add_to_linker_sync(linker)?;
+                    wasmtime_wasi::add_to_linker_async(linker)?;
                     self.set_preview2_ctx(store)?;
                 }
             }
@@ -653,6 +692,77 @@ impl RunCommand {
                         store.data_mut().wasi_nn_wit = Some(Arc::new(
                             wasmtime_wasi_nn::wit::WasiNnCtx::new(backends, registry),
                         ));
+                    }
+                }
+            }
+        }
+
+        if self.run.common.wasi.runtime_config == Some(true) {
+            #[cfg(not(feature = "wasi-runtime-config"))]
+            {
+                bail!("Cannot enable wasi-runtime-config when the binary is not compiled with this feature.");
+            }
+            #[cfg(all(feature = "wasi-runtime-config", feature = "component-model"))]
+            {
+                match linker {
+                    CliLinker::Core(_) => {
+                        bail!("Cannot enable wasi-runtime-config for core wasm modules");
+                    }
+                    CliLinker::Component(linker) => {
+                        let vars = WasiRuntimeConfigVariables::from_iter(
+                            self.run
+                                .common
+                                .wasi
+                                .runtime_config_var
+                                .iter()
+                                .map(|v| (v.key.clone(), v.value.clone())),
+                        );
+
+                        wasmtime_wasi_runtime_config::add_to_linker(linker, |h| {
+                            WasiRuntimeConfig::new(
+                                Arc::get_mut(h.wasi_runtime_config.as_mut().unwrap()).unwrap(),
+                            )
+                        })?;
+                        store.data_mut().wasi_runtime_config = Some(Arc::new(vars));
+                    }
+                }
+            }
+        }
+
+        if self.run.common.wasi.keyvalue == Some(true) {
+            #[cfg(not(feature = "wasi-keyvalue"))]
+            {
+                bail!("Cannot enable wasi-keyvalue when the binary is not compiled with this feature.");
+            }
+            #[cfg(all(feature = "wasi-keyvalue", feature = "component-model"))]
+            {
+                match linker {
+                    CliLinker::Core(_) => {
+                        bail!("Cannot enable wasi-keyvalue for core wasm modules");
+                    }
+                    CliLinker::Component(linker) => {
+                        let ctx = WasiKeyValueCtxBuilder::new()
+                            .in_memory_data(
+                                self.run
+                                    .common
+                                    .wasi
+                                    .keyvalue_in_memory_data
+                                    .iter()
+                                    .map(|v| (v.key.clone(), v.value.clone())),
+                            )
+                            .build();
+
+                        wasmtime_wasi_keyvalue::add_to_linker(linker, |h| {
+                            let preview2_ctx =
+                                h.preview2_ctx.as_mut().expect("wasip2 is not configured");
+                            let preview2_ctx =
+                                Arc::get_mut(preview2_ctx).unwrap().get_mut().unwrap();
+                            WasiKeyValue::new(
+                                Arc::get_mut(h.wasi_keyvalue.as_mut().unwrap()).unwrap(),
+                                preview2_ctx.table(),
+                            )
+                        })?;
+                        store.data_mut().wasi_keyvalue = Some(Arc::new(ctx));
                     }
                 }
             }
@@ -748,7 +858,7 @@ impl RunCommand {
 
         for (host, guest) in self.run.dirs.iter() {
             let dir = Dir::open_ambient_dir(host, ambient_authority())
-                .with_context(|| format!("failed to open directory '{}'", host))?;
+                .with_context(|| format!("failed to open directory '{host}'"))?;
             builder.preopened_dir(dir, guest)?;
         }
 
@@ -802,6 +912,11 @@ struct Host {
     limits: StoreLimits,
     #[cfg(feature = "profiling")]
     guest_profiler: Option<Arc<wasmtime::GuestProfiler>>,
+
+    #[cfg(feature = "wasi-runtime-config")]
+    wasi_runtime_config: Option<Arc<WasiRuntimeConfigVariables>>,
+    #[cfg(feature = "wasi-keyvalue")]
+    wasi_keyvalue: Option<Arc<WasiKeyValueCtx>>,
 }
 
 impl Host {
@@ -885,9 +1000,9 @@ fn write_core_dump(
     let core_dump = core_dump.serialize(store, name);
 
     let mut core_dump_file =
-        File::create(path).context(format!("failed to create file at `{}`", path))?;
+        File::create(path).context(format!("failed to create file at `{path}`"))?;
     core_dump_file
         .write_all(&core_dump)
-        .with_context(|| format!("failed to write core dump file at `{}`", path))?;
+        .with_context(|| format!("failed to write core dump file at `{path}`"))?;
     Ok(())
 }

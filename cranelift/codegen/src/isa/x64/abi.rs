@@ -1,6 +1,6 @@
 //! Implementation of the standard x64 ABI.
 
-use crate::ir::{self, types, LibCall, MemFlags, Opcode, Signature, TrapCode};
+use crate::ir::{self, types, LibCall, MemFlags, Signature, TrapCode};
 use crate::ir::{types::*, ExternalName};
 use crate::isa;
 use crate::isa::{unwind::UnwindInst, x64::inst::*, x64::settings as x64_settings, CallConv};
@@ -123,9 +123,12 @@ impl ABIMachineSpec for X64ABIMachineSpec {
         // extension annotations. Additionally, handling extension attributes this way allows clif
         // functions that use them with the Winch calling convention to interact successfully with
         // testing infrastructure.
+        // The results are also not packed if any of the types are `f16`. This is to simplify the
+        // implementation of `Inst::load`/`Inst::store` (which would otherwise require multiple
+        // instructions), and doesn't affect Winch itself as Winch doesn't support `f16` at all.
         let uses_extension = params
             .iter()
-            .any(|p| p.extension != ir::ArgumentExtension::None);
+            .any(|p| p.extension != ir::ArgumentExtension::None || p.value_type == types::F16);
 
         for (ix, param) in params.iter().enumerate() {
             let last_param = ix == params.len() - 1;
@@ -169,11 +172,21 @@ impl ABIMachineSpec for X64ABIMachineSpec {
             // https://godbolt.org/z/PhG3ob
 
             if param.value_type.bits() > 64
-                && !param.value_type.is_vector()
+                && !(param.value_type.is_vector() || param.value_type.is_float())
                 && !flags.enable_llvm_abi_extensions()
             {
                 panic!(
                     "i128 args/return values not supported unless LLVM ABI extensions are enabled"
+                );
+            }
+            // As MSVC doesn't support f16/f128 there is no standard way to pass/return them with
+            // the Windows ABI. LLVM passes/returns them in XMM registers.
+            if matches!(param.value_type, types::F16 | types::F128)
+                && is_fastcall
+                && !flags.enable_llvm_abi_extensions()
+            {
+                panic!(
+                    "f16/f128 args/return values not supported for windows_fastcall unless LLVM ABI extensions are enabled"
                 );
             }
 
@@ -410,12 +423,20 @@ impl ABIMachineSpec for X64ABIMachineSpec {
         // bits as well -- see `Inst::store()`).
         let ty = match ty {
             types::I8 | types::I16 | types::I32 => types::I64,
+            // Stack slots are always at least 8 bytes, so it's fine to load 4 bytes instead of only
+            // two.
+            types::F16 => types::F32,
             _ => ty,
         };
         Inst::load(ty, mem, into_reg, ExtKind::None)
     }
 
     fn gen_store_stack(mem: StackAMode, from_reg: Reg, ty: Type) -> Self::I {
+        let ty = match ty {
+            // See `gen_load_stack`.
+            types::F16 => types::F32,
+            _ => ty,
+        };
         Inst::store(ty, from_reg, mem)
     }
 
@@ -432,7 +453,7 @@ impl ABIMachineSpec for X64ABIMachineSpec {
         to_bits: u8,
     ) -> Self::I {
         let ext_mode = ExtMode::new(from_bits as u16, to_bits as u16)
-            .unwrap_or_else(|| panic!("invalid extension: {} -> {}", from_bits, to_bits));
+            .unwrap_or_else(|| panic!("invalid extension: {from_bits} -> {to_bits}"));
         if is_signed {
             Inst::movsx_rm_r(ext_mode, RegMem::reg(from_reg), to_reg)
         } else {
@@ -502,6 +523,11 @@ impl ABIMachineSpec for X64ABIMachineSpec {
     }
 
     fn gen_store_base_offset(base: Reg, offset: i32, from_reg: Reg, ty: Type) -> Self::I {
+        let ty = match ty {
+            // See `gen_load_stack`.
+            types::F16 => types::F32,
+            _ => ty,
+        };
         let mem = Amode::imm_reg(offset, base);
         Inst::store(ty, from_reg, mem)
     }
@@ -591,17 +617,12 @@ impl ABIMachineSpec for X64ABIMachineSpec {
             Writable::from_reg(regs::rax()),
         ));
         insts.push(Inst::CallKnown {
-            opcode: Opcode::Call,
-            dest: ExternalName::LibCall(LibCall::Probestack),
-            info: Some(Box::new(CallInfo {
-                // No need to include arg here: we are post-regalloc
-                // so no constraints will be seen anyway.
-                uses: smallvec![],
-                defs: smallvec![],
-                clobbers: PRegSet::empty(),
-                callee_pop_size: 0,
-                callee_conv: CallConv::Probestack,
-            })),
+            // No need to include arg here: we are post-regalloc
+            // so no constraints will be seen anyway.
+            info: Box::new(CallInfo::empty(
+                ExternalName::LibCall(LibCall::Probestack),
+                CallConv::Probestack,
+            )),
         });
     }
 
@@ -797,29 +818,12 @@ impl ABIMachineSpec for X64ABIMachineSpec {
     }
 
     /// Generate a call instruction/sequence.
-    fn gen_call(
-        dest: &CallDest,
-        uses: CallArgList,
-        defs: CallRetList,
-        clobbers: PRegSet,
-        opcode: ir::Opcode,
-        tmp: Writable<Reg>,
-        callee_conv: isa::CallConv,
-        _caller_conv: isa::CallConv,
-        callee_pop_size: u32,
-    ) -> SmallVec<[Self::I; 2]> {
+    fn gen_call(dest: &CallDest, tmp: Writable<Reg>, info: CallInfo<()>) -> SmallVec<[Self::I; 2]> {
         let mut insts = SmallVec::new();
         match dest {
             &CallDest::ExtName(ref name, RelocDistance::Near) => {
-                insts.push(Inst::call_known(
-                    name.clone(),
-                    uses,
-                    defs,
-                    clobbers,
-                    opcode,
-                    callee_pop_size,
-                    callee_conv,
-                ));
+                let info = Box::new(info.map(|()| name.clone()));
+                insts.push(Inst::call_known(info));
             }
             &CallDest::ExtName(ref name, RelocDistance::Far) => {
                 insts.push(Inst::LoadExtName {
@@ -828,26 +832,12 @@ impl ABIMachineSpec for X64ABIMachineSpec {
                     offset: 0,
                     distance: RelocDistance::Far,
                 });
-                insts.push(Inst::call_unknown(
-                    RegMem::reg(tmp.to_reg()),
-                    uses,
-                    defs,
-                    clobbers,
-                    opcode,
-                    callee_pop_size,
-                    callee_conv,
-                ));
+                let info = Box::new(info.map(|()| RegMem::reg(tmp.to_reg())));
+                insts.push(Inst::call_unknown(info));
             }
             &CallDest::Reg(reg) => {
-                insts.push(Inst::call_unknown(
-                    RegMem::reg(reg),
-                    uses,
-                    defs,
-                    clobbers,
-                    opcode,
-                    callee_pop_size,
-                    callee_conv,
-                ));
+                let info = Box::new(info.map(|()| RegMem::reg(reg)));
+                insts.push(Inst::call_unknown(info));
             }
         }
         insts
@@ -877,10 +867,9 @@ impl ABIMachineSpec for X64ABIMachineSpec {
             distance: RelocDistance::Far,
         });
         let callee_pop_size = 0;
-        insts.push(Inst::call_unknown(
-            RegMem::reg(temp2.to_reg()),
-            /* uses = */
-            smallvec![
+        insts.push(Inst::call_unknown(Box::new(CallInfo {
+            dest: RegMem::reg(temp2.to_reg()),
+            uses: smallvec![
                 CallArgPair {
                     vreg: dst,
                     preg: arg0
@@ -894,12 +883,12 @@ impl ABIMachineSpec for X64ABIMachineSpec {
                     preg: arg2
                 },
             ],
-            /* defs = */ smallvec![],
-            /* clobbers = */ Self::get_regs_clobbered_by_call(call_conv),
-            Opcode::Call,
+            defs: smallvec![],
+            clobbers: Self::get_regs_clobbered_by_call(call_conv),
             callee_pop_size,
-            call_conv,
-        ));
+            callee_conv: call_conv,
+            caller_conv: call_conv,
+        })));
         insts
     }
 
@@ -1008,14 +997,17 @@ impl X64CallSite {
 
         // Finally, do the actual tail call!
         let dest = self.dest().clone();
-        let info = Box::new(ReturnCallInfo {
-            new_stack_arg_size,
-            uses: self.take_uses(),
-            tmp: ctx.temp_writable_gpr(),
-        });
+        let uses = self.take_uses();
+        let tmp = ctx.temp_writable_gpr();
         match dest {
             CallDest::ExtName(callee, RelocDistance::Near) => {
-                ctx.emit(Inst::ReturnCallKnown { callee, info });
+                let info = Box::new(ReturnCallInfo {
+                    dest: callee,
+                    uses,
+                    tmp,
+                    new_stack_arg_size,
+                });
+                ctx.emit(Inst::ReturnCallKnown { info });
             }
             CallDest::ExtName(callee, RelocDistance::Far) => {
                 let tmp2 = ctx.temp_writable_gpr();
@@ -1025,15 +1017,23 @@ impl X64CallSite {
                     offset: 0,
                     distance: RelocDistance::Far,
                 });
-                ctx.emit(Inst::ReturnCallUnknown {
-                    callee: tmp2.to_reg().to_reg(),
-                    info,
+                let info = Box::new(ReturnCallInfo {
+                    dest: tmp2.to_reg().to_reg().into(),
+                    uses,
+                    tmp,
+                    new_stack_arg_size,
                 });
+                ctx.emit(Inst::ReturnCallUnknown { info });
             }
-            CallDest::Reg(callee) => ctx.emit(Inst::ReturnCallUnknown {
-                callee: callee.into(),
-                info,
-            }),
+            CallDest::Reg(callee) => {
+                let info = Box::new(ReturnCallInfo {
+                    dest: callee.into(),
+                    uses,
+                    tmp,
+                    new_stack_arg_size,
+                });
+                ctx.emit(Inst::ReturnCallUnknown { info });
+            }
         }
     }
 }
@@ -1237,7 +1237,7 @@ fn compute_clobber_size(clobbers: &[Writable<RealReg>]) -> u32 {
 
 const WINDOWS_CLOBBERS: PRegSet = windows_clobbers();
 const SYSV_CLOBBERS: PRegSet = sysv_clobbers();
-const ALL_CLOBBERS: PRegSet = all_clobbers();
+pub(crate) const ALL_CLOBBERS: PRegSet = all_clobbers();
 
 const fn windows_clobbers() -> PRegSet {
     PRegSet::empty()

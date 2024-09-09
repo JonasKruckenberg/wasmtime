@@ -88,6 +88,7 @@ use crate::runtime::vm::{
     VMRuntimeLimits, WasmFault,
 };
 use crate::trampoline::VMHostGlobalContext;
+use crate::type_registry::RegisteredType;
 use crate::RootSet;
 use crate::{module::ModuleRegistry, Engine, Module, Trap, Val, ValRaw};
 use crate::{Global, Instance, Memory, RootScope, Table, Uninhabited};
@@ -323,6 +324,8 @@ pub struct StoreOpaque {
     gc_store: Option<GcStore>,
     gc_roots: RootSet,
     gc_roots_list: GcRootsList,
+    // Types for which the embedder has created an allocator for.
+    gc_host_alloc_types: hashbrown::HashSet<RegisteredType>,
 
     // Numbers of resources instantiated in this store, and their limits
     instance_count: usize,
@@ -521,6 +524,7 @@ impl<T> Store<T> {
                 gc_store: None,
                 gc_roots: RootSet::default(),
                 gc_roots_list: GcRootsList::default(),
+                gc_host_alloc_types: hashbrown::HashSet::default(),
                 modules: ModuleRegistry::default(),
                 func_refs: FuncRefs::default(),
                 host_globals: Vec::new(),
@@ -915,7 +919,7 @@ impl<T> Store<T> {
     /// yield and then continue.
     ///
     /// This deadline is always set relative to the current epoch:
-    /// `delta_beyond_current` ticks in the future. The deadline can
+    /// `ticks_beyond_current` ticks in the future. The deadline can
     /// be set explicitly via this method, or refilled automatically
     /// on a yield if configured via
     /// [`epoch_deadline_async_yield_and_update()`](Store::epoch_deadline_async_yield_and_update). After
@@ -1174,13 +1178,14 @@ impl<T> StoreInner<T> {
 
         // Temporarily take the configured behavior to avoid mutably borrowing
         // multiple times.
+        #[cfg_attr(not(feature = "call-hook"), allow(unreachable_patterns))]
         if let Some(mut call_hook) = self.call_hook.take() {
             let result = self.invoke_call_hook(&mut call_hook, s);
             self.call_hook = Some(call_hook);
-            result
-        } else {
-            Ok(())
+            return result;
         }
+
+        Ok(())
     }
 
     fn invoke_call_hook(&mut self, call_hook: &mut CallHookInner<T>, s: CallHook) -> Result<()> {
@@ -1514,11 +1519,7 @@ impl StoreOpaque {
 
         #[cfg(feature = "gc")]
         fn allocate_gc_store(engine: &Engine) -> Result<GcStore> {
-            let (index, heap) = if engine
-                .config()
-                .features
-                .contains(wasmparser::WasmFeatures::REFERENCE_TYPES)
-            {
+            let (index, heap) = if engine.features().gc_types() {
                 engine
                     .allocator()
                     .allocate_gc_heap(&**engine.gc_runtime())?
@@ -1696,11 +1697,12 @@ impl StoreOpaque {
             let pc = frame.pc();
             debug_assert!(pc != 0, "we should always get a valid PC for Wasm frames");
 
-            let fp = frame.fp();
+            let fp = frame.fp() as *mut usize;
             debug_assert!(
-                fp != 0,
+                !fp.is_null(),
                 "we should always get a valid frame pointer for Wasm frames"
             );
+
             let module_info = self
                 .modules()
                 .lookup(pc)
@@ -1714,31 +1716,16 @@ impl StoreOpaque {
                 }
             };
             log::trace!(
-                "We have a stack map that maps {} words in this Wasm frame",
-                stack_map.mapped_words()
+                "We have a stack map that maps {} bytes in this Wasm frame",
+                stack_map.frame_size()
             );
 
-            let sp = fp - stack_map.mapped_words() as usize * mem::size_of::<usize>();
+            let sp = unsafe { stack_map.sp(fp) };
+            for stack_slot in unsafe { stack_map.live_gc_refs(sp) } {
+                let raw: u32 = unsafe { core::ptr::read(stack_slot) };
+                log::trace!("Stack slot @ {stack_slot:p} = {raw:#x}");
 
-            for i in 0..(stack_map.mapped_words() as usize) {
-                // Stack maps have one bit per word in the frame, and the
-                // zero^th bit is the *lowest* addressed word in the frame,
-                // i.e. the closest to the SP. So to get the `i`^th word in
-                // this frame, we add `i * sizeof(word)` to the SP.
-                let stack_slot = sp + i * mem::size_of::<usize>();
-                let stack_slot = stack_slot as *mut u64;
-
-                if !stack_map.get_bit(i) {
-                    log::trace!("Stack slot @ {stack_slot:p} does not contain gc_refs");
-                    continue;
-                }
-
-                let gc_ref = unsafe { core::ptr::read(stack_slot) };
-                log::trace!("Stack slot @ {stack_slot:p} = {gc_ref:#x}");
-
-                let gc_ref = VMGcRef::from_r64(gc_ref)
-                    .expect("we should never use the high 32 bits of an r64");
-
+                let gc_ref = VMGcRef::from_raw_u32(raw);
                 if gc_ref.is_some() {
                     unsafe {
                         gc_roots_list.add_wasm_stack_root(SendSyncPtr::new(
@@ -1767,6 +1754,16 @@ impl StoreOpaque {
         log::trace!("Begin trace GC roots :: user");
         self.gc_roots.trace_roots(gc_roots_list);
         log::trace!("End trace GC roots :: user");
+    }
+
+    /// Insert a host-allocated GC type into this store.
+    ///
+    /// This makes it suitable for the embedder to allocate instances of this
+    /// type in this store, and we don't have to worry about the type being
+    /// reclaimed (since it is possible that none of the Wasm modules in this
+    /// store are holding it alive).
+    pub(crate) fn insert_gc_host_alloc_type(&mut self, ty: RegisteredType) {
+        self.gc_host_alloc_types.insert(ty);
     }
 
     /// Yields the async context, assuming that we are executing on a fiber and
@@ -2030,7 +2027,7 @@ at https://bytecodealliance.org/security.
     /// Retrieve the store's protection key.
     #[inline]
     pub(crate) fn get_pkey(&self) -> Option<ProtectionKey> {
-        self.pkey.clone()
+        self.pkey
     }
 
     #[inline]
@@ -2602,7 +2599,7 @@ unsafe impl<T> crate::runtime::vm::Store for StoreInner<T> {
             None => None,
             Some(r) => {
                 let r = r
-                    .unchecked_get_gc_ref(store)
+                    .get_gc_ref(store)
                     .expect("still in scope")
                     .unchecked_copy();
                 Some(store.gc_store_mut()?.clone_gc_ref(&r))
@@ -2716,7 +2713,14 @@ impl Drop for StoreOpaque {
 
             #[cfg(feature = "gc")]
             if let Some(gc_store) = self.gc_store.take() {
-                allocator.deallocate_gc_heap(gc_store.allocation_index, gc_store.gc_heap);
+                if self.engine.features().gc_types() {
+                    allocator.deallocate_gc_heap(gc_store.allocation_index, gc_store.gc_heap);
+                } else {
+                    // If GC types are not enabled, we are just dealing with a
+                    // dummy GC heap.
+                    debug_assert_eq!(gc_store.allocation_index, GcHeapAllocationIndex::default());
+                    debug_assert!(gc_store.gc_heap.as_any().is::<crate::vm::DisabledGcHeap>());
+                }
             }
 
             #[cfg(feature = "component-model")]

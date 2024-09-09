@@ -3,7 +3,7 @@
 //! recommended when working on this area of Winch.
 use super::env::{HeapData, HeapStyle};
 use crate::{
-    abi::{vmctx, ABI},
+    abi::{scratch, vmctx},
     codegen::CodeGenContext,
     isa::reg::Reg,
     masm::{IntCmpKind, MacroAssembler, OperandSize, RegImm, TrapCode},
@@ -96,7 +96,7 @@ where
             masm.mov(RegImm::i64(max_size as i64), dst, ptr_size)
         }
         (_, HeapStyle::Dynamic) => {
-            let scratch = <M::ABI as ABI>::scratch_reg();
+            let scratch = scratch!(M);
             let base = if let Some(offset) = heap.import_from {
                 let addr = masm.address_at_vmctx(offset);
                 masm.load_ptr(addr, scratch);
@@ -115,11 +115,11 @@ where
 
 /// This function ensures the following:
 /// * The immediate offset and memory access size fit in a single u64. Given:
-/// that the memory access size is a `u8`, we must guarantee that the immediate
-/// offset will fit in a `u32`, making the result of their addition fit in a u64
-/// and overflow safe.
+///   that the memory access size is a `u8`, we must guarantee that the immediate
+///   offset will fit in a `u32`, making the result of their addition fit in a u64
+///   and overflow safe.
 /// * Adjust the base index to account for the immediate offset via an unsigned
-/// addition and check for overflow in case the previous condition is not met.
+///   addition and check for overflow in case the previous condition is not met.
 #[inline]
 pub(crate) fn ensure_index_and_offset<M: MacroAssembler>(
     masm: &mut M,
@@ -199,7 +199,7 @@ pub(crate) fn load_heap_addr_unchecked<M>(
     let base = if let Some(offset) = heap.import_from {
         // If the WebAssembly memory is imported, load the address into
         // the scratch register.
-        let scratch = <M::ABI as ABI>::scratch_reg();
+        let scratch = scratch!(M);
         masm.load_ptr(masm.address_at_vmctx(offset), scratch);
         scratch
     } else {

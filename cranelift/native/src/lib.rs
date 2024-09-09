@@ -109,6 +109,10 @@ pub fn infer_native_flags(isa_builder: &mut dyn Configurable) -> Result<(), &'st
             isa_builder.enable("has_pauth").unwrap();
         }
 
+        if std::arch::is_aarch64_feature_detected!("fp16") {
+            isa_builder.enable("has_fp16").unwrap();
+        }
+
         if cfg!(target_os = "macos") {
             // Pointer authentication is always available on Apple Silicon.
             isa_builder.enable("sign_return_address").unwrap();
@@ -151,6 +155,9 @@ pub fn infer_native_flags(isa_builder: &mut dyn Configurable) -> Result<(), &'st
     Ok(())
 }
 
+/// Version number of this crate.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[cfg(test)]
 mod tests {
     use super::builder;
@@ -183,6 +190,3 @@ mod tests {
         }
     }
 }
-
-/// Version number of this crate.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");

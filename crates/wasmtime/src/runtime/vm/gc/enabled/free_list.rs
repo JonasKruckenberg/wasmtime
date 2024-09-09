@@ -14,13 +14,19 @@ pub(crate) struct FreeList {
 
 /// Our minimum and maximum supported alignment. Every allocation is aligned to
 /// this.
-const ALIGN_USIZE: usize = 8;
-const ALIGN_U32: u32 = ALIGN_USIZE as u32;
+const ALIGN_U32: u32 = 8;
+const ALIGN_USIZE: usize = ALIGN_U32 as usize;
 
 /// Our minimum allocation size.
 const MIN_BLOCK_SIZE: u32 = 24;
 
 impl FreeList {
+    /// Create a new `Layout` from the given `size` with an alignment that is
+    /// compatible with this free list.
+    pub fn layout(size: usize) -> Layout {
+        Layout::from_size_align(size, ALIGN_USIZE).unwrap()
+    }
+
     /// Create a new `FreeList` for a contiguous region of memory of the given
     /// size.
     pub fn new(capacity: usize) -> Self {

@@ -176,9 +176,7 @@ impl Type {
                 err: Type::generate_opt(u, depth - 1, fuel)?.map(Box::new),
             },
             20 => {
-                // Generate 1 flag all the way up to 65 flags which exercises
-                // the 1 to 3 x u32 cases.
-                let amt = u.int_in_range(1..=(*fuel).min(65))?;
+                let amt = u.int_in_range(1..=(*fuel).min(32))?;
                 *fuel -= amt;
                 Type::Flags(amt)
             }
@@ -571,10 +569,16 @@ pub fn rust_type(ty: &Type, name_counter: &mut u32, declarations: &mut TokenStre
                 .collect::<TokenStream>();
 
             let name = make_rust_name(name_counter);
+            let repr = match count.ilog2() {
+                0..=7 => quote!(u8),
+                8..=15 => quote!(u16),
+                _ => quote!(u32),
+            };
 
             declarations.extend(quote! {
                 #[derive(ComponentType, Lift, Lower, PartialEq, Debug, Copy, Clone, Arbitrary)]
                 #[component(enum)]
+                #[repr(#repr)]
                 enum #name {
                     #cases
                 }

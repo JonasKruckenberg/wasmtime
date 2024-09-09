@@ -843,8 +843,14 @@ pub(crate) fn check(
 
         Inst::ReturnCallUnknown { .. } => Ok(()),
 
-        Inst::CallUnknown { ref dest, .. }
-        | Inst::JmpUnknown {
+        Inst::CallUnknown { ref info } => match <&RegMem>::from(&info.dest) {
+            RegMem::Mem { ref addr } => {
+                check_load(ctx, None, addr, vcode, I64, 64)?;
+                Ok(())
+            }
+            RegMem::Reg { .. } => Ok(()),
+        },
+        Inst::JmpUnknown {
             target: ref dest, ..
         } => match <&RegMem>::from(dest) {
             RegMem::Mem { ref addr } => {
@@ -901,6 +907,8 @@ pub(crate) fn check(
         }
 
         Inst::Unwind { .. } | Inst::DummyUse { .. } => Ok(()),
+
+        Inst::StackSwitchBasic { .. } => Err(PccError::UnimplementedInst),
     }
 }
 

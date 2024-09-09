@@ -354,6 +354,7 @@ macro_rules! for_each_function_signature {
         $mac!(14 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14);
         $mac!(15 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15);
         $mac!(16 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16);
+        $mac!(17 A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17);
     };
 }
 
@@ -608,6 +609,10 @@ impl Func {
     /// | `AnyRef`                          | `(ref any)`                               |
     /// | `Option<I31>`                     | `i31ref` aka `(ref null i31)`             |
     /// | `I31`                             | `(ref i31)`                               |
+    /// | `Option<StructRef>`               | `(ref null struct)`                       |
+    /// | `StructRef`                       | `(ref struct)`                            |
+    /// | `Option<ArrayRef>`                | `(ref null array)`                        |
+    /// | `ArrayRef`                        | `(ref array)`                             |
     ///
     /// Any of the Rust types can be returned from the closure as well, in
     /// addition to some extra types
@@ -900,6 +905,11 @@ impl Func {
     /// Does this function match the given type?
     ///
     /// That is, is this function's type a subtype of the given type?
+    ///
+    /// # Panics
+    ///
+    /// Panics if this function is not associated with the given store or if the
+    /// function type is not associated with the store's engine.
     pub fn matches_ty(&self, store: impl AsContext, func_ty: &FuncType) -> bool {
         self._matches_ty(store.as_context().0, func_ty)
     }
@@ -979,8 +989,8 @@ impl Func {
     /// # Panics
     ///
     /// This function will panic if called on a function belonging to an async
-    /// store. Asynchronous stores must always use `call_async`.
-    /// initiates a panic. Also panics if `store` does not own this function.
+    /// store. Asynchronous stores must always use `call_async`. Also panics if
+    /// `store` does not own this function.
     ///
     /// [`WasmBacktrace`]: crate::WasmBacktrace
     pub fn call(
@@ -1423,6 +1433,10 @@ impl Func {
     /// | `(ref any)`                               | `AnyRef`                              |
     /// | `i31ref` aka `(ref null i31)`             | `Option<I31>`                         |
     /// | `(ref i31)`                               | `I31`                                 |
+    /// | `structref` aka `(ref null struct)`       | `Option<Struct>`                      |
+    /// | `(ref struct)`                            | `Struct`                              |
+    /// | `arrayref` aka `(ref null array)`         | `Option<Array>`                       |
+    /// | `(ref array)`                             | `Array`                               |
     /// | `funcref` aka `(ref null func)`           | `Option<Func>`                        |
     /// | `(ref func)`                              | `Func`                                |
     /// | `(ref null <func type index>)`            | `Option<Func>`                        |

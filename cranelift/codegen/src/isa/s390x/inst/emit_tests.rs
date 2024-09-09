@@ -1,7 +1,6 @@
 use crate::ir::{MemFlags, TrapCode};
 use crate::isa::s390x::inst::*;
 use crate::isa::s390x::settings as s390x_settings;
-use smallvec::smallvec;
 
 #[cfg(test)]
 fn simm20_zero() -> SImm20 {
@@ -6984,16 +6983,10 @@ fn test_s390x_binemit() {
     insns.push((
         Inst::Call {
             link: writable_gpr(14),
-            info: Box::new(CallInfo {
-                dest: ExternalName::testcase("test0"),
-                uses: smallvec![],
-                defs: smallvec![],
-                clobbers: PRegSet::empty(),
-                opcode: Opcode::Call,
-                caller_callconv: CallConv::SystemV,
-                callee_callconv: CallConv::SystemV,
-                tls_symbol: None,
-            }),
+            info: Box::new(CallInfo::empty(
+                ExternalName::testcase("test0"),
+                CallConv::SystemV,
+            )),
         },
         "C0E500000000",
         "brasl %r14, %test0",
@@ -7002,15 +6995,7 @@ fn test_s390x_binemit() {
     insns.push((
         Inst::CallInd {
             link: writable_gpr(14),
-            info: Box::new(CallIndInfo {
-                rn: gpr(1),
-                uses: smallvec![],
-                defs: smallvec![],
-                clobbers: PRegSet::empty(),
-                opcode: Opcode::CallIndirect,
-                caller_callconv: CallConv::SystemV,
-                callee_callconv: CallConv::SystemV,
-            }),
+            info: Box::new(CallInfo::empty(gpr(1), CallConv::SystemV)),
         },
         "0DE1",
         "basr %r14, %r1",
@@ -13359,10 +13344,7 @@ fn test_s390x_binemit() {
 
     let emit_info = EmitInfo::new(isa_flags);
     for (insn, expected_encoding, expected_printing) in insns {
-        println!(
-            "S390x: {:?}, {}, {}",
-            insn, expected_encoding, expected_printing
-        );
+        println!("S390x: {insn:?}, {expected_encoding}, {expected_printing}");
 
         // Check the printed text is as expected.
         let actual_printing = insn.print_with_state(&mut EmitState::default());

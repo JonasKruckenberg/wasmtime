@@ -58,7 +58,7 @@ where
         if ctrl_ty.is_invalid() {
             String::new()
         } else {
-            format!(".{}", ctrl_ty)
+            format!(".{ctrl_ty}")
         }
     );
 
@@ -83,18 +83,19 @@ where
     let imm = || -> DataValue {
         DataValue::from(match inst {
             InstructionData::UnaryConst {
-                constant_handle, ..
+                constant_handle,
+                opcode,
             } => {
                 let buffer = state
                     .get_current_function()
                     .dfg
                     .constants
-                    .get(constant_handle.clone())
-                    .as_slice();
-                match ctrl_ty.bytes() {
-                    16 => DataValue::V128(buffer.try_into().expect("a 16-byte data buffer")),
-                    8 => DataValue::V64(buffer.try_into().expect("an 8-byte data buffer")),
-                    length => panic!("unexpected UnaryConst buffer length {}", length),
+                    .get(constant_handle);
+                match (ctrl_ty.bytes(), opcode) {
+                    (_, Opcode::F128const) => DataValue::F128(buffer.try_into().expect("a 16-byte data buffer")),
+                    (16, Opcode::Vconst) => DataValue::V128(buffer.as_slice().try_into().expect("a 16-byte data buffer")),
+                    (8, Opcode::Vconst) => DataValue::V64(buffer.as_slice().try_into().expect("an 8-byte data buffer")),
+                    (length, opcode) => panic!("unexpected UnaryConst controlling type size {length} for opcode {opcode:?}"),
                 }
             }
             InstructionData::Shuffle { imm, .. } => {
@@ -115,6 +116,8 @@ where
             InstructionData::BinaryImm8 { imm, .. } | InstructionData::TernaryImm8 { imm, .. } => {
                 DataValue::from(imm as i8) // Note the switch from unsigned to signed.
             }
+            // 16-bit
+            InstructionData::UnaryIeee16 { imm, .. } => DataValue::from(imm),
             // 32-bit
             InstructionData::UnaryIeee32 { imm, .. } => DataValue::from(imm),
             InstructionData::Load { offset, .. }
@@ -552,10 +555,11 @@ where
             ControlFlow::Continue
         }
         Opcode::Iconst => assign(DataValueExt::int(imm().into_int_signed()?, ctrl_ty)?),
+        Opcode::F16const => assign(imm()),
         Opcode::F32const => assign(imm()),
         Opcode::F64const => assign(imm()),
+        Opcode::F128const => assign(imm()),
         Opcode::Vconst => assign(imm()),
-        Opcode::Null => unimplemented!("Null"),
         Opcode::Nop => ControlFlow::Continue,
         Opcode::Select | Opcode::SelectSpectreGuard => choose(arg(0).into_bool()?, arg(1), arg(2)),
         Opcode::Bitselect => assign(bitselect(arg(0), arg(1), arg(2))?),
@@ -714,24 +718,24 @@ where
             let (sum, carry) = arg(0).smul_overflow(arg(1))?;
             assign_multiple(&[sum, DataValueExt::bool(carry, false, types::I8)?])
         }
-        Opcode::IaddCin => choose(
-            DataValueExt::into_bool(arg(2))?,
-            DataValueExt::add(
-                DataValueExt::add(arg(0), arg(1))?,
-                DataValueExt::int(1, ctrl_ty)?,
-            )?,
-            DataValueExt::add(arg(0), arg(1))?,
-        ),
-        Opcode::IaddCarry => {
-            let mut sum = DataValueExt::add(arg(0), arg(1))?;
-            let mut carry = arg(0).sadd_checked(arg(1))?.is_none();
+        Opcode::SaddOverflowCin => {
+            let (mut sum, mut carry) = arg(0).sadd_overflow(arg(1))?;
 
             if DataValueExt::into_bool(arg(2))? {
-                carry |= sum
-                    .clone()
-                    .sadd_checked(DataValueExt::int(1, ctrl_ty)?)?
-                    .is_none();
-                sum = DataValueExt::add(sum, DataValueExt::int(1, ctrl_ty)?)?;
+                let (sum2, carry2) = sum.sadd_overflow(DataValueExt::int(1, ctrl_ty)?)?;
+                carry |= carry2;
+                sum = sum2;
+            }
+
+            assign_multiple(&[sum, DataValueExt::bool(carry, false, types::I8)?])
+        }
+        Opcode::UaddOverflowCin => {
+            let (mut sum, mut carry) = arg(0).uadd_overflow(arg(1))?;
+
+            if DataValueExt::into_bool(arg(2))? {
+                let (sum2, carry2) = sum.uadd_overflow(DataValueExt::int(1, ctrl_ty)?)?;
+                carry |= carry2;
+                sum = sum2;
             }
 
             assign_multiple(&[sum, DataValueExt::bool(carry, false, types::I8)?])
@@ -745,23 +749,27 @@ where
                 assign(sum)
             }
         }
-        Opcode::IsubBin => choose(
-            DataValueExt::into_bool(arg(2))?,
-            DataValueExt::sub(
-                arg(0),
-                DataValueExt::add(arg(1), DataValueExt::int(1, ctrl_ty)?)?,
-            )?,
-            DataValueExt::sub(arg(0), arg(1))?,
-        ),
-        Opcode::IsubBorrow => {
-            let rhs = if DataValueExt::into_bool(arg(2))? {
-                DataValueExt::add(arg(1), DataValueExt::int(1, ctrl_ty)?)?
-            } else {
-                arg(1)
-            };
-            let borrow = arg(0) < rhs;
-            let sum = DataValueExt::sub(arg(0), rhs)?;
-            assign_multiple(&[sum, DataValueExt::bool(borrow, false, types::I8)?])
+        Opcode::SsubOverflowBin => {
+            let (mut sub, mut carry) = arg(0).ssub_overflow(arg(1))?;
+
+            if DataValueExt::into_bool(arg(2))? {
+                let (sub2, carry2) = sub.ssub_overflow(DataValueExt::int(1, ctrl_ty)?)?;
+                carry |= carry2;
+                sub = sub2;
+            }
+
+            assign_multiple(&[sub, DataValueExt::bool(carry, false, types::I8)?])
+        }
+        Opcode::UsubOverflowBin => {
+            let (mut sub, mut carry) = arg(0).usub_overflow(arg(1))?;
+
+            if DataValueExt::into_bool(arg(2))? {
+                let (sub2, carry2) = sub.usub_overflow(DataValueExt::int(1, ctrl_ty)?)?;
+                carry |= carry2;
+                sub = sub2;
+            }
+
+            assign_multiple(&[sub, DataValueExt::bool(carry, false, types::I8)?])
         }
         Opcode::Band => binary(DataValueExt::and, arg(0), arg(1))?,
         Opcode::Bor => binary(DataValueExt::or, arg(0), arg(1))?,
@@ -868,8 +876,6 @@ where
         Opcode::Floor => unary(DataValueExt::floor, arg(0))?,
         Opcode::Trunc => unary(DataValueExt::trunc, arg(0))?,
         Opcode::Nearest => unary(DataValueExt::nearest, arg(0))?,
-        Opcode::IsNull => unimplemented!("IsNull"),
-        Opcode::IsInvalid => unimplemented!("IsInvalid"),
         Opcode::Bitcast | Opcode::ScalarToVector => {
             let input_ty = inst_context.type_of(inst_context.args()[0]).unwrap();
             let lanes = &if input_ty.is_vector() {
@@ -1281,6 +1287,7 @@ where
         Opcode::X86Pmulhrsw => unimplemented!("X86Pmulhrsw"),
         Opcode::X86Pmaddubsw => unimplemented!("X86Pmaddubsw"),
         Opcode::X86Cvtt2dq => unimplemented!("X86Cvtt2dq"),
+        Opcode::StackSwitch => unimplemented!("StackSwitch"),
     })
 }
 

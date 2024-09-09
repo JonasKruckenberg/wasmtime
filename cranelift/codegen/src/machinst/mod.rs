@@ -44,7 +44,7 @@
 //!
 //! ```
 
-use crate::binemit::{Addend, CodeInfo, CodeOffset, Reloc, StackMap};
+use crate::binemit::{Addend, CodeInfo, CodeOffset, Reloc};
 use crate::ir::{
     self, function::FunctionParameters, DynamicStackSlot, RelSourceLoc, StackSlot, Type,
 };
@@ -304,11 +304,7 @@ pub trait MachInstEmitState<I: VCodeInst>: Default + Clone + Debug {
 
     /// Update the emission state before emitting an instruction that is a
     /// safepoint.
-    fn pre_safepoint(
-        &mut self,
-        stack_map: Option<StackMap>,
-        user_stack_map: Option<ir::UserStackMap>,
-    );
+    fn pre_safepoint(&mut self, user_stack_map: Option<ir::UserStackMap>);
 
     /// The emission state holds ownership of a control plane, so it doesn't
     /// have to be passed around explicitly too much. `ctrl_plane_mut` may
@@ -416,7 +412,7 @@ impl<T: CompilePhase> CompiledCodeBase<T> {
             .zip(block_starts.iter().skip(1))
             .enumerate()
         {
-            writeln!(buf, "block{}: ; offset 0x{:x}", n, start)?;
+            writeln!(buf, "block{n}: ; offset 0x{start:x}")?;
 
             let buffer = &self.buffer.data()[start as usize..end as usize];
             let insns = cs.disasm_all(buffer, start as u64).map_err(map_caperr)?;
@@ -425,13 +421,13 @@ impl<T: CompilePhase> CompiledCodeBase<T> {
 
                 let op_str = i.op_str().unwrap_or("");
                 if let Some(s) = i.mnemonic() {
-                    write!(buf, "{}", s)?;
+                    write!(buf, "{s}")?;
                     if !op_str.is_empty() {
                         write!(buf, " ")?;
                     }
                 }
 
-                write!(buf, "{}", op_str)?;
+                write!(buf, "{op_str}")?;
 
                 let end = i.address() + i.bytes().len() as u64;
                 let contains = |off| i.address() <= off && off < end;

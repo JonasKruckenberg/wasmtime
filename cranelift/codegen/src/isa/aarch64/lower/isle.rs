@@ -7,18 +7,16 @@ use generated_code::Context;
 // Types that the generated ISLE code uses via `use super::*`.
 use super::{
     fp_reg, lower_condcode, lower_fp_condcode, stack_reg, writable_link_reg, writable_zero_reg,
-    zero_reg, ASIMDFPModImm, ASIMDMovModImm, BranchTarget, CallIndInfo, CallInfo, Cond, CondBrKind,
-    ExtendOp, FPUOpRI, FPUOpRIMod, FloatCC, Imm12, ImmLogic, ImmShift, Inst as MInst, IntCC,
-    MachLabel, MemLabel, MoveWideConst, MoveWideOp, Opcode, OperandSize, Reg, SImm9, ScalarSize,
+    zero_reg, ASIMDFPModImm, ASIMDMovModImm, BranchTarget, CallInfo, Cond, CondBrKind, ExtendOp,
+    FPUOpRI, FPUOpRIMod, FloatCC, Imm12, ImmLogic, ImmShift, Inst as MInst, IntCC, MachLabel,
+    MemLabel, MoveWideConst, MoveWideOp, Opcode, OperandSize, Reg, SImm9, ScalarSize,
     ShiftOpAndAmt, UImm12Scaled, UImm5, VecMisc2, VectorSize, NZCV,
 };
 use crate::ir::{condcodes, ArgumentExtension};
 use crate::isa;
 use crate::isa::aarch64::inst::{FPULeftShiftImm, FPURightShiftImm, ReturnCallInfo};
 use crate::isa::aarch64::AArch64Backend;
-use crate::isle_common_prelude_methods;
 use crate::machinst::isle::*;
-use crate::machinst::valueregs;
 use crate::{
     binemit::CodeOffset,
     ir::{
@@ -28,15 +26,18 @@ use crate::{
     isa::aarch64::abi::AArch64CallSite,
     isa::aarch64::inst::args::{ShiftOp, ShiftOpShiftImm},
     isa::aarch64::inst::SImm7Scaled,
-    machinst::{abi::ArgPair, ty_bits, InstOutput, MachInst, VCodeConstant, VCodeConstantData},
+    machinst::{
+        abi::ArgPair, ty_bits, InstOutput, IsTailCall, MachInst, VCodeConstant, VCodeConstantData,
+    },
 };
 use regalloc2::PReg;
 use std::boxed::Box;
 use std::vec::Vec;
 
-type BoxCallInfo = Box<CallInfo>;
-type BoxCallIndInfo = Box<CallIndInfo>;
-type BoxReturnCallInfo = Box<ReturnCallInfo>;
+type BoxCallInfo = Box<CallInfo<ExternalName>>;
+type BoxCallIndInfo = Box<CallInfo<Reg>>;
+type BoxReturnCallInfo = Box<ReturnCallInfo<ExternalName>>;
+type BoxReturnCallIndInfo = Box<ReturnCallInfo<Reg>>;
 type VecMachLabel = Vec<MachLabel>;
 type BoxExternalName = Box<ExternalName>;
 type VecArgPair = Vec<ArgPair>;
@@ -62,16 +63,12 @@ pub(crate) fn lower_branch(
     // TODO: reuse the ISLE context across lowerings so we can reuse its
     // internal heap allocations.
     let mut isle_ctx = IsleContext { lower_ctx, backend };
-    generated_code::constructor_lower_branch(&mut isle_ctx, branch, &targets.to_vec())
+    generated_code::constructor_lower_branch(&mut isle_ctx, branch, targets)
 }
 
 pub struct ExtendedValue {
     val: Value,
     extend: ExtendOp,
-}
-
-impl IsleContext<'_, '_, MInst, AArch64Backend> {
-    isle_prelude_method_helpers!(AArch64CallSite);
 }
 
 impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
@@ -99,7 +96,7 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
             self.lower_ctx.sigs(),
             callee_sig,
             &callee,
-            Opcode::ReturnCall,
+            IsTailCall::Yes,
             distance,
             caller_conv,
             self.backend.flags().clone(),
@@ -128,7 +125,7 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
             self.lower_ctx.sigs(),
             callee_sig,
             callee,
-            Opcode::ReturnCallIndirect,
+            IsTailCall::Yes,
             caller_conv,
             self.backend.flags().clone(),
         );
@@ -151,6 +148,10 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
         } else {
             None
         }
+    }
+
+    fn use_fp16(&mut self) -> bool {
+        self.backend.isa_flags.has_fp16()
     }
 
     fn move_wide_const_from_u64(&mut self, ty: Type, n: u64) -> Option<MoveWideConst> {
@@ -230,7 +231,7 @@ impl Context for IsleContext<'_, '_, MInst, AArch64Backend> {
 
     fn integral_ty(&mut self, ty: Type) -> Option<Type> {
         match ty {
-            I8 | I16 | I32 | I64 | R64 => Some(ty),
+            I8 | I16 | I32 | I64 => Some(ty),
             _ => None,
         }
     }

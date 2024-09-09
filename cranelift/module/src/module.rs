@@ -18,6 +18,7 @@ use cranelift_codegen::{
 };
 use cranelift_control::ControlPlane;
 use std::borrow::{Cow, ToOwned};
+use std::boxed::Box;
 use std::string::String;
 
 /// A module relocation.
@@ -325,36 +326,34 @@ impl std::fmt::Display for ModuleError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Undeclared(name) => {
-                write!(f, "Undeclared identifier: {}", name)
+                write!(f, "Undeclared identifier: {name}")
             }
             Self::IncompatibleDeclaration(name) => {
-                write!(f, "Incompatible declaration of identifier: {}", name,)
+                write!(f, "Incompatible declaration of identifier: {name}",)
             }
             Self::IncompatibleSignature(name, prev_sig, new_sig) => {
                 write!(
                     f,
-                    "Function {} signature {:?} is incompatible with previous declaration {:?}",
-                    name, new_sig, prev_sig,
+                    "Function {name} signature {new_sig:?} is incompatible with previous declaration {prev_sig:?}",
                 )
             }
             Self::DuplicateDefinition(name) => {
-                write!(f, "Duplicate definition of identifier: {}", name)
+                write!(f, "Duplicate definition of identifier: {name}")
             }
             Self::InvalidImportDefinition(name) => {
                 write!(
                     f,
-                    "Invalid to define identifier declared as an import: {}",
-                    name,
+                    "Invalid to define identifier declared as an import: {name}",
                 )
             }
             Self::Compilation(err) => {
-                write!(f, "Compilation error: {}", err)
+                write!(f, "Compilation error: {err}")
             }
             Self::Allocation { message, err } => {
-                write!(f, "Allocation error: {}: {}", message, err)
+                write!(f, "Allocation error: {message}: {err}")
             }
-            Self::Backend(err) => write!(f, "Backend error: {}", err),
-            Self::Flag(err) => write!(f, "Flag error: {}", err),
+            Self::Backend(err) => write!(f, "Backend error: {err}"),
+            Self::Flag(err) => write!(f, "Flag error: {err}"),
         }
     }
 }
@@ -447,9 +446,9 @@ impl ModuleRelocTarget {
 impl Display for ModuleRelocTarget {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::User { namespace, index } => write!(f, "u{}:{}", namespace, index),
-            Self::LibCall(lc) => write!(f, "%{}", lc),
-            Self::KnownSymbol(ks) => write!(f, "{}", ks),
+            Self::User { namespace, index } => write!(f, "u{namespace}:{index}"),
+            Self::LibCall(lc) => write!(f, "%{lc}"),
+            Self::KnownSymbol(ks) => write!(f, "{ks}"),
             Self::FunctionOffset(fname, offset) => write!(f, "{fname}+{offset}"),
         }
     }
@@ -990,7 +989,112 @@ pub trait Module {
     fn define_data(&mut self, data_id: DataId, data: &DataDescription) -> ModuleResult<()>;
 }
 
-impl<M: Module> Module for &mut M {
+impl<M: Module + ?Sized> Module for &mut M {
+    fn isa(&self) -> &dyn isa::TargetIsa {
+        (**self).isa()
+    }
+
+    fn declarations(&self) -> &ModuleDeclarations {
+        (**self).declarations()
+    }
+
+    fn get_name(&self, name: &str) -> Option<FuncOrDataId> {
+        (**self).get_name(name)
+    }
+
+    fn target_config(&self) -> isa::TargetFrontendConfig {
+        (**self).target_config()
+    }
+
+    fn make_context(&self) -> Context {
+        (**self).make_context()
+    }
+
+    fn clear_context(&self, ctx: &mut Context) {
+        (**self).clear_context(ctx)
+    }
+
+    fn make_signature(&self) -> ir::Signature {
+        (**self).make_signature()
+    }
+
+    fn clear_signature(&self, sig: &mut ir::Signature) {
+        (**self).clear_signature(sig)
+    }
+
+    fn declare_function(
+        &mut self,
+        name: &str,
+        linkage: Linkage,
+        signature: &ir::Signature,
+    ) -> ModuleResult<FuncId> {
+        (**self).declare_function(name, linkage, signature)
+    }
+
+    fn declare_anonymous_function(&mut self, signature: &ir::Signature) -> ModuleResult<FuncId> {
+        (**self).declare_anonymous_function(signature)
+    }
+
+    fn declare_data(
+        &mut self,
+        name: &str,
+        linkage: Linkage,
+        writable: bool,
+        tls: bool,
+    ) -> ModuleResult<DataId> {
+        (**self).declare_data(name, linkage, writable, tls)
+    }
+
+    fn declare_anonymous_data(&mut self, writable: bool, tls: bool) -> ModuleResult<DataId> {
+        (**self).declare_anonymous_data(writable, tls)
+    }
+
+    fn declare_func_in_func(&mut self, func: FuncId, in_func: &mut ir::Function) -> ir::FuncRef {
+        (**self).declare_func_in_func(func, in_func)
+    }
+
+    fn declare_data_in_func(&self, data: DataId, func: &mut ir::Function) -> ir::GlobalValue {
+        (**self).declare_data_in_func(data, func)
+    }
+
+    fn declare_func_in_data(&self, func_id: FuncId, data: &mut DataDescription) -> ir::FuncRef {
+        (**self).declare_func_in_data(func_id, data)
+    }
+
+    fn declare_data_in_data(&self, data_id: DataId, data: &mut DataDescription) -> ir::GlobalValue {
+        (**self).declare_data_in_data(data_id, data)
+    }
+
+    fn define_function(&mut self, func: FuncId, ctx: &mut Context) -> ModuleResult<()> {
+        (**self).define_function(func, ctx)
+    }
+
+    fn define_function_with_control_plane(
+        &mut self,
+        func: FuncId,
+        ctx: &mut Context,
+        ctrl_plane: &mut ControlPlane,
+    ) -> ModuleResult<()> {
+        (**self).define_function_with_control_plane(func, ctx, ctrl_plane)
+    }
+
+    fn define_function_bytes(
+        &mut self,
+        func_id: FuncId,
+        func: &ir::Function,
+        alignment: u64,
+        bytes: &[u8],
+        relocs: &[FinalizedMachReloc],
+    ) -> ModuleResult<()> {
+        (**self).define_function_bytes(func_id, func, alignment, bytes, relocs)
+    }
+
+    fn define_data(&mut self, data_id: DataId, data: &DataDescription) -> ModuleResult<()> {
+        (**self).define_data(data_id, data)
+    }
+}
+
+impl<M: Module + ?Sized> Module for Box<M> {
     fn isa(&self) -> &dyn isa::TargetIsa {
         (**self).isa()
     }

@@ -44,7 +44,7 @@ impl PartialEq for VecAvl {
 impl fmt::Display for VecAvl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            VecAvl::Static { size } => write!(f, "{}", size),
+            VecAvl::Static { size } => write!(f, "{size}"),
         }
     }
 }
@@ -60,7 +60,7 @@ impl VecElementWidth {
             16 => VecElementWidth::E16,
             32 => VecElementWidth::E32,
             64 => VecElementWidth::E64,
-            _ => panic!("Invalid number of bits for VecElementWidth: {}", bits),
+            _ => panic!("Invalid number of bits for VecElementWidth: {bits}"),
         }
     }
 
@@ -1118,12 +1118,12 @@ pub trait VecInstOverlapInfo {
     ///  * The destination EEW equals the source EEW.
     ///
     ///  * The destination EEW is smaller than the source EEW and the overlap is
-    ///  in the lowest-numbered part of the source register group (e.g., when LMUL=1,
-    ///  vnsrl.wi v0, v0, 3 is legal, but a destination of v1 is not).
+    ///    in the lowest-numbered part of the source register group (e.g., when LMUL=1,
+    ///    vnsrl.wi v0, v0, 3 is legal, but a destination of v1 is not).
     ///
     ///  * The destination EEW is greater than the source EEW, the source EMUL is at
-    ///  least 1, and the overlap is in the highest-numbered part of the destination register
-    ///  group (e.g., when LMUL=8, vzext.vf4 v0, v6 is legal, but a source of v0, v2, or v4 is not).
+    ///    least 1, and the overlap is in the highest-numbered part of the destination register
+    ///    group (e.g., when LMUL=8, vzext.vf4 v0, v6 is legal, but a source of v0, v2, or v4 is not).
     ///
     /// For the purpose of determining register group overlap constraints, mask elements have EEW=1.
     fn forbids_src_dst_overlaps(&self) -> bool;

@@ -1,5 +1,5 @@
 use crate::ir::types::*;
-use crate::ir::TrapCode;
+use crate::ir::{ExternalName, TrapCode};
 use crate::isa::aarch64::inst::*;
 
 use alloc::boxed::Box;
@@ -6056,16 +6056,10 @@ fn test_aarch64_binemit() {
 
     insns.push((
         Inst::Call {
-            info: Box::new(CallInfo {
-                dest: ExternalName::testcase("test0"),
-                uses: smallvec![],
-                defs: smallvec![],
-                clobbers: PRegSet::empty(),
-                opcode: Opcode::Call,
-                caller_callconv: CallConv::SystemV,
-                callee_callconv: CallConv::SystemV,
-                callee_pop_size: 0,
-            }),
+            info: Box::new(CallInfo::empty(
+                ExternalName::testcase("test0"),
+                CallConv::SystemV,
+            )),
         },
         "00000094",
         "bl 0",
@@ -6073,16 +6067,7 @@ fn test_aarch64_binemit() {
 
     insns.push((
         Inst::CallInd {
-            info: Box::new(CallIndInfo {
-                rn: xreg(10),
-                uses: smallvec![],
-                defs: smallvec![],
-                clobbers: PRegSet::empty(),
-                opcode: Opcode::CallIndirect,
-                caller_callconv: CallConv::SystemV,
-                callee_callconv: CallConv::SystemV,
-                callee_pop_size: 0,
-            }),
+            info: Box::new(CallInfo::empty(xreg(10), CallConv::SystemV)),
         },
         "40013FD6",
         "blr x10",
@@ -6480,6 +6465,32 @@ fn test_aarch64_binemit() {
     ));
 
     insns.push((
+        Inst::FpuRRRR {
+            fpu_op: FPUOp3::NMAdd,
+            size: ScalarSize::Size64,
+            rd: writable_vreg(15),
+            rn: vreg(30),
+            rm: vreg(31),
+            ra: vreg(1),
+        },
+        "CF077F1F",
+        "fnmadd d15, d30, d31, d1",
+    ));
+
+    insns.push((
+        Inst::FpuRRRR {
+            fpu_op: FPUOp3::NMSub,
+            size: ScalarSize::Size64,
+            rd: writable_vreg(15),
+            rn: vreg(30),
+            rm: vreg(31),
+            ra: vreg(1),
+        },
+        "CF877F1F",
+        "fnmsub d15, d30, d31, d1",
+    ));
+
+    insns.push((
         Inst::FpuRRI {
             fpu_op: FPUOpRI::UShr32(FPURightShiftImm::maybe_from_u8(32, 32).unwrap()),
             rd: writable_vreg(2),
@@ -6702,6 +6713,19 @@ fn test_aarch64_binemit() {
     ));
 
     insns.push((
+        Inst::FpuLoad16 {
+            rd: writable_vreg(16),
+            mem: AMode::RegScaled {
+                rn: xreg(8),
+                rm: xreg(9),
+            },
+            flags: MemFlags::trusted(),
+        },
+        "1079697C",
+        "ldr h16, [x8, x9, LSL #1]",
+    ));
+
+    insns.push((
         Inst::FpuLoad32 {
             rd: writable_vreg(16),
             mem: AMode::RegScaled {
@@ -6774,6 +6798,19 @@ fn test_aarch64_binemit() {
         },
         "5000009C",
         "ldr q16, pc+8",
+    ));
+
+    insns.push((
+        Inst::FpuStore16 {
+            rd: vreg(16),
+            mem: AMode::RegScaled {
+                rn: xreg(8),
+                rm: xreg(9),
+            },
+            flags: MemFlags::trusted(),
+        },
+        "1079297C",
+        "str h16, [x8, x9, LSL #1]",
     ));
 
     insns.push((
@@ -6973,6 +7010,17 @@ fn test_aarch64_binemit() {
         },
         "F2DB89AC",
         "stp q18, q22, [sp], #304",
+    ));
+
+    insns.push((
+        Inst::FpuCSel16 {
+            rd: writable_vreg(1),
+            rn: vreg(2),
+            rm: vreg(3),
+            cond: Cond::Hi,
+        },
+        "418CE31E",
+        "fcsel h1, h2, h3, hi",
     ));
 
     insns.push((
@@ -7883,10 +7931,7 @@ fn test_aarch64_binemit() {
     let flags = settings::Flags::new(settings::builder());
     let emit_info = EmitInfo::new(flags);
     for (insn, expected_encoding, expected_printing) in insns {
-        println!(
-            "AArch64: {:?}, {}, {}",
-            insn, expected_encoding, expected_printing
-        );
+        println!("AArch64: {insn:?}, {expected_encoding}, {expected_printing}");
 
         // Check the printed text is as expected.
         let actual_printing = insn.print_with_state(&mut EmitState::default());

@@ -80,9 +80,40 @@
 (extern constructor u8_as_u64 u8_as_u64)
 (convert u8 u64 u8_as_u64)
 
+(decl pure u16_as_i16 (u16) i16)
+(extern constructor u16_as_i16 u16_as_i16)
+
+(decl pure u16_as_u32 (u16) u32)
+(extern constructor u16_as_u32 u16_as_u32)
+(convert u16 u32 u16_as_u32)
+
 (decl pure u16_as_u64 (u16) u64)
 (extern constructor u16_as_u64 u16_as_u64)
 (convert u16 u64 u16_as_u64)
+
+(decl pure u64_as_u8 (u64) u8)
+(extern constructor u64_as_u8 u64_as_u8)
+
+(decl pure u64_as_u16 (u64) u16)
+(extern constructor u64_as_u16 u64_as_u16)
+
+(decl pure u64_as_i64 (u64) i64)
+(extern constructor u64_as_i64 u64_as_i64)
+
+(decl pure partial u16_try_from_u64 (u64) u16)
+(extern constructor u16_try_from_u64 u16_try_from_u64)
+
+(decl pure partial u32_try_from_u64 (u64) u32)
+(extern constructor u32_try_from_u64 u32_try_from_u64)
+
+(decl pure partial i8_try_from_u64 (u64) i8)
+(extern constructor i8_try_from_u64 i8_try_from_u64)
+
+(decl pure partial i16_try_from_u64 (u64) i16)
+(extern constructor i16_try_from_u64 i16_try_from_u64)
+
+(decl pure partial i32_try_from_u64 (u64) i32)
+(extern constructor i32_try_from_u64 i32_try_from_u64)
 
 (decl pure u32_as_u64 (u32) u64)
 (extern constructor u32_as_u64 u32_as_u64)
@@ -106,6 +137,9 @@
 
 (decl u64_as_u32 (u32) u64)
 (extern extractor u64_as_u32 u64_as_u32)
+
+(decl u32_as_u16 (u16) u32)
+(extern extractor u32_as_u16 u32_as_u16)
 
 (decl pure u64_as_i32 (u64) i32)
 (extern constructor u64_as_i32 u64_as_i32)
@@ -239,18 +273,83 @@
 
 ;; Floating point operations
 
+(decl pure partial f16_min (Ieee16 Ieee16) Ieee16)
+(extern constructor f16_min f16_min)
+(decl pure partial f16_max (Ieee16 Ieee16) Ieee16)
+(extern constructor f16_max f16_max)
+(decl pure f16_neg (Ieee16) Ieee16)
+(extern constructor f16_neg f16_neg)
+(decl pure f16_abs (Ieee16) Ieee16)
+(extern constructor f16_abs f16_abs)
+(decl pure f16_copysign (Ieee16 Ieee16) Ieee16)
+(extern constructor f16_copysign f16_copysign)
+(decl pure partial f32_add (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_add f32_add)
+(decl pure partial f32_sub (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_sub f32_sub)
+(decl pure partial f32_mul (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_mul f32_mul)
+(decl pure partial f32_div (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_div f32_div)
+(decl pure partial f32_sqrt (Ieee32) Ieee32)
+(extern constructor f32_sqrt f32_sqrt)
+(decl pure partial f32_ceil (Ieee32) Ieee32)
+(extern constructor f32_ceil f32_ceil)
+(decl pure partial f32_floor (Ieee32) Ieee32)
+(extern constructor f32_floor f32_floor)
+(decl pure partial f32_trunc (Ieee32) Ieee32)
+(extern constructor f32_trunc f32_trunc)
+(decl pure partial f32_nearest (Ieee32) Ieee32)
+(extern constructor f32_nearest f32_nearest)
+(decl pure partial f32_min (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_min f32_min)
+(decl pure partial f32_max (Ieee32 Ieee32) Ieee32)
+(extern constructor f32_max f32_max)
 (decl pure f32_neg (Ieee32) Ieee32)
 (extern constructor f32_neg f32_neg)
 (decl pure f32_abs (Ieee32) Ieee32)
 (extern constructor f32_abs f32_abs)
 (decl pure f32_copysign (Ieee32 Ieee32) Ieee32)
 (extern constructor f32_copysign f32_copysign)
+(decl pure partial f64_add (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_add f64_add)
+(decl pure partial f64_sub (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_sub f64_sub)
+(decl pure partial f64_mul (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_mul f64_mul)
+(decl pure partial f64_div (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_div f64_div)
+(decl pure partial f64_sqrt (Ieee64) Ieee64)
+(extern constructor f64_sqrt f64_sqrt)
+(decl pure partial f64_ceil (Ieee64) Ieee64)
+(extern constructor f64_ceil f64_ceil)
+(decl pure partial f64_floor (Ieee64) Ieee64)
+(extern constructor f64_floor f64_floor)
+(decl pure partial f64_trunc (Ieee64) Ieee64)
+(extern constructor f64_trunc f64_trunc)
+(decl pure partial f64_nearest (Ieee64) Ieee64)
+(extern constructor f64_nearest f64_nearest)
+(decl pure partial f64_min (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_min f64_min)
+(decl pure partial f64_max (Ieee64 Ieee64) Ieee64)
+(extern constructor f64_max f64_max)
 (decl pure f64_neg (Ieee64) Ieee64)
 (extern constructor f64_neg f64_neg)
 (decl pure f64_abs (Ieee64) Ieee64)
 (extern constructor f64_abs f64_abs)
 (decl pure f64_copysign (Ieee64 Ieee64) Ieee64)
 (extern constructor f64_copysign f64_copysign)
+(decl pure partial f128_min (Ieee128 Ieee128) Ieee128)
+(extern constructor f128_min f128_min)
+(decl pure partial f128_max (Ieee128 Ieee128) Ieee128)
+(extern constructor f128_max f128_max)
+(decl pure f128_neg (Ieee128) Ieee128)
+(extern constructor f128_neg f128_neg)
+(decl pure f128_abs (Ieee128) Ieee128)
+(extern constructor f128_abs f128_abs)
+(decl pure f128_copysign (Ieee128 Ieee128) Ieee128)
+(extern constructor f128_copysign f128_copysign)
+(type Ieee128 (primitive Ieee128))
 
 ;;;; `cranelift_codegen::ir::Type` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -260,11 +359,10 @@
 (extern const $I64 Type)
 (extern const $I128 Type)
 
-(extern const $R32 Type)
-(extern const $R64 Type)
-
+(extern const $F16 Type)
 (extern const $F32 Type)
 (extern const $F64 Type)
+(extern const $F128 Type)
 
 (extern const $I8X8 Type)
 (extern const $I8X16 Type)
@@ -343,11 +441,6 @@
 ;; Compare two types for equality.
 (decl pure ty_equal (Type Type) bool)
 (extern constructor ty_equal ty_equal)
-
-(decl pure is_ref_type (Type) bool)
-(rule 1 (is_ref_type $R32) $true)
-(rule 1 (is_ref_type $R64) $true)
-(rule 0 (is_ref_type _) $false)
 
 ;;;; `cranelift_codegen::ir::MemFlags ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -461,7 +554,7 @@
 (decl int_fits_in_32 (Type) Type)
 (extern extractor int_fits_in_32 int_fits_in_32)
 
-;; An extractor that matches I64 or R64.
+;; An extractor that matches I64.
 (decl ty_int_ref_64 (Type) Type)
 (extern extractor ty_int_ref_64 ty_int_ref_64)
 
@@ -563,7 +656,11 @@
 (decl pure imm64_masked (Type u64) Imm64)
 (extern constructor imm64_masked imm64_masked)
 
-;; Extract a `u64` from an `Ieee32`.
+;; Extract a `u16` from an `Ieee16`.
+(decl u16_from_ieee16 (u16) Ieee16)
+(extern extractor infallible u16_from_ieee16 u16_from_ieee16)
+
+;; Extract a `u32` from an `Ieee32`.
 (decl u32_from_ieee32 (u32) Ieee32)
 (extern extractor infallible u32_from_ieee32 u32_from_ieee32)
 

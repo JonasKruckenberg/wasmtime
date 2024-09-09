@@ -3,7 +3,7 @@ use cfg_if::cfg_if;
 use cranelift_codegen::ir::function::FunctionParameters;
 use cranelift_codegen::ir::Function;
 use cranelift_codegen::isa::TargetIsa;
-use cranelift_codegen::{FinalizedMachReloc, MachStackMap, MachTrap};
+use cranelift_codegen::{FinalizedMachReloc, MachTrap};
 use std::fmt::Write;
 
 fn print_relocs(func_params: &FunctionParameters, relocs: &[FinalizedMachReloc]) -> String {
@@ -36,38 +36,6 @@ pub fn print_traps(traps: &[MachTrap]) -> String {
     text
 }
 
-pub fn print_stack_maps(traps: &[MachStackMap]) -> String {
-    let mut text = String::new();
-    for MachStackMap {
-        offset,
-        offset_end,
-        stack_map,
-    } in traps
-    {
-        writeln!(
-            text,
-            "add_stack_map at {offset:#x}-{offset_end:#x} mapped_words={}",
-            stack_map.mapped_words()
-        )
-        .unwrap();
-
-        write!(text, "    entries: ").unwrap();
-        let mut first = true;
-        for i in 0..stack_map.mapped_words() {
-            if !stack_map.get_bit(i as usize) {
-                continue;
-            }
-            if !first {
-                write!(text, ", ").unwrap();
-            } else {
-                first = false;
-            }
-            write!(text, "{i}").unwrap();
-        }
-    }
-    text
-}
-
 cfg_if! {
     if #[cfg(feature = "disas")] {
         pub fn print_disassembly(func: &Function, isa: &dyn TargetIsa, mem: &[u8]) -> Result<()> {
@@ -87,24 +55,24 @@ cfg_if! {
                     if !first {
                         write!(&mut bytes_str, " ").unwrap();
                     }
-                    write!(&mut bytes_str, "{:02x}", b).unwrap();
+                    write!(&mut bytes_str, "{b:02x}").unwrap();
                     len += 1;
                     first = false;
                 }
-                write!(&mut line, "{:21}\t", bytes_str).unwrap();
+                write!(&mut line, "{bytes_str:21}\t").unwrap();
                 if len > 8 {
                     write!(&mut line, "\n\t\t\t\t").unwrap();
                 }
 
                 if let Some(s) = i.mnemonic() {
-                    write!(&mut line, "{}\t", s).unwrap();
+                    write!(&mut line, "{s}\t").unwrap();
                 }
 
                 if let Some(s) = i.op_str() {
-                    write!(&mut line, "{}", s).unwrap();
+                    write!(&mut line, "{s}").unwrap();
                 }
 
-                println!("{}", line);
+                println!("{line}");
             }
             Ok(())
         }
@@ -124,16 +92,14 @@ pub fn print_all(
     print: bool,
     relocs: &[FinalizedMachReloc],
     traps: &[MachTrap],
-    stack_maps: &[MachStackMap],
 ) -> Result<()> {
     print_bytes(&mem);
     print_disassembly(func, isa, &mem[0..code_size as usize])?;
     if print {
         println!(
-            "\n{}\n{}\n{}",
+            "\n{}\n{}",
             print_relocs(&func.params, relocs),
             print_traps(traps),
-            print_stack_maps(stack_maps)
         );
     }
     Ok(())
@@ -148,7 +114,7 @@ pub fn print_bytes(mem: &[u8]) {
         } else {
             print!(", ");
         }
-        print!("{}", byte);
+        print!("{byte}");
     }
     println!();
 }

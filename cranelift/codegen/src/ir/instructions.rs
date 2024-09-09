@@ -151,7 +151,7 @@ impl<'a> Display for DisplayBlockCall<'a> {
                 if ix > 0 {
                     write!(f, ", ")?;
                 }
-                write!(f, "{}", arg)?;
+                write!(f, "{arg}")?;
             }
             write!(f, ")")?;
         }
@@ -192,6 +192,14 @@ impl Opcode {
     /// Panic if this is called on `NotAnOpcode`.
     pub fn constraints(self) -> OpcodeConstraints {
         OPCODE_CONSTRAINTS[self as usize - 1]
+    }
+
+    /// Is this instruction a GC safepoint?
+    ///
+    /// Safepoints are all kinds of calls, except for tail calls.
+    #[inline]
+    pub fn is_safepoint(self) -> bool {
+        self.is_call() && !self.is_return()
     }
 }
 
@@ -274,9 +282,9 @@ impl Display for VariableArgs {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         for (i, val) in self.0.iter().enumerate() {
             if i == 0 {
-                write!(fmt, "{}", val)?;
+                write!(fmt, "{val}")?;
             } else {
-                write!(fmt, ", {}", val)?;
+                write!(fmt, ", {val}")?;
             }
         }
         Ok(())
@@ -297,7 +305,7 @@ impl InstructionData {
     /// Get the destinations of this instruction, if it's a branch.
     ///
     /// `br_table` returns the empty slice.
-    pub fn branch_destination<'a>(&'a self, jump_tables: &'a ir::JumpTables) -> &[BlockCall] {
+    pub fn branch_destination<'a>(&'a self, jump_tables: &'a ir::JumpTables) -> &'a [BlockCall] {
         match self {
             Self::Jump {
                 ref destination, ..
@@ -317,7 +325,7 @@ impl InstructionData {
     pub fn branch_destination_mut<'a>(
         &'a mut self,
         jump_tables: &'a mut ir::JumpTables,
-    ) -> &mut [BlockCall] {
+    ) -> &'a mut [BlockCall] {
         match self {
             Self::Jump {
                 ref mut destination,
@@ -442,6 +450,14 @@ impl InstructionData {
             Self::CallIndirect {
                 sig_ref, ref args, ..
             } => CallInfo::Indirect(sig_ref, &args.as_slice(pool)[1..]),
+            Self::Ternary {
+                opcode: Opcode::StackSwitch,
+                ..
+            } => {
+                // `StackSwitch` is not actually a call, but has the .call() side
+                // effect as it continues execution elsewhere.
+                CallInfo::NotACall
+            }
             _ => {
                 debug_assert!(!self.opcode().is_call());
                 CallInfo::NotACall
@@ -450,7 +466,7 @@ impl InstructionData {
     }
 
     #[inline]
-    pub(crate) fn sign_extend_immediates(&mut self, ctrl_typevar: Type) {
+    pub(crate) fn mask_immediates(&mut self, ctrl_typevar: Type) {
         if ctrl_typevar.is_invalid() {
             return;
         }
@@ -458,13 +474,16 @@ impl InstructionData {
         let bit_width = ctrl_typevar.bits();
 
         match self {
+            Self::UnaryImm { opcode: _, imm } => {
+                *imm = imm.mask_to_width(bit_width);
+            }
             Self::BinaryImm64 {
                 opcode,
                 arg: _,
                 imm,
             } => {
                 if *opcode == Opcode::SdivImm || *opcode == Opcode::SremImm {
-                    imm.sign_extend_from_width(bit_width);
+                    *imm = imm.mask_to_width(bit_width);
                 }
             }
             Self::IntCompareImm {
@@ -475,7 +494,7 @@ impl InstructionData {
             } => {
                 debug_assert_eq!(*opcode, Opcode::IcmpImm);
                 if cond.unsigned() != *cond {
-                    imm.sign_extend_from_width(bit_width);
+                    *imm = imm.mask_to_width(bit_width);
                 }
             }
             _ => {}
@@ -589,7 +608,7 @@ impl OpcodeConstraints {
         debug_assert!(n < self.num_fixed_results(), "Invalid result index");
         match OPERAND_CONSTRAINTS[self.constraint_offset() + n].resolve(ctrl_type) {
             ResolvedConstraint::Bound(t) => t,
-            ResolvedConstraint::Free(ts) => panic!("Result constraints can't be free: {:?}", ts),
+            ResolvedConstraint::Free(ts) => panic!("Result constraints can't be free: {ts:?}"),
         }
     }
 
@@ -631,8 +650,6 @@ pub struct ValueTypeSet {
     pub ints: BitSet8,
     /// Allowed float widths
     pub floats: BitSet8,
-    /// Allowed ref widths
-    pub refs: BitSet8,
     /// Allowed dynamic vectors minimum lane sizes
     pub dynamic_lanes: BitSet16,
 }
@@ -647,8 +664,6 @@ impl ValueTypeSet {
             self.ints.contains(l2b)
         } else if scalar.is_float() {
             self.floats.contains(l2b)
-        } else if scalar.is_ref() {
-            self.refs.contains(l2b)
         } else {
             false
         }
@@ -957,7 +972,6 @@ mod tests {
             lanes: BitSet16::from_range(0, 8),
             ints: BitSet8::from_range(4, 7),
             floats: BitSet8::from_range(0, 0),
-            refs: BitSet8::from_range(5, 7),
             dynamic_lanes: BitSet16::from_range(0, 4),
         };
         assert!(!vts.contains(I8));
@@ -968,15 +982,12 @@ mod tests {
         assert!(!vts.contains(F16));
         assert!(!vts.contains(F32));
         assert!(!vts.contains(F128));
-        assert!(vts.contains(R32));
-        assert!(vts.contains(R64));
         assert_eq!(vts.example().to_string(), "i32");
 
         let vts = ValueTypeSet {
             lanes: BitSet16::from_range(0, 8),
             ints: BitSet8::from_range(0, 0),
             floats: BitSet8::from_range(5, 7),
-            refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
         assert_eq!(vts.example().to_string(), "f32");
@@ -985,7 +996,6 @@ mod tests {
             lanes: BitSet16::from_range(1, 8),
             ints: BitSet8::from_range(0, 0),
             floats: BitSet8::from_range(5, 7),
-            refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
         assert_eq!(vts.example().to_string(), "f32x2");
@@ -994,7 +1004,6 @@ mod tests {
             lanes: BitSet16::from_range(2, 8),
             ints: BitSet8::from_range(3, 7),
             floats: BitSet8::from_range(0, 0),
-            refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
         assert_eq!(vts.example().to_string(), "i32x4");
@@ -1004,12 +1013,9 @@ mod tests {
             lanes: BitSet16::from_range(0, 9),
             ints: BitSet8::from_range(3, 7),
             floats: BitSet8::from_range(0, 0),
-            refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
         assert!(vts.contains(I32));
         assert!(vts.contains(I32X4));
-        assert!(!vts.contains(R32));
-        assert!(!vts.contains(R64));
     }
 }

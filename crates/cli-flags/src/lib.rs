@@ -115,6 +115,14 @@ wasmtime_option_group! {
         /// The maximum runtime size of each linear memory in the pooling
         /// allocator, in bytes.
         pub pooling_max_memory_size: Option<usize>,
+
+        /// The maximum table elements for any table defined in a module when
+        /// using the pooling allocator.
+        pub pooling_table_elements: Option<u32>,
+
+        /// The maximum size, in bytes, allocated for a core instance's metadata
+        /// when using the pooling allocator.
+        pub pooling_max_core_instance_size: Option<usize>,
     }
 
     enum Optimize {
@@ -256,6 +264,8 @@ wasmtime_option_group! {
         pub component_model: Option<bool>,
         /// Configure support for 33+ flags in the component model.
         pub component_model_more_flags: Option<bool>,
+        /// Component model support for more than one return value.
+        pub component_model_multiple_returns: Option<bool>,
         /// Configure support for the function-references proposal.
         pub function_references: Option<bool>,
         /// Configure support for the GC proposal.
@@ -282,6 +292,10 @@ wasmtime_option_group! {
         pub threads: Option<bool>,
         /// Enable support for WASI HTTP API (experimental)
         pub http: Option<bool>,
+        /// Enable support for WASI runtime config API (experimental)
+        pub runtime_config: Option<bool>,
+        /// Enable support for WASI key-value API (experimental)
+        pub keyvalue: Option<bool>,
         /// Inherit environment variables and file descriptors following the
         /// systemd listen fd specification (UNIX only)
         pub listenfd: Option<bool>,
@@ -319,6 +333,10 @@ wasmtime_option_group! {
         ///
         /// This option can be further overwritten with `--env` flags.
         pub inherit_env: Option<bool>,
+        /// Pass a wasi runtime config variable to the program.
+        pub runtime_config_var: Vec<KeyValuePair>,
+        /// Preset data for the In-Memory provider of WASI key-value API.
+        pub keyvalue_in_memory_data: Vec<KeyValuePair>,
     }
 
     enum Wasi {
@@ -330,6 +348,12 @@ wasmtime_option_group! {
 pub struct WasiNnGraph {
     pub format: String,
     pub dir: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeyValuePair {
+    pub key: String,
+    pub value: String,
 }
 
 /// Common options for commands that translate WebAssembly modules
@@ -593,6 +617,12 @@ impl CommonOptions {
                     if let Some(limit) = self.opts.pooling_total_tables {
                         cfg.total_tables(limit);
                     }
+                    if let Some(limit) = self.opts.pooling_table_elements {
+                        cfg.table_elements(limit);
+                    }
+                    if let Some(limit) = self.opts.pooling_max_core_instance_size {
+                        cfg.max_core_instance_size(limit);
+                    }
                     match_feature! {
                         ["async" : self.opts.pooling_total_stacks]
                         limit => cfg.total_stacks(limit),
@@ -682,6 +712,7 @@ impl CommonOptions {
         handle_conditionally_compiled! {
             ("component-model", component_model, wasm_component_model)
             ("component-model", component_model_more_flags, wasm_component_model_more_flags)
+            ("component-model", component_model_multiple_returns, wasm_component_model_multiple_returns)
             ("threads", threads, wasm_threads)
             ("gc", gc, wasm_gc)
             ("gc", reference_types, wasm_reference_types)

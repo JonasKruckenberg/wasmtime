@@ -2,11 +2,15 @@
 
 use crate::prelude::*;
 use crate::runtime::vm::{
-    ExternRefHostDataId, ExternRefHostDataTable, SendSyncPtr, VMExternRef, VMGcHeader, VMGcRef,
+    ExternRefHostDataId, ExternRefHostDataTable, SendSyncPtr, VMArrayRef, VMExternRef, VMGcHeader,
+    VMGcRef, VMStructRef,
 };
 use core::marker;
 use core::ptr;
 use core::{any::Any, num::NonZeroUsize};
+use wasmtime_environ::{VMSharedTypeIndex, WasmArrayType, WasmStructType};
+
+use super::VMGcObjectDataMut;
 
 /// Trait for integrating a garbage collector with the runtime.
 ///
@@ -32,6 +36,12 @@ use core::{any::Any, num::NonZeroUsize};
 pub unsafe trait GcRuntime: 'static + Send + Sync {
     /// Construct a new GC heap.
     fn new_gc_heap(&self) -> Result<Box<dyn GcHeap>>;
+
+    /// Get this collector's layout for the given array type.
+    fn array_layout(&self, ty: &WasmArrayType) -> GcArrayLayout;
+
+    /// Get this collector's layout for the given struct type.
+    fn struct_layout(&self, ty: &WasmStructType) -> GcStructLayout;
 }
 
 /// A heap that manages garbage-collected objects.
@@ -200,6 +210,98 @@ pub unsafe trait GcHeap: 'static + Send + Sync {
     fn externref_host_data(&self, externref: &VMExternRef) -> ExternRefHostDataId;
 
     ////////////////////////////////////////////////////////////////////////////
+    // Struct and Array methods
+
+    /// Allocate a GC-managed struct of the given type and layout.
+    ///
+    /// The struct's fields are left uninitialized. It is the caller's
+    /// responsibility to initialize them before exposing the struct to Wasm or
+    /// triggering a GC.
+    ///
+    /// The `ty` and `layout` must match.
+    ///
+    /// Failure to do either of the above is memory safe, but may result in
+    /// general failures such as panics or incorrect results.
+    ///
+    /// Return values:
+    ///
+    /// * `Ok(Some(_))`: The allocation was successful.
+    ///
+    /// * `Ok(None)`: There is currently no available space for this
+    ///   allocation. The caller should call `self.gc()`, run the GC to
+    ///   completion so the collector can reclaim space, and then try allocating
+    ///   again.
+    ///
+    /// * `Err(_)`: The collector cannot satisfy this allocation request, and
+    ///   would not be able to even after the caller were to trigger a
+    ///   collection. This could be because, for example, the requested
+    ///   allocation is larger than this collector's implementation limit for
+    ///   object size.
+    fn alloc_uninit_struct(
+        &mut self,
+        ty: VMSharedTypeIndex,
+        layout: &GcStructLayout,
+    ) -> Result<Option<VMStructRef>>;
+
+    /// Deallocate an uninitialized, GC-managed struct.
+    ///
+    /// This is useful for if initialization of the struct's fields fails, so
+    /// that the struct's allocation can be eagerly reclaimed, and so that the
+    /// collector doesn't attempt to treat any of the uninitialized fields as
+    /// valid GC references, or something like that.
+    fn dealloc_uninit_struct(&mut self, structref: VMStructRef);
+
+    /// Get a mutable borrow of the the given object's data.
+    ///
+    /// Panics on out-of-bounds accesses.
+    fn gc_object_data(&mut self, gc_ref: &VMGcRef) -> VMGcObjectDataMut<'_>;
+
+    /// Allocate a GC-managed array of the given type and length.
+    ///
+    /// The array's elements are left uninitialized. It is the caller's
+    /// responsibility to initialize them before exposing the array to Wasm or
+    /// triggering a GC. Failure to do this is memory safe, but may result in
+    /// general failures such as panics or incorrect results.
+    ///
+    /// Return values:
+    ///
+    /// * `Ok(Some(_))`: The allocation was successful.
+    ///
+    /// * `Ok(None)`: There is currently no available space for this
+    ///   allocation. The caller should call `self.gc()`, run the GC to
+    ///   completion so the collector can reclaim space, and then try allocating
+    ///   again.
+    ///
+    /// * `Err(_)`: The collector cannot satisfy this allocation request, and
+    ///   would not be able to even after the caller were to trigger a
+    ///   collection. This could be because, for example, the requested
+    ///   allocation is larger than this collector's implementation limit for
+    ///   object size.
+    fn alloc_uninit_array(
+        &mut self,
+        ty: VMSharedTypeIndex,
+        len: u32,
+        layout: &GcArrayLayout,
+    ) -> Result<Option<VMArrayRef>>;
+
+    /// Deallocate an uninitialized, GC-managed array.
+    ///
+    /// This is useful for if initialization of the array's fields fails, so
+    /// that the array's allocation can be eagerly reclaimed, and so that the
+    /// collector doesn't attempt to treat any of the uninitialized fields as
+    /// valid GC references, or something like that.
+    fn dealloc_uninit_array(&mut self, arrayref: VMArrayRef);
+
+    /// Get the length of the given array.
+    ///
+    /// Panics on out-of-bounds accesses.
+    ///
+    /// The given `arrayref` should be valid and of the given size. Failure to
+    /// do so is memory safe, but may result in general failures such as panics
+    /// or incorrect results.
+    fn array_len(&self, arrayref: &VMArrayRef) -> u32;
+
+    ////////////////////////////////////////////////////////////////////////////
     // Garbage Collection Methods
 
     /// Start a new garbage collection process.
@@ -284,6 +386,117 @@ pub unsafe trait GcHeap: 'static + Send + Sync {
     fn reset(&mut self);
 }
 
+/// The layout of a GC-managed object.
+#[derive(Clone, Debug)]
+pub enum GcLayout {
+    /// The layout of a GC-managed array object.
+    #[allow(dead_code)] // Not used yet, but added for completeness.
+    Array(GcArrayLayout),
+
+    /// The layout of a GC-managed struct object.
+    Struct(GcStructLayout),
+}
+
+impl From<GcArrayLayout> for GcLayout {
+    fn from(layout: GcArrayLayout) -> Self {
+        Self::Array(layout)
+    }
+}
+
+impl From<GcStructLayout> for GcLayout {
+    fn from(layout: GcStructLayout) -> Self {
+        Self::Struct(layout)
+    }
+}
+
+impl GcLayout {
+    /// Get the underlying `GcStructLayout`, or panic.
+    #[track_caller]
+    pub fn unwrap_struct(&self) -> &GcStructLayout {
+        match self {
+            Self::Struct(s) => s,
+            _ => panic!("GcLayout::unwrap_struct on non-struct GC layout"),
+        }
+    }
+
+    /// Get the underlying `GcArrayLayout`, or panic.
+    #[track_caller]
+    pub fn unwrap_array(&self) -> &GcArrayLayout {
+        match self {
+            Self::Array(a) => a,
+            _ => panic!("GcLayout::unwrap_array on non-array GC layout"),
+        }
+    }
+}
+
+/// The layout of a GC-managed array.
+///
+/// This layout is only valid for use with the GC runtime that created it. It is
+/// not valid to use one GC runtime's layout with another GC runtime, doing so
+/// is memory safe but will lead to general incorrectness like panics and wrong
+/// results.
+///
+/// All offsets are from the start of the object; that is, the size of the GC
+/// header (for example) is included in the offset.
+///
+/// All arrays are composed of the generic `VMGcHeader`, followed by
+/// collector-specific fields, followed by the contiguous array elements
+/// themselves. The array elements must be aligned to the element type's natural
+/// alignment.
+#[derive(Clone, Debug)]
+#[allow(dead_code)] // Not used yet, but added for completeness.
+pub struct GcArrayLayout {
+    /// The size of this array object, ignoring its elements.
+    pub size: u32,
+
+    /// The alignment of this array.
+    pub align: u32,
+
+    /// The offset of the array's length.
+    pub length_field_offset: u32,
+
+    /// The offset from where this array's contiguous elements begin.
+    pub elems_offset: u32,
+
+    /// The size and natural alignment of each element in this array.
+    pub elem_size: u32,
+}
+
+impl GcArrayLayout {
+    /// Get the total size of this array for a given length of elements.
+    pub fn size_for_len(&self, len: u32) -> u32 {
+        self.size + len * self.elem_size
+    }
+
+    /// Get the offset of the `i`th element in an array with this layout.
+    #[inline]
+    pub fn elem_offset(&self, i: u32, elem_size: u32) -> u32 {
+        self.elems_offset + i * elem_size
+    }
+}
+
+/// The layout for a GC-managed struct type.
+///
+/// This layout is only valid for use with the GC runtime that created it. It is
+/// not valid to use one GC runtime's layout with another GC runtime, doing so
+/// is memory safe but will lead to general incorrectness like panics and wrong
+/// results.
+///
+/// All offsets are from the start of the object; that is, the size of the GC
+/// header (for example) is included in the offset.
+#[derive(Clone, Debug)]
+pub struct GcStructLayout {
+    /// The size of this struct.
+    pub size: u32,
+
+    /// The alignment of this struct.
+    pub align: u32,
+
+    /// The fields of this struct. The `i`th entry is the `i`th struct field's
+    /// offset in the struct.
+    pub fields: Vec<u32>,
+}
+
 /// A list of GC roots.
 ///
 /// This is effectively a builder for a `GcRootsIter` that will be given to a GC
@@ -305,28 +518,30 @@ pub struct GcRootsList(Vec<RawGcRoot>);
 //    such that it is easily reusable across GCs is in the store itself. But the
 //    contents of the roots list (when it is non-empty, during GCs) borrow from
 //    the store, which creates self-references.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum RawGcRoot {
-    Stack(SendSyncPtr<u64>),
+    Stack(SendSyncPtr<u32>),
     NonStack(SendSyncPtr<VMGcRef>),
 }
 
 impl GcRootsList {
     /// Add a GC root that is inside a Wasm stack frame to this list.
     #[inline]
-    pub unsafe fn add_wasm_stack_root(&mut self, ptr_to_root: SendSyncPtr<u64>) {
+    pub unsafe fn add_wasm_stack_root(&mut self, ptr_to_root: SendSyncPtr<u32>) {
         log::trace!(
-            "Adding Wasm stack root: {:#p}",
-            VMGcRef::from_r64(*ptr_to_root.as_ref()).unwrap().unwrap()
+            "Adding Wasm stack root: {:#p} -> {:#p}",
+            ptr_to_root,
+            VMGcRef::from_raw_u32(*ptr_to_root.as_ref()).unwrap()
         );
+        debug_assert!(VMGcRef::from_raw_u32(*ptr_to_root.as_ref()).is_some());
         self.0.push(RawGcRoot::Stack(ptr_to_root));
     }
 
     /// Add a GC root to this list.
     #[inline]
-    pub unsafe fn add_root(&mut self, ptr_to_root: SendSyncPtr<VMGcRef>) {
+    pub unsafe fn add_root(&mut self, ptr_to_root: SendSyncPtr<VMGcRef>, why: &str) {
         log::trace!(
-            "Adding non-stack root: {:#p}",
+            "Adding non-stack root: {why}: {:#p}",
             ptr_to_root.as_ref().unchecked_copy()
         );
         self.0.push(RawGcRoot::NonStack(ptr_to_root))
@@ -384,6 +599,7 @@ impl<'a> Iterator for GcRootsIter<'a> {
 ///
 /// Collector implementations should update the `VMGcRef` if they move the
 /// `VMGcRef`'s referent during the course of a GC.
+#[derive(Debug)]
 pub struct GcRoot<'a> {
     raw: RawGcRoot,
     _phantom: marker::PhantomData<&'a mut VMGcRef>,
@@ -404,10 +620,8 @@ impl GcRoot<'_> {
         match self.raw {
             RawGcRoot::NonStack(ptr) => unsafe { ptr::read(ptr.as_ptr()) },
             RawGcRoot::Stack(ptr) => unsafe {
-                let r64 = ptr::read(ptr.as_ptr());
-                VMGcRef::from_r64(r64)
-                    .expect("valid r64")
-                    .expect("non-null")
+                let raw: u32 = ptr::read(ptr.as_ptr());
+                VMGcRef::from_raw_u32(raw).expect("non-null")
             },
         }
     }
@@ -425,8 +639,7 @@ impl GcRoot<'_> {
                 ptr::write(ptr.as_ptr(), new_ref);
             },
             RawGcRoot::Stack(ptr) => unsafe {
-                let r64 = new_ref.into_r64();
-                ptr::write(ptr.as_ptr(), r64);
+                ptr::write(ptr.as_ptr(), new_ref.as_raw_u32());
             },
         }
     }

@@ -227,33 +227,26 @@ impl RunCommon {
             }
             #[cfg(any(feature = "cranelift", feature = "winch"))]
             None => {
-                // Parse the text format here specifically to add the `path` to
-                // the error message if there's a syntax error.
-                #[cfg(feature = "wat")]
-                let bytes = wat::parse_bytes(bytes).map_err(|mut e| {
-                    e.set_path(path);
-                    e
-                })?;
-                if wasmparser::Parser::is_component(&bytes) {
-                    #[cfg(feature = "component-model")]
-                    {
-                        self.ensure_allow_components()?;
-                        let component = wasmtime::CodeBuilder::new(engine)
-                            .wasm(&bytes, Some(path))?
-                            .compile_component()?;
-                        RunTarget::Component(component)
+                let mut code = wasmtime::CodeBuilder::new(engine);
+                code.wasm_binary_or_text(bytes, Some(path))?;
+                match code.hint() {
+                    Some(wasmtime::CodeHint::Component) => {
+                        #[cfg(feature = "component-model")]
+                        {
+                            self.ensure_allow_components()?;
+                            RunTarget::Component(code.compile_component()?)
+                        }
+                        #[cfg(not(feature = "component-model"))]
+                        {
+                            bail!("support for components was not enabled at compile time");
+                        }
                     }
-                    #[cfg(not(feature = "component-model"))]
-                    {
-                        bail!("support for components was not enabled at compile time");
+                    Some(wasmtime::CodeHint::Module) | None => {
+                        RunTarget::Core(code.compile_module()?)
                     }
-                } else {
-                    let module = wasmtime::CodeBuilder::new(engine)
-                        .wasm(&bytes, Some(path))?
-                        .compile_module()?;
-                    RunTarget::Core(module)
                 }
             }
+
             #[cfg(not(any(feature = "cranelift", feature = "winch")))]
             None => {
                 let _ = path;
@@ -267,7 +260,11 @@ impl RunCommon {
         // the program as the CLI. This helps improve the performance of some
         // blocking operations in WASI, for example, by skipping the
         // back-and-forth between sync and async.
-        builder.allow_blocking_current_thread(true);
+        //
+        // However, do not set this if a timeout is configured, as that would
+        // cause the timeout to be ignored if the guest does, for example,
+        // something like `sleep(FOREVER)`.
+        builder.allow_blocking_current_thread(self.common.wasm.timeout.is_none());
 
         if self.common.wasi.inherit_env == Some(true) {
             for (k, v) in std::env::vars() {
@@ -327,7 +324,7 @@ impl RunCommon {
 
         for address in &self.common.wasi.tcplisten {
             let stdlistener = std::net::TcpListener::bind(address)
-                .with_context(|| format!("failed to bind to address '{}'", address))?;
+                .with_context(|| format!("failed to bind to address '{address}'"))?;
 
             let _ = stdlistener.set_nonblocking(true)?;
 

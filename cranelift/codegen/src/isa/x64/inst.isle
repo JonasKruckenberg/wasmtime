@@ -531,22 +531,16 @@
        ;; Control flow instructions.
 
        ;; Direct call: call simm32.
-       (CallKnown (dest ExternalName)
-                  (opcode Opcode)
-                  (info BoxCallInfo))
+       (CallKnown (info BoxCallInfo))
 
        ;; Indirect call: callq (reg mem)
-       (CallUnknown (dest RegMem)
-                    (opcode Opcode)
-                    (info BoxCallInfo))
+       (CallUnknown (info BoxCallIndInfo))
 
        ;; Tail call to a direct destination.
-       (ReturnCallKnown (callee ExternalName)
-                        (info BoxReturnCallInfo))
+       (ReturnCallKnown (info BoxReturnCallInfo))
 
        ;; Tail call to an indirect destination.
-       (ReturnCallUnknown (callee Reg)
-                          (info BoxReturnCallInfo))
+       (ReturnCallUnknown (info BoxReturnCallIndInfo))
 
        ;; A pseudo-instruction that captures register arguments in vregs.
        (Args
@@ -558,6 +552,12 @@
 
        ;; Return.
        (Ret (stack_bytes_to_pop u32))
+
+       ;; Stack switching
+       (StackSwitchBasic (store_context_ptr Gpr)
+                         (load_context_ptr Gpr)
+                         (in_payload0 Gpr)
+                         (out_payload0 WritableGpr))
 
        ;; Jump to a known target: jmp simm32.
        (JmpKnown (dst MachLabel))
@@ -744,7 +744,9 @@
             SFence))
 
 (type BoxCallInfo extern (enum))
+(type BoxCallIndInfo extern (enum))
 (type BoxReturnCallInfo extern (enum))
+(type BoxReturnCallIndInfo extern (enum))
 
 ;; Get the `OperandSize` for a given `Type`, rounding smaller types up to 32 bits.
 (decl operand_size_of_type_32_64 (Type) OperandSize)
@@ -1239,6 +1241,22 @@
             Vfnmadd132sd
             Vfnmadd132ps
             Vfnmadd132pd
+            Vfmsub213ss
+            Vfmsub213sd
+            Vfmsub213ps
+            Vfmsub213pd
+            Vfmsub132ss
+            Vfmsub132sd
+            Vfmsub132ps
+            Vfmsub132pd
+            Vfnmsub213ss
+            Vfnmsub213sd
+            Vfnmsub213ps
+            Vfnmsub213pd
+            Vfnmsub132ss
+            Vfnmsub132sd
+            Vfnmsub132ps
+            Vfnmsub132pd
             Vcmpps
             Vcmppd
             Vpsrlw
@@ -1615,10 +1633,22 @@
 
 ;; Put a value into a GPR.
 ;;
-;; Asserts that the value goes into a GPR.
+;; Moves the value into a GPR if it is a type that would naturally go into an
+;; XMM register.
 (decl put_in_gpr (Value) Gpr)
+
+;; Case for when the value naturally lives in a GPR.
 (rule (put_in_gpr val)
+      (if-let (value_type ty) val)
+      (if-let (type_register_class (RegisterClass.Gpr _)) ty)
       (gpr_new (put_in_reg val)))
+
+;; Case for when the value naturally lives in an XMM register and we must
+;; bitcast it from an XMM into a GPR.
+(rule (put_in_gpr val)
+      (if-let (value_type ty) val)
+      (if-let (type_register_class (RegisterClass.Xmm)) ty)
+      (bitcast_xmm_to_gpr (ty_bits ty) (xmm_new (put_in_reg val))))
 
 ;; Put a value into a `GprMem`.
 ;;
@@ -2226,8 +2256,10 @@
 
 ;; Performs an xor operation of the two operands specified.
 (decl x64_xor_vector (Type Xmm XmmMem) Xmm)
+(rule 1 (x64_xor_vector $F16 x y) (x64_xorps x y))
 (rule 1 (x64_xor_vector $F32 x y) (x64_xorps x y))
 (rule 1 (x64_xor_vector $F64 x y) (x64_xorpd x y))
+(rule 1 (x64_xor_vector $F128 x y) (x64_xorps x y))
 (rule 1 (x64_xor_vector $F32X4 x y) (x64_xorps x y))
 (rule 1 (x64_xor_vector $F64X2 x y) (x64_xorpd x y))
 (rule 0 (x64_xor_vector (multi_lane _ _) x y) (x64_pxor x y))
@@ -2260,6 +2292,17 @@
 (decl gen_call_indirect (SigRef Value ValueSlice) InstOutput)
 (extern constructor gen_call_indirect gen_call_indirect)
 
+;;;; Helpers for emitting stack switches ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(decl x64_stack_switch_basic (Gpr Gpr Gpr) Gpr)
+(rule (x64_stack_switch_basic store_context_ptr load_context_ptr in_payload0)
+      (let ((out_payload0 WritableGpr (temp_writable_gpr))
+            (_ Unit (emit (MInst.StackSwitchBasic store_context_ptr
+                                                  load_context_ptr
+                                                  in_payload0
+                                                  out_payload0))))
+        out_payload0))
+
 ;;;; Helpers for Emitting Loads ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Load a value into a register.
@@ -2277,6 +2320,9 @@
 
 (rule 2 (x64_load $F64 addr _ext_kind)
       (x64_movsd_load addr))
+
+(rule 2 (x64_load $F128 addr _ext_kind)
+      (x64_movdqu_load addr))
 
 (rule 2 (x64_load $F32X4 addr _ext_kind)
       (x64_movups_load addr))
@@ -2693,6 +2739,10 @@
             (_ Unit (emit (MInst.Imm size simm64 dst))))
         dst))
 
+;; `f16` immediates.
+(rule 2 (imm $F16 (u64_nonzero bits))
+        (bitcast_gpr_to_xmm 16 (imm $I16 bits)))
+
 ;; `f32` immediates.
 (rule 2 (imm $F32 (u64_nonzero bits))
         (x64_movd_to_xmm (imm $I32 bits)))
@@ -2719,6 +2769,9 @@
 ;; specific to the vector type.
 (rule 0 (imm ty @ (multi_lane _bits _lanes) 0)
       (xmm_to_reg (xmm_zero ty)))
+
+;; Special case for `f16` zero immediates
+(rule 2 (imm ty @ $F16 (u64_zero)) (xmm_zero ty))
 
 ;; Special case for `f32` zero immediates
 (rule 2 (imm ty @ $F32 (u64_zero)) (xmm_zero ty))
@@ -4371,6 +4424,38 @@
 (rule (x64_vfnmadd132 $F32X4 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfnmadd132ps) a b c))
 (rule (x64_vfnmadd132 $F64X2 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfnmadd132pd) a b c))
 
+;; Helper for creating `vfmsub213*` instructions
+(decl x64_vfmsub213 (Type Xmm Xmm XmmMem) Xmm)
+(rule (x64_vfmsub213 $F32 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfmsub213ss) a b c))
+(rule (x64_vfmsub213 $F64 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfmsub213sd) a b c))
+(rule (x64_vfmsub213 $F32X4 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfmsub213ps) a b c))
+(rule (x64_vfmsub213 $F64X2 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfmsub213pd) a b c))
+
+;; Helper for creating `vfmsub132*` instructions
+(decl x64_vfmsub132 (Type Xmm Xmm XmmMem) Xmm)
+(rule (x64_vfmsub132 $F32 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfmsub132ss) a b c))
+(rule (x64_vfmsub132 $F64 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfmsub132sd) a b c))
+(rule (x64_vfmsub132 $F32X4 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfmsub132ps) a b c))
+(rule (x64_vfmsub132 $F64X2 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfmsub132pd) a b c))
+
+;; Helper for creating `vfnmsub213*` instructions
+(decl x64_vfnmsub213 (Type Xmm Xmm XmmMem) Xmm)
+(rule (x64_vfnmsub213 $F32 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfnmsub213ss) a b c))
+(rule (x64_vfnmsub213 $F64 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfnmsub213sd) a b c))
+(rule (x64_vfnmsub213 $F32X4 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfnmsub213ps) a b c))
+(rule (x64_vfnmsub213 $F64X2 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfnmsub213pd) a b c))
+
+;; Helper for creating `vfnmsub132*` instructions
+(decl x64_vfnmsub132 (Type Xmm Xmm XmmMem) Xmm)
+(rule (x64_vfnmsub132 $F32 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfnmsub132ss) a b c))
+(rule (x64_vfnmsub132 $F64 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfnmsub132sd) a b c))
+(rule (x64_vfnmsub132 $F32X4 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfnmsub132ps) a b c))
+(rule (x64_vfnmsub132 $F64X2 a b c) (xmm_rmr_vex3 (AvxOpcode.Vfnmsub132pd) a b c))
+
+;; Note, the `vfmsub231` and `vfnmsub231*` instructions are omitted, because
+;; instruction selection happens before register allocation and therefore there
+;; is no benefit to a a third permutation
+
 ;; Helper for creating `sqrtss` instructions.
 ;;
 ;; NB: the square-root operation technically only has one operand but this
@@ -4964,17 +5049,29 @@
 
 ;;;; Casting ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(decl bitcast_xmm_to_gpr (Type Xmm) Gpr)
-(rule (bitcast_xmm_to_gpr $F32 src)
+(decl bitcast_xmm_to_gpr (u8 Xmm) Gpr)
+(rule (bitcast_xmm_to_gpr 16 src)
+      (x64_pextrw src 0))
+(rule (bitcast_xmm_to_gpr 32 src)
       (x64_movd_to_gpr src))
-(rule (bitcast_xmm_to_gpr $F64 src)
+(rule (bitcast_xmm_to_gpr 64 src)
       (x64_movq_to_gpr src))
 
-(decl bitcast_gpr_to_xmm (Type Gpr) Xmm)
-(rule (bitcast_gpr_to_xmm $I32 src)
+(decl bitcast_xmm_to_gprs (Xmm) ValueRegs)
+(rule (bitcast_xmm_to_gprs src)
+      (value_regs (x64_movq_to_gpr src) (x64_movq_to_gpr (x64_pshufd src 0b11101110))))
+
+(decl bitcast_gpr_to_xmm (u8 Gpr) Xmm)
+(rule (bitcast_gpr_to_xmm 16 src)
+      (x64_pinsrw (xmm_uninit_value) src 0))
+(rule (bitcast_gpr_to_xmm 32 src)
       (x64_movd_to_xmm src))
-(rule (bitcast_gpr_to_xmm $I64 src)
+(rule (bitcast_gpr_to_xmm 64 src)
       (x64_movq_to_xmm src))
+
+(decl bitcast_gprs_to_xmm (ValueRegs) Xmm)
+(rule (bitcast_gprs_to_xmm src)
+      (x64_punpcklqdq (x64_movq_to_xmm (value_regs_get_gpr src 0)) (x64_movq_to_xmm (value_regs_get_gpr src 1))))
 
 ;;;; Stack Addresses ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -5237,20 +5334,6 @@
 (rule (synthetic_amode_to_xmm_mem_aligned mode) (synthetic_amode_to_xmm_mem mode))
 (decl put_in_xmm_mem_aligned (Value) XmmMemAligned)
 (rule (put_in_xmm_mem_aligned val) (put_in_xmm_mem val))
-
-;; Copy a GPR of the given type to a new GPR.
-;;
-;; Generally, regalloc should take care of this kind of thing for us. This is
-;; only useful for implementing things like `bitcast` from an `r64` to an `i64`
-;; to avoid conflicting constraints on a single aliased value by splitting the
-;; value into two parts.
-(decl copy_gpr (Type Gpr) Gpr)
-(rule (copy_gpr ty src)
-      (let ((dst WritableGpr (temp_writable_gpr))
-            (_ Unit (emit (MInst.MovRR (operand_size_of_type_32_64 ty)
-                                       src
-                                       dst))))
-        dst))
 
 (decl mov_to_preg (PReg Gpr) SideEffectNoResult)
 (rule (mov_to_preg dst src)

@@ -252,7 +252,7 @@ impl MemoryPool {
             self.stripes.len() < 2 || self.stripes[index].pkey.is_some(),
             "if we are using stripes, we cannot have an empty protection key"
         );
-        self.stripes[index].pkey.clone()
+        self.stripes[index].pkey
     }
 
     /// Validate whether this memory pool supports the given module.
@@ -378,7 +378,8 @@ impl MemoryPool {
             // the process to continue, because we never perform a
             // mmap that would leave an open space for someone
             // else to come in and map something.
-            slot.instantiate(initial_size as usize, image, memory_plan)?;
+            let initial_size = usize::try_from(initial_size).unwrap();
+            slot.instantiate(initial_size, image, memory_plan)?;
 
             Memory::new_static(
                 memory_plan,

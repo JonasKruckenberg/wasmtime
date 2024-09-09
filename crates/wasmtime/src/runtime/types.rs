@@ -127,6 +127,9 @@ impl ValType {
     /// The `externref` type, aka `(ref null extern)`.
     pub const EXTERNREF: Self = ValType::Ref(RefType::EXTERNREF);
 
+    /// The `nullexternref` type, aka `(ref null noextern)`.
+    pub const NULLEXTERNREF: Self = ValType::Ref(RefType::NULLEXTERNREF);
+
     /// The `funcref` type, aka `(ref null func)`.
     pub const FUNCREF: Self = ValType::Ref(RefType::FUNCREF);
 
@@ -138,6 +141,12 @@ impl ValType {
 
     /// The `i31ref` type, aka `(ref null i31)`.
     pub const I31REF: Self = ValType::Ref(RefType::I31REF);
+
+    /// The `arrayref` type, aka `(ref null array)`.
+    pub const ARRAYREF: Self = ValType::Ref(RefType::ARRAYREF);
+
+    /// The `structref` type, aka `(ref null struct)`.
+    pub const STRUCTREF: Self = ValType::Ref(RefType::STRUCTREF);
 
     /// The `nullref` type, aka `(ref null none)`.
     pub const NULLREF: Self = ValType::Ref(RefType::NULLREF);
@@ -329,6 +338,19 @@ impl ValType {
             WasmValType::Ref(r) => Self::Ref(RefType::from_wasm_type(engine, r)),
         }
     }
+
+    /// What is the size (in bytes) of this type's values when they are stored
+    /// inside the GC heap?
+    pub(crate) fn byte_size_in_gc_heap(&self) -> u32 {
+        match self {
+            ValType::I32 => 4,
+            ValType::I64 => 8,
+            ValType::F32 => 4,
+            ValType::F64 => 8,
+            ValType::V128 => 16,
+            ValType::Ref(r) => r.byte_size_in_gc_heap(),
+        }
+    }
 }
 
 /// Opaque references to data in the Wasm heap or to host data.
@@ -371,6 +393,12 @@ impl RefType {
         heap_type: HeapType::Extern,
     };
 
+    /// The `nullexternref` type, aka `(ref null noextern)`.
+    pub const NULLEXTERNREF: Self = RefType {
+        is_nullable: true,
+        heap_type: HeapType::NoExtern,
+    };
+
     /// The `funcref` type, aka `(ref null func)`.
     pub const FUNCREF: Self = RefType {
         is_nullable: true,
@@ -393,6 +421,18 @@ impl RefType {
     pub const I31REF: Self = RefType {
         is_nullable: true,
         heap_type: HeapType::I31,
+    };
+
+    /// The `arrayref` type, aka `(ref null array)`.
+    pub const ARRAYREF: Self = RefType {
+        is_nullable: true,
+        heap_type: HeapType::Array,
+    };
+
+    /// The `structref` type, aka `(ref null struct)`.
+    pub const STRUCTREF: Self = RefType {
+        is_nullable: true,
+        heap_type: HeapType::Struct,
     };
 
     /// The `nullref` type, aka `(ref null none)`.
@@ -478,6 +518,26 @@ impl RefType {
 
     pub(crate) fn is_vmgcref_type_and_points_to_object(&self) -> bool {
         self.heap_type().is_vmgcref_type_and_points_to_object()
+    }
+
+    /// What is the size (in bytes) of this type's values when they are stored
+    /// inside the GC heap?
+    pub(crate) fn byte_size_in_gc_heap(&self) -> u32 {
+        match &self.heap_type {
+            HeapType::Extern | HeapType::NoExtern => 4,
+
+            HeapType::Func | HeapType::ConcreteFunc(_) | HeapType::NoFunc => {
+                todo!("funcrefs in the gc heap aren't supported yet")
+            }
+            HeapType::Any
+            | HeapType::Eq
+            | HeapType::I31
+            | HeapType::Array
+            | HeapType::ConcreteArray(_)
+            | HeapType::Struct
+            | HeapType::ConcreteStruct(_)
+            | HeapType::None => 4,
+        }
     }
 }
 
@@ -752,7 +812,10 @@ impl HeapType {
     /// Types that are not concrete, user-defined types are abstract types.
     #[inline]
     pub fn is_concrete(&self) -> bool {
-        matches!(self, HeapType::ConcreteFunc(_) | HeapType::ConcreteArray(_))
+        matches!(
+            self,
+            HeapType::ConcreteFunc(_) | HeapType::ConcreteArray(_) | HeapType::ConcreteStruct(_)
+        )
     }
 
     /// Is this a concrete, user-defined function type?
@@ -795,6 +858,27 @@ impl HeapType {
     /// a concrete array type.
     pub fn unwrap_concrete_array(&self) -> &ArrayType {
         self.as_concrete_array().unwrap()
+    }
+
+    /// Is this a concrete, user-defined struct type?
+    pub fn is_concrete_struct(&self) -> bool {
+        matches!(self, HeapType::ConcreteStruct(_))
+    }
+
+    /// Get the underlying concrete, user-defined struct type, if any.
+    ///
+    /// Returns `None` for if this is not a concrete struct type.
+    pub fn as_concrete_struct(&self) -> Option<&StructType> {
+        match self {
+            HeapType::ConcreteStruct(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    /// Get the underlying concrete, user-defined type, panicking if this is not
+    /// a concrete struct type.
+    pub fn unwrap_concrete_struct(&self) -> &StructType {
+        self.as_concrete_struct().unwrap()
     }
 
     /// Get the top type of this heap type's type hierarchy.
@@ -1198,6 +1282,16 @@ pub enum StorageType {
     ValType(ValType),
 }
 
+impl fmt::Display for StorageType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StorageType::I8 => write!(f, "i8"),
+            StorageType::I16 => write!(f, "i16"),
+            StorageType::ValType(ty) => fmt::Display::fmt(ty, f),
+        }
+    }
+}
+
 impl From<ValType> for StorageType {
     #[inline]
     fn from(v: ValType) -> Self {
@@ -1241,6 +1335,20 @@ impl StorageType {
         self.as_val_type().unwrap()
     }
 
+    /// Unpack this (possibly packed) storage type into a full `ValType`.
+    ///
+    /// If this is a `StorageType::ValType`, then the inner `ValType` is
+    /// returned as-is.
+    ///
+    /// If this is a packed `StorageType::I8` or `StorageType::I16, then a
+    /// `ValType::I32` is returned.
+    pub fn unpack(&self) -> &ValType {
+        match self {
+            StorageType::I8 | StorageType::I16 => &ValType::I32,
+            StorageType::ValType(ty) => ty,
+        }
+    }
+
     /// Does this field type match the other field type?
     ///
     /// That is, is this field type a subtype of the other field type?
@@ -1271,6 +1379,16 @@ impl StorageType {
     /// other.
     pub fn eq(a: &Self, b: &Self) -> bool {
         a.matches(b) && b.matches(a)
+    }
+
+    /// What is the size (in bytes) of this type's values when they are stored
+    /// inside the GC heap?
+    pub(crate) fn byte_size_in_gc_heap(&self) -> u32 {
+        match self {
+            StorageType::I8 => 1,
+            StorageType::I16 => 2,
+            StorageType::ValType(ty) => ty.byte_size_in_gc_heap(),
+        }
     }
 
     pub(crate) fn comes_from_same_engine(&self, engine: &Engine) -> bool {
@@ -1305,6 +1423,16 @@ impl StorageType {
 pub struct FieldType {
     mutability: Mutability,
     element_type: StorageType,
+}
+
+impl fmt::Display for FieldType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.mutability.is_var() {
+            write!(f, "(mut {})", self.element_type)
+        } else {
+            fmt::Display::fmt(&self.element_type, f)
+        }
+    }
 }
 
 impl FieldType {
@@ -1399,6 +1527,17 @@ impl FieldType {
 #[derive(Debug, Clone, Hash)]
 pub struct StructType {
     registered_type: RegisteredType,
+}
+
+impl fmt::Display for StructType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(struct")?;
+        for field in self.fields() {
+            write!(f, " (field {field})")?;
+        }
+        write!(f, ")")?;
+        Ok(())
+    }
 }
 
 impl StructType {
@@ -1576,15 +1715,19 @@ impl StructType {
     }
 
     pub(crate) fn comes_from_same_engine(&self, engine: &Engine) -> bool {
-        Engine::same(self.registered_type.engine(), engine)
+        Engine::same(self.registered_type().engine(), engine)
     }
 
     pub(crate) fn type_index(&self) -> VMSharedTypeIndex {
-        self.registered_type.index()
+        self.registered_type().index()
     }
 
     pub(crate) fn as_wasm_struct_type(&self) -> &WasmStructType {
-        self.registered_type.unwrap_struct()
+        self.registered_type().unwrap_struct()
+    }
+
+    pub(crate) fn registered_type(&self) -> &RegisteredType {
+        &self.registered_type
     }
 
     /// Construct a `StructType` from a `WasmStructType`.
@@ -1630,10 +1773,12 @@ impl StructType {
             "VMSharedTypeIndex is not registered in the Engine! Wrong \
              engine? Didn't root the index somewhere?",
         );
-        assert!(ty.is_struct());
-        Self {
-            registered_type: ty,
-        }
+        Self::from_registered_type(ty)
+    }
+
+    pub(crate) fn from_registered_type(registered_type: RegisteredType) -> Self {
+        debug_assert!(registered_type.is_struct());
+        Self { registered_type }
     }
 }
 
@@ -1656,6 +1801,14 @@ impl StructType {
 #[derive(Debug, Clone, Hash)]
 pub struct ArrayType {
     registered_type: RegisteredType,
+}
+
+impl fmt::Display for ArrayType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let field_ty = self.field_type();
+        write!(f, "(array (field {field_ty}))")?;
+        Ok(())
+    }
 }
 
 impl ArrayType {
@@ -1818,6 +1971,10 @@ impl ArrayType {
         Engine::same(self.registered_type.engine(), engine)
     }
 
+    pub(crate) fn registered_type(&self) -> &RegisteredType {
+        &self.registered_type
+    }
+
     pub(crate) fn type_index(&self) -> VMSharedTypeIndex {
         self.registered_type.index()
     }
@@ -1860,10 +2017,12 @@ impl ArrayType {
             "VMSharedTypeIndex is not registered in the Engine! Wrong \
              engine? Didn't root the index somewhere?",
         );
-        assert!(ty.is_array());
-        Self {
-            registered_type: ty,
-        }
+        Self::from_registered_type(ty)
+    }
+
+    pub(crate) fn from_registered_type(registered_type: RegisteredType) -> Self {
+        debug_assert!(registered_type.is_array());
+        Self { registered_type }
     }
 }
 
@@ -2214,10 +2373,12 @@ impl FuncType {
             "VMSharedTypeIndex is not registered in the Engine! Wrong \
              engine? Didn't root the index somewhere?",
         );
-        assert!(ty.is_func());
-        Self {
-            registered_type: ty,
-        }
+        Self::from_registered_type(ty)
+    }
+
+    pub(crate) fn from_registered_type(registered_type: RegisteredType) -> Self {
+        debug_assert!(registered_type.is_func());
+        Self { registered_type }
     }
 }
 
@@ -2334,7 +2495,7 @@ impl TableType {
         let element = RefType::from_wasm_type(engine, &table.wasm_ty);
         TableType {
             element,
-            ty: table.clone(),
+            ty: *table,
         }
     }
 
@@ -2637,7 +2798,7 @@ impl MemoryType {
     }
 
     pub(crate) fn from_wasmtime_memory(memory: &Memory) -> MemoryType {
-        MemoryType { ty: memory.clone() }
+        MemoryType { ty: *memory }
     }
 
     pub(crate) fn wasmtime_memory(&self) -> &Memory {

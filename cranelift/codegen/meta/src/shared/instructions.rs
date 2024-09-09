@@ -98,7 +98,7 @@ fn define_control_flow(
     let iAddr = &TypeVar::new(
         "iAddr",
         "An integer address type",
-        TypeSetBuilder::new().ints(32..64).refs(32..64).build(),
+        TypeSetBuilder::new().ints(32..64).build(),
     );
 
     ig.push(
@@ -599,8 +599,10 @@ pub(crate) fn define(
 
     // Operand kind shorthands.
     let i8: &TypeVar = &ValueType::from(LaneType::from(types::Int::I8)).into();
+    let f16_: &TypeVar = &ValueType::from(LaneType::from(types::Float::F16)).into();
     let f32_: &TypeVar = &ValueType::from(LaneType::from(types::Float::F32)).into();
     let f64_: &TypeVar = &ValueType::from(LaneType::from(types::Float::F64)).into();
+    let f128_: &TypeVar = &ValueType::from(LaneType::from(types::Float::F128)).into();
 
     // Starting definitions.
     let Int = &TypeVar::new(
@@ -640,13 +642,7 @@ pub(crate) fn define(
     let iAddr = &TypeVar::new(
         "iAddr",
         "An integer address type",
-        TypeSetBuilder::new().ints(32..64).refs(32..64).build(),
-    );
-
-    let Ref = &TypeVar::new(
-        "Ref",
-        "A scalar reference type",
-        TypeSetBuilder::new().refs(Interval::All).build(),
+        TypeSetBuilder::new().ints(32..64).build(),
     );
 
     let TxN = &TypeVar::new(
@@ -665,7 +661,6 @@ pub(crate) fn define(
         TypeSetBuilder::new()
             .ints(Interval::All)
             .floats(Interval::All)
-            .refs(Interval::All)
             .simd_lanes(Interval::All)
             .includes_scalars(true)
             .build(),
@@ -678,7 +673,6 @@ pub(crate) fn define(
             .ints(Interval::All)
             .floats(Interval::All)
             .simd_lanes(Interval::All)
-            .refs(Interval::All)
             .dynamic_simd_lanes(Interval::All)
             .build(),
     );
@@ -912,6 +906,66 @@ pub(crate) fn define(
             Operand::new("Offset", &imm.offset32).with_doc("Byte offset from base address"),
         ])
         .can_store(),
+    );
+    ig.push(
+        Inst::new(
+            "stack_switch",
+            r#"
+        Suspends execution of the current stack and resumes execution of another
+        one.
+
+        The target stack to switch to is identified by the data stored at
+        ``load_context_ptr``. Before switching, this instruction stores
+        analogous information about the
+        current (i.e., original) stack at ``store_context_ptr``, to
+        enabled switching back to the original stack at a later point.
+
+        The size, alignment and layout of the information stored at
+        ``load_context_ptr`` and ``store_context_ptr`` is platform-dependent.
+        The instruction assumes that ``load_context_ptr`` and
+        ``store_context_ptr`` are valid pointers to memory with said layout and
+        alignment, and does not perform any checks on these pointers or the data
+        stored there.
+
+        The instruction is experimental and only supported on x64 Linux at the
+        moment.
+
+        When switching from a stack A to a stack B, one of the following cases
+        must apply:
+        1. Stack B was previously suspended using a ``stack_switch`` instruction.
+        2. Stack B is a newly initialized stack. The necessary initialization is
+        platform-dependent and will generally involve running some kind of
+        trampoline to start execution of a function on the new stack.
+
+        In both cases, the ``in_payload`` argument of the ``stack_switch``
+        instruction executed on A is passed to stack B. In the first case above,
+        it will be the result value of the earlier ``stack_switch`` instruction
+        executed on stack B. In the second case, the value will be accessible to
+        the trampoline in a platform-dependent register.
+
+        The pointers ``load_context_ptr`` and ``store_context_ptr`` are allowed
+        to be equal; the instruction ensures that all data is loaded from the
+        former before writing to the latter.
+
+        Stack switching is one-shot in the sense that each ``stack_switch``
+        operation effectively consumes the context identified by
+        ``load_context_ptr``. In other words, performing two ``stack_switches``
+        using the same ``load_context_ptr`` causes undefined behavior, unless
+        the context at ``load_context_ptr`` is overwritten by another
+        `stack_switch` in between.
+        "#,
+            &formats.ternary,
+        )
+        .operands_in(vec![
+            Operand::new("store_context_ptr", iAddr),
+            Operand::new("load_context_ptr", iAddr),
+            Operand::new("in_payload0", iAddr),
+        ])
+        .operands_out(vec![Operand::new("out_payload0", iAddr)])
+        .other_side_effects()
+        .can_load()
+        .can_store()
+        .call(),
     );
 
     let I16x8 = &TypeVar::new(
@@ -1287,6 +1341,22 @@ pub(crate) fn define(
 
     ig.push(
         Inst::new(
+            "f16const",
+            r#"
+        Floating point constant.
+
+        Create a `f16` SSA value with an immediate constant value.
+        "#,
+            &formats.unary_ieee16,
+        )
+        .operands_in(vec![Operand::new("N", &imm.ieee16)])
+        .operands_out(vec![
+            Operand::new("a", f16_).with_doc("A constant f16 scalar value")
+        ]),
+    );
+
+    ig.push(
+        Inst::new(
             "f32const",
             r#"
         Floating point constant.
@@ -1314,6 +1384,22 @@ pub(crate) fn define(
         .operands_in(vec![Operand::new("N", &imm.ieee64)])
         .operands_out(vec![
             Operand::new("a", f64_).with_doc("A constant f64 scalar value")
+        ]),
+    );
+
+    ig.push(
+        Inst::new(
+            "f128const",
+            r#"
+        Floating point constant.
+
+        Create a `f128` SSA value with an immediate constant value.
+        "#,
+            &formats.unary_const,
+        )
+        .operands_in(vec![Operand::new("N", &imm.pool_constant)])
+        .operands_out(vec![
+            Operand::new("a", f128_).with_doc("A constant f128 scalar value")
         ]),
     );
 
@@ -1365,21 +1451,6 @@ pub(crate) fn define(
                 .with_doc("The 16 immediate bytes used for selecting the elements to shuffle"),
         ])
         .operands_out(vec![Operand::new("a", Tx16).with_doc("A vector value")]),
-    );
-
-    ig.push(
-        Inst::new(
-            "null",
-            r#"
-        Null constant value for reference types.
-
-        Create a scalar reference SSA value with a constant null value.
-        "#,
-            &formats.nullary,
-        )
-        .operands_out(vec![
-            Operand::new("a", Ref).with_doc("A constant reference null value")
-        ]),
     );
 
     ig.push(Inst::new(
@@ -1937,18 +2008,12 @@ pub(crate) fn define(
 
     ig.push(
         Inst::new(
-            "iadd_cin",
+            "sadd_overflow_cin",
             r#"
-        Add integers with carry in.
+        Add signed integers with carry in and overflow out.
 
-        Same as `iadd` with an additional carry input. Computes:
-
-        ```text
-            a = x + y + c_{in} \pmod 2^B
-        ```
-
-        Polymorphic over all scalar integer types, but does not support vector
-        types.
+        Same as `sadd_overflow` with an additional carry input. The `c_in` type
+        is interpreted as 1 if it's nonzero or 0 if it's zero.
         "#,
             &formats.ternary,
         )
@@ -1957,24 +2022,20 @@ pub(crate) fn define(
             Operand::new("y", iB),
             Operand::new("c_in", i8).with_doc("Input carry flag"),
         ])
-        .operands_out(vec![Operand::new("a", iB)]),
+        .operands_out(vec![
+            Operand::new("a", iB),
+            Operand::new("c_out", i8).with_doc("Output carry flag"),
+        ]),
     );
 
     ig.push(
         Inst::new(
-            "iadd_carry",
+            "uadd_overflow_cin",
             r#"
-        Add integers with carry in and out.
+        Add unsigned integers with carry in and overflow out.
 
-        Same as `iadd` with an additional carry input and output.
-
-        ```text
-            a &= x + y + c_{in} \pmod 2^B \\
-            c_{out} &= x + y + c_{in} >= 2^B
-        ```
-
-        Polymorphic over all scalar integer types, but does not support vector
-        types.
+        Same as `uadd_overflow` with an additional carry input. The `c_in` type
+        is interpreted as 1 if it's nonzero or 0 if it's zero.
         "#,
             &formats.ternary,
         )
@@ -2136,18 +2197,13 @@ pub(crate) fn define(
 
     ig.push(
         Inst::new(
-            "isub_bin",
+            "ssub_overflow_bin",
             r#"
-        Subtract integers with borrow in.
+        Subtract signed integers with borrow in and overflow out.
 
-        Same as `isub` with an additional borrow flag input. Computes:
-
-        ```text
-            a = x - (y + b_{in}) \pmod 2^B
-        ```
-
-        Polymorphic over all scalar integer types, but does not support vector
-        types.
+        Same as `ssub_overflow` with an additional borrow input. The `b_in` type
+        is interpreted as 1 if it's nonzero or 0 if it's zero. The computation
+        performed here is `x - (y + (b_in != 0))`.
         "#,
             &formats.ternary,
         )
@@ -2156,24 +2212,21 @@ pub(crate) fn define(
             Operand::new("y", iB),
             Operand::new("b_in", i8).with_doc("Input borrow flag"),
         ])
-        .operands_out(vec![Operand::new("a", iB)]),
+        .operands_out(vec![
+            Operand::new("a", iB),
+            Operand::new("b_out", i8).with_doc("Output borrow flag"),
+        ]),
     );
 
     ig.push(
         Inst::new(
-            "isub_borrow",
+            "usub_overflow_bin",
             r#"
-        Subtract integers with borrow in and out.
+        Subtract unsigned integers with borrow in and overflow out.
 
-        Same as `isub` with an additional borrow flag input and output.
-
-        ```text
-            a &= x - (y + b_{in}) \pmod 2^B \\
-            b_{out} &= x < y + b_{in}
-        ```
-
-        Polymorphic over all scalar integer types, but does not support vector
-        types.
+        Same as `usub_overflow` with an additional borrow input. The `b_in` type
+        is interpreted as 1 if it's nonzero or 0 if it's zero. The computation
+        performed here is `x - (y + (b_in != 0))`.
         "#,
             &formats.ternary,
         )
@@ -2954,36 +3007,6 @@ pub(crate) fn define(
         .operands_out(vec![
             Operand::new("a", Float).with_doc("``x`` rounded to integral value")
         ]),
-    );
-
-    ig.push(
-        Inst::new(
-            "is_null",
-            r#"
-        Reference verification.
-
-        The condition code determines if the reference type in question is
-        null or not.
-        "#,
-            &formats.unary,
-        )
-        .operands_in(vec![Operand::new("x", Ref)])
-        .operands_out(vec![Operand::new("a", i8)]),
-    );
-
-    ig.push(
-        Inst::new(
-            "is_invalid",
-            r#"
-        Reference verification.
-
-        The condition code determines if the reference type in question is
-        invalid or not.
-        "#,
-            &formats.unary,
-        )
-        .operands_in(vec![Operand::new("x", Ref)])
-        .operands_out(vec![Operand::new("a", i8)]),
     );
 
     ig.push(

@@ -4,7 +4,6 @@ use crate::ir;
 use crate::ir::types;
 use crate::ir::types::*;
 use crate::ir::MemFlags;
-use crate::ir::Opcode;
 use crate::ir::{dynamic_to_fixed, ExternalName, LibCall, Signature};
 use crate::isa;
 use crate::isa::aarch64::{inst::*, settings as aarch64_settings};
@@ -103,7 +102,7 @@ impl ABIMachineSpec for AArch64MachineDeps {
 
     fn compute_arg_locs(
         call_conv: isa::CallConv,
-        _flags: &settings::Flags,
+        flags: &settings::Flags,
         params: &[ir::AbiParam],
         args_or_rets: ArgsOrRets,
         add_ret_area_ptr: bool,
@@ -156,11 +155,12 @@ impl ABIMachineSpec for AArch64MachineDeps {
         };
 
         for param in params {
-            assert!(
-                legal_type_for_machine(param.value_type),
-                "Invalid type for AArch64: {:?}",
-                param.value_type
-            );
+            if is_apple_cc && param.value_type == types::F128 && !flags.enable_llvm_abi_extensions()
+            {
+                panic!(
+                    "f128 args/return values not supported for apple_aarch64 unless LLVM ABI extensions are enabled"
+                );
+            }
 
             let (rcs, reg_types) = Inst::rc_for_type(param.value_type)?;
 
@@ -723,12 +723,12 @@ impl ABIMachineSpec for AArch64MachineDeps {
         // present, resize the incoming argument area of the frame to accommodate those arguments.
         let incoming_args_diff = frame_layout.tail_args_size - frame_layout.incoming_args_size;
         if incoming_args_diff > 0 {
-            // Decrement SP to account for the additional space required by a tail call
+            // Decrement SP to account for the additional space required by a tail call.
             insts.extend(Self::gen_sp_reg_adjust(-(incoming_args_diff as i32)));
 
-            // Move fp and lr down
+            // Move fp and lr down.
             if setup_frame {
-                // Reload the frame pointer from the stack
+                // Reload the frame pointer from the stack.
                 insts.push(Inst::ULoad64 {
                     rd: regs::writable_fp_reg(),
                     mem: AMode::SPOffset {
@@ -1014,62 +1014,26 @@ impl ABIMachineSpec for AArch64MachineDeps {
         insts
     }
 
-    fn gen_call(
-        dest: &CallDest,
-        uses: CallArgList,
-        defs: CallRetList,
-        clobbers: PRegSet,
-        opcode: ir::Opcode,
-        tmp: Writable<Reg>,
-        callee_conv: isa::CallConv,
-        caller_conv: isa::CallConv,
-        callee_pop_size: u32,
-    ) -> SmallVec<[Inst; 2]> {
+    fn gen_call(dest: &CallDest, tmp: Writable<Reg>, info: CallInfo<()>) -> SmallVec<[Inst; 2]> {
         let mut insts = SmallVec::new();
         match &dest {
-            &CallDest::ExtName(ref name, RelocDistance::Near) => insts.push(Inst::Call {
-                info: Box::new(CallInfo {
-                    dest: name.clone(),
-                    uses,
-                    defs,
-                    clobbers,
-                    opcode,
-                    caller_callconv: caller_conv,
-                    callee_callconv: callee_conv,
-                    callee_pop_size,
-                }),
-            }),
+            &CallDest::ExtName(ref name, RelocDistance::Near) => {
+                let info = Box::new(info.map(|()| name.clone()));
+                insts.push(Inst::Call { info });
+            }
             &CallDest::ExtName(ref name, RelocDistance::Far) => {
                 insts.push(Inst::LoadExtName {
                     rd: tmp,
                     name: Box::new(name.clone()),
                     offset: 0,
                 });
-                insts.push(Inst::CallInd {
-                    info: Box::new(CallIndInfo {
-                        rn: tmp.to_reg(),
-                        uses,
-                        defs,
-                        clobbers,
-                        opcode,
-                        caller_callconv: caller_conv,
-                        callee_callconv: callee_conv,
-                        callee_pop_size,
-                    }),
-                });
+                let info = Box::new(info.map(|()| tmp.to_reg()));
+                insts.push(Inst::CallInd { info });
             }
-            &CallDest::Reg(reg) => insts.push(Inst::CallInd {
-                info: Box::new(CallIndInfo {
-                    rn: *reg,
-                    uses,
-                    defs,
-                    clobbers,
-                    opcode,
-                    caller_callconv: caller_conv,
-                    callee_callconv: callee_conv,
-                    callee_pop_size,
-                }),
-            }),
+            &CallDest::Reg(reg) => {
+                let info = Box::new(info.map(|()| *reg));
+                insts.push(Inst::CallInd { info });
+            }
         }
 
         insts
@@ -1107,9 +1071,8 @@ impl ABIMachineSpec for AArch64MachineDeps {
                 ],
                 defs: smallvec![],
                 clobbers: Self::get_regs_clobbered_by_call(call_conv),
-                opcode: Opcode::Call,
-                caller_callconv: call_conv,
-                callee_callconv: call_conv,
+                caller_conv: call_conv,
+                callee_conv: call_conv,
                 callee_pop_size: 0,
             }),
         });
@@ -1299,19 +1262,18 @@ impl AArch64CallSite {
         self.emit_stack_ret_arg_for_tail_call(ctx);
 
         let dest = self.dest().clone();
-        let opcode = self.opcode();
         let uses = self.take_uses();
-        let info = Box::new(ReturnCallInfo {
-            uses,
-            opcode,
-            new_stack_arg_size,
-            key: select_api_key(isa_flags, isa::CallConv::Tail, true),
-        });
+        let key = select_api_key(isa_flags, isa::CallConv::Tail, true);
 
         match dest {
             CallDest::ExtName(callee, RelocDistance::Near) => {
-                let callee = Box::new(callee);
-                ctx.emit(Inst::ReturnCall { callee, info });
+                let info = Box::new(ReturnCallInfo {
+                    dest: callee,
+                    uses,
+                    key,
+                    new_stack_arg_size,
+                });
+                ctx.emit(Inst::ReturnCall { info });
             }
             CallDest::ExtName(name, RelocDistance::Far) => {
                 let callee = ctx.alloc_tmp(types::I64).only_reg().unwrap();
@@ -1320,22 +1282,24 @@ impl AArch64CallSite {
                     name: Box::new(name),
                     offset: 0,
                 });
-                ctx.emit(Inst::ReturnCallInd {
-                    callee: callee.to_reg(),
-                    info,
+                let info = Box::new(ReturnCallInfo {
+                    dest: callee.to_reg(),
+                    uses,
+                    key,
+                    new_stack_arg_size,
                 });
+                ctx.emit(Inst::ReturnCallInd { info });
             }
-            CallDest::Reg(callee) => ctx.emit(Inst::ReturnCallInd { callee, info }),
+            CallDest::Reg(callee) => {
+                let info = Box::new(ReturnCallInfo {
+                    dest: callee,
+                    uses,
+                    key,
+                    new_stack_arg_size,
+                });
+                ctx.emit(Inst::ReturnCallInd { info });
+            }
         }
-    }
-}
-
-/// Is this type supposed to be seen on this machine? E.g. references of the
-/// wrong width are invalid.
-fn legal_type_for_machine(ty: Type) -> bool {
-    match ty {
-        R32 => false,
-        _ => true,
     }
 }
 

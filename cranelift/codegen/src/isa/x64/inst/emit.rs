@@ -1,4 +1,3 @@
-use crate::ir;
 use crate::ir::immediates::{Ieee32, Ieee64};
 use crate::ir::KnownSymbol;
 use crate::isa::x64::encoding::evex::{EvexInstruction, EvexVectorLength, RegisterOrAmode};
@@ -33,7 +32,7 @@ fn emit_signed_cvt(
         op,
         dst,
         src1: dst.to_reg(),
-        src2: GprMem::new(RegMem::reg(src)).unwrap(),
+        src2: GprMem::unwrap_new(RegMem::reg(src)),
         src2_size: OperandSize::Size64,
     }
     .emit(sink, info, state);
@@ -139,8 +138,7 @@ pub(crate) fn emit(
     let isa_requirements = inst.available_in_any_isa();
     if !isa_requirements.is_empty() && !isa_requirements.iter().all(matches_isa_flags) {
         panic!(
-            "Cannot emit inst '{:?}' for target; failed to match ISA requirements: {:?}",
-            inst, isa_requirements
+            "Cannot emit inst '{inst:?}' for target; failed to match ISA requirements: {isa_requirements:?}"
         )
     }
 
@@ -166,9 +164,9 @@ pub(crate) fn emit(
             let mut rex = RexFlags::from(*size);
             let (opcode_r, opcode_m, subopcode_i) = match op {
                 AluRmiROpcode::Add => (0x01, 0x03, 0),
-                AluRmiROpcode::Adc => (0x11, 0x03, 0),
+                AluRmiROpcode::Adc => (0x11, 0x13, 2),
                 AluRmiROpcode::Sub => (0x29, 0x2B, 5),
-                AluRmiROpcode::Sbb => (0x19, 0x2B, 5),
+                AluRmiROpcode::Sbb => (0x19, 0x1B, 3),
                 AluRmiROpcode::And => (0x21, 0x23, 4),
                 AluRmiROpcode::Or => (0x09, 0x0B, 1),
                 AluRmiROpcode::Xor => (0x31, 0x33, 6),
@@ -789,18 +787,18 @@ pub(crate) fn emit(
                     DivSignedness::Signed,
                     TrapCode::IntegerDivisionByZero,
                     RegMem::reg(divisor),
-                    Gpr::new(regs::rax()).unwrap(),
-                    Writable::from_reg(Gpr::new(regs::rax()).unwrap()),
+                    Gpr::unwrap_new(regs::rax()),
+                    Writable::from_reg(Gpr::unwrap_new(regs::rax())),
                 ),
                 _ => Inst::div(
                     size,
                     DivSignedness::Signed,
                     TrapCode::IntegerDivisionByZero,
                     RegMem::reg(divisor),
-                    Gpr::new(regs::rax()).unwrap(),
-                    Gpr::new(regs::rdx()).unwrap(),
-                    Writable::from_reg(Gpr::new(regs::rax()).unwrap()),
-                    Writable::from_reg(Gpr::new(regs::rdx()).unwrap()),
+                    Gpr::unwrap_new(regs::rax()),
+                    Gpr::unwrap_new(regs::rdx()),
+                    Writable::from_reg(Gpr::unwrap_new(regs::rax())),
+                    Writable::from_reg(Gpr::unwrap_new(regs::rdx())),
                 ),
             };
             inst.emit(sink, info, state);
@@ -885,7 +883,7 @@ pub(crate) fn emit(
         Inst::MovFromPReg { src, dst } => {
             let src: Reg = (*src).into();
             debug_assert!([regs::rsp(), regs::rbp(), regs::pinned_reg()].contains(&src));
-            let src = Gpr::new(src).unwrap();
+            let src = Gpr::unwrap_new(src);
             let size = OperandSize::Size64;
             let dst = WritableGpr::from_writable_reg(dst.to_writable_reg()).unwrap();
             Inst::MovRR { size, src, dst }.emit(sink, info, state);
@@ -893,7 +891,7 @@ pub(crate) fn emit(
 
         Inst::MovToPReg { src, dst } => {
             let src = src.to_reg();
-            let src = Gpr::new(src).unwrap();
+            let src = Gpr::unwrap_new(src);
             let dst: Reg = (*dst).into();
             debug_assert!([regs::rsp(), regs::rbp(), regs::pinned_reg()].contains(&dst));
             let dst = WritableGpr::from_writable_reg(Writable::from_reg(dst)).unwrap();
@@ -1233,7 +1231,7 @@ pub(crate) fn emit(
                     SseOpcode::Psrlw => (0x0F71, 2),
                     SseOpcode::Psrld => (0x0F72, 2),
                     SseOpcode::Psrlq => (0x0F73, 2),
-                    _ => panic!("invalid opcode: {}", opcode),
+                    _ => panic!("invalid opcode: {opcode}"),
                 };
                 let dst_enc = reg_enc(dst);
                 emit_std_enc_enc(sink, prefix, opcode_bytes, 2, reg_digit, dst_enc, rex);
@@ -1251,7 +1249,7 @@ pub(crate) fn emit(
                     SseOpcode::Psrlw => 0x0FD1,
                     SseOpcode::Psrld => 0x0FD2,
                     SseOpcode::Psrlq => 0x0FD3,
-                    _ => panic!("invalid opcode: {}", opcode),
+                    _ => panic!("invalid opcode: {opcode}"),
                 };
 
                 match src2 {
@@ -1417,7 +1415,7 @@ pub(crate) fn emit(
             let alternative = alternative.to_reg();
             let dst = dst.to_writable_reg();
             debug_assert_eq!(alternative, dst.to_reg());
-            let consequent = consequent.clone().to_reg();
+            let consequent = consequent.to_reg();
 
             // Lowering of the Select IR opcode when the input is an fcmp relies on the fact that
             // this doesn't clobber flags. Make sure to not do so here.
@@ -1429,10 +1427,11 @@ pub(crate) fn emit(
             let op = match *ty {
                 types::F64 => SseOpcode::Movsd,
                 types::F32 => SseOpcode::Movsd,
+                types::F16 => SseOpcode::Movsd,
                 types::F32X4 => SseOpcode::Movaps,
                 types::F64X2 => SseOpcode::Movapd,
                 ty => {
-                    debug_assert!(ty.is_vector() && ty.bytes() == 16);
+                    debug_assert!((ty.is_float() || ty.is_vector()) && ty.bytes() == 16);
                     SseOpcode::Movdqa
                 }
             };
@@ -1594,16 +1593,8 @@ pub(crate) fn emit(
             inst.emit(sink, info, state);
         }
 
-        Inst::CallKnown {
-            dest,
-            opcode,
-            info: call_info,
-        } => {
-            let (stack_map, user_stack_map) = state.take_stack_map();
-            if let Some(s) = stack_map {
-                sink.add_stack_map(StackMapExtent::UpcomingBytes(5), s);
-            }
-            if let Some(s) = user_stack_map {
+        Inst::CallKnown { info: call_info } => {
+            if let Some(s) = state.take_stack_map() {
                 let offset = sink.cur_offset() + 5;
                 sink.push_user_stack_map(state, offset, s);
             }
@@ -1611,31 +1602,24 @@ pub(crate) fn emit(
             sink.put1(0xE8);
             // The addend adjusts for the difference between the end of the instruction and the
             // beginning of the immediate field.
-            emit_reloc(sink, Reloc::X86CallPCRel4, &dest, -4);
+            emit_reloc(sink, Reloc::X86CallPCRel4, &call_info.dest, -4);
             sink.put4(0);
-            if opcode.is_call() {
-                sink.add_call_site(*opcode);
-            }
+            sink.add_call_site();
 
             // Reclaim the outgoing argument area that was released by the callee, to ensure that
             // StackAMode values are always computed from a consistent SP.
-            if let Some(call_info) = call_info {
-                if call_info.callee_pop_size > 0 {
-                    Inst::alu_rmi_r(
-                        OperandSize::Size64,
-                        AluRmiROpcode::Sub,
-                        RegMemImm::imm(call_info.callee_pop_size),
-                        Writable::from_reg(regs::rsp()),
-                    )
-                    .emit(sink, info, state);
-                }
+            if call_info.callee_pop_size > 0 {
+                Inst::alu_rmi_r(
+                    OperandSize::Size64,
+                    AluRmiROpcode::Sub,
+                    RegMemImm::imm(call_info.callee_pop_size),
+                    Writable::from_reg(regs::rsp()),
+                )
+                .emit(sink, info, state);
             }
         }
 
-        Inst::ReturnCallKnown {
-            callee,
-            info: call_info,
-        } => {
+        Inst::ReturnCallKnown { info: call_info } => {
             emit_return_call_common_sequence(sink, info, state, &call_info);
 
             // Finally, jump to the callee!
@@ -1646,16 +1630,13 @@ pub(crate) fn emit(
             sink.put1(0xE9);
             // The addend adjusts for the difference between the end of the instruction and the
             // beginning of the immediate field.
-            emit_reloc(sink, Reloc::X86CallPCRel4, &callee, -4);
+            emit_reloc(sink, Reloc::X86CallPCRel4, &call_info.dest, -4);
             sink.put4(0);
-            sink.add_call_site(ir::Opcode::ReturnCall);
+            sink.add_call_site();
         }
 
-        Inst::ReturnCallUnknown {
-            callee,
-            info: call_info,
-        } => {
-            let callee = *callee;
+        Inst::ReturnCallUnknown { info: call_info } => {
+            let callee = call_info.dest;
 
             emit_return_call_common_sequence(sink, info, state, &call_info);
 
@@ -1663,17 +1644,14 @@ pub(crate) fn emit(
                 target: RegMem::reg(callee),
             }
             .emit(sink, info, state);
-            sink.add_call_site(ir::Opcode::ReturnCallIndirect);
+            sink.add_call_site();
         }
 
         Inst::CallUnknown {
-            dest,
-            opcode,
-            info: call_info,
+            info: call_info, ..
         } => {
-            let dest = dest.clone();
+            let dest = call_info.dest.clone();
 
-            let start_offset = sink.cur_offset();
             match dest {
                 RegMem::Reg { reg } => {
                     let reg_enc = int_reg_enc(reg);
@@ -1703,31 +1681,23 @@ pub(crate) fn emit(
                 }
             }
 
-            let (stack_map, user_stack_map) = state.take_stack_map();
-            if let Some(s) = stack_map {
-                sink.add_stack_map(StackMapExtent::StartedAtOffset(start_offset), s);
-            }
-            if let Some(s) = user_stack_map {
+            if let Some(s) = state.take_stack_map() {
                 let offset = sink.cur_offset();
                 sink.push_user_stack_map(state, offset, s);
             }
 
-            if opcode.is_call() {
-                sink.add_call_site(*opcode);
-            }
+            sink.add_call_site();
 
             // Reclaim the outgoing argument area that was released by the callee, to ensure that
             // StackAMode values are always computed from a consistent SP.
-            if let Some(call_info) = call_info {
-                if call_info.callee_pop_size > 0 {
-                    Inst::alu_rmi_r(
-                        OperandSize::Size64,
-                        AluRmiROpcode::Sub,
-                        RegMemImm::imm(call_info.callee_pop_size),
-                        Writable::from_reg(regs::rsp()),
-                    )
-                    .emit(sink, info, state);
-                }
+            if call_info.callee_pop_size > 0 {
+                Inst::alu_rmi_r(
+                    OperandSize::Size64,
+                    AluRmiROpcode::Sub,
+                    RegMemImm::imm(call_info.callee_pop_size),
+                    Writable::from_reg(regs::rsp()),
+                )
+                .emit(sink, info, state);
             }
         }
 
@@ -1741,6 +1711,123 @@ pub(crate) fn emit(
         Inst::Ret { stack_bytes_to_pop } => {
             sink.put1(0xC2);
             sink.put2(u16::try_from(*stack_bytes_to_pop).unwrap());
+        }
+
+        Inst::StackSwitchBasic {
+            store_context_ptr,
+            load_context_ptr,
+            in_payload0,
+            out_payload0,
+        } => {
+            // Note that we do not emit anything for preserving and restoring
+            // ordinary registers here: That's taken care of by regalloc for us,
+            // since we marked this instruction as clobbering all registers.
+            //
+            // Also note that we do nothing about passing the single payload
+            // value: We've informed regalloc that it is sent and received via
+            // the fixed register given by [stack_switch::payload_register]
+
+            let (tmp1, tmp2) = {
+                // Ideally we would just ask regalloc for two temporary registers.
+                // However, adding any early defs to the constraints on StackSwitch
+                // causes TooManyLiveRegs. Fortunately, we can manually find tmp
+                // registers without regalloc: Since our instruction clobbers all
+                // registers, we can simply pick any register that is not assigned
+                // to the operands.
+
+                let all = crate::isa::x64::abi::ALL_CLOBBERS;
+
+                let used_regs = [
+                    **load_context_ptr,
+                    **store_context_ptr,
+                    **in_payload0,
+                    *out_payload0.to_reg(),
+                ];
+
+                let mut tmps = all.into_iter().filter_map(|preg| {
+                    let reg: Reg = preg.into();
+                    if !used_regs.contains(&reg) {
+                        WritableGpr::from_writable_reg(isle::WritableReg::from_reg(reg))
+                    } else {
+                        None
+                    }
+                });
+                (tmps.next().unwrap(), tmps.next().unwrap())
+            };
+
+            let layout = stack_switch::control_context_layout();
+            let rsp_offset = layout.stack_pointer_offset as i32;
+            let pc_offset = layout.ip_offset as i32;
+            let rbp_offset = layout.frame_pointer_offset as i32;
+
+            // Location to which someone switch-ing back to this stack will jump
+            // to: Right behind the `StackSwitch` instruction
+            let resume = sink.get_label();
+
+            //
+            // For RBP and RSP we do the following:
+            // - Load new value for register from `load_context_ptr` +
+            // corresponding offset.
+            // - Store previous (!) value of register at `store_context_ptr` +
+            // corresponding offset.
+            //
+            // Since `load_context_ptr` and `store_context_ptr` are allowed to be
+            // equal, we need to use a temporary register here.
+            //
+
+            let mut exchange = |offset, reg| {
+                let inst = Inst::Mov64MR {
+                    src: Amode::imm_reg(offset, **load_context_ptr).into(),
+                    dst: tmp1,
+                };
+                emit(&inst, sink, info, state);
+
+                let inst = Inst::MovRM {
+                    size: OperandSize::Size64,
+                    src: Gpr::new(reg).unwrap(),
+                    dst: Amode::imm_reg(offset, **store_context_ptr).into(),
+                };
+                emit(&inst, sink, info, state);
+
+                let dst = Writable::from_reg(reg.into());
+                let inst = Inst::MovRR {
+                    size: OperandSize::Size64,
+                    src: tmp1.to_reg(),
+                    dst: WritableGpr::from_writable_reg(dst.into()).unwrap(),
+                };
+                emit(&inst, sink, info, state);
+            };
+
+            exchange(rsp_offset, regs::rsp());
+            exchange(rbp_offset, regs::rbp());
+
+            //
+            // Load target PC, store resume PC, jump to target PC
+            //
+
+            let inst = Inst::Mov64MR {
+                src: Amode::imm_reg(pc_offset, **load_context_ptr).into(),
+                dst: tmp1,
+            };
+            emit(&inst, sink, info, state);
+
+            let amode = Amode::RipRelative { target: resume };
+            let inst = Inst::lea(amode, tmp2.map(Reg::from));
+            inst.emit(sink, info, state);
+
+            let inst = Inst::MovRM {
+                size: OperandSize::Size64,
+                src: tmp2.to_reg(),
+                dst: Amode::imm_reg(pc_offset, **store_context_ptr).into(),
+            };
+            emit(&inst, sink, info, state);
+
+            let inst = Inst::JmpUnknown {
+                target: RegMem::reg(tmp1.to_reg().into()),
+            };
+            emit(&inst, sink, info, state);
+
+            sink.bind_label(resume, state.ctrl_plane_mut());
         }
 
         Inst::JmpKnown { dst } => {
@@ -1871,8 +1958,8 @@ pub(crate) fn emit(
                 ExtMode::LQ,
                 RegMem::mem(Amode::imm_reg_reg_shift(
                     0,
-                    Gpr::new(tmp1.to_reg()).unwrap(),
-                    Gpr::new(idx).unwrap(),
+                    Gpr::unwrap_new(tmp1.to_reg()),
+                    Gpr::unwrap_new(idx),
                     2,
                 )),
                 tmp2,
@@ -1944,7 +2031,7 @@ pub(crate) fn emit(
             emit(
                 &Inst::XmmUnaryRmRUnaligned {
                     op: *op,
-                    src: XmmMem::new(src.clone().into()).unwrap(),
+                    src: XmmMem::unwrap_new(src.clone().into()),
                     dst: *dst,
                 },
                 sink,
@@ -2102,7 +2189,7 @@ pub(crate) fn emit(
                 op: *op,
                 dst: *dst,
                 src1: *src1,
-                src2: XmmMem::new(src2.clone().to_reg_mem()).unwrap(),
+                src2: XmmMem::unwrap_new(src2.clone().to_reg_mem()),
             },
             sink,
             info,
@@ -2580,6 +2667,22 @@ pub(crate) fn emit(
                 AvxOpcode::Vfmadd213pd => (true, OpcodeMap::_0F38, 0xA8),
                 AvxOpcode::Vfnmadd132pd => (true, OpcodeMap::_0F38, 0x9C),
                 AvxOpcode::Vfnmadd213pd => (true, OpcodeMap::_0F38, 0xAC),
+                AvxOpcode::Vfmsub132ss => (false, OpcodeMap::_0F38, 0x9B),
+                AvxOpcode::Vfmsub213ss => (false, OpcodeMap::_0F38, 0xAB),
+                AvxOpcode::Vfnmsub132ss => (false, OpcodeMap::_0F38, 0x9F),
+                AvxOpcode::Vfnmsub213ss => (false, OpcodeMap::_0F38, 0xAF),
+                AvxOpcode::Vfmsub132sd => (true, OpcodeMap::_0F38, 0x9B),
+                AvxOpcode::Vfmsub213sd => (true, OpcodeMap::_0F38, 0xAB),
+                AvxOpcode::Vfnmsub132sd => (true, OpcodeMap::_0F38, 0x9F),
+                AvxOpcode::Vfnmsub213sd => (true, OpcodeMap::_0F38, 0xAF),
+                AvxOpcode::Vfmsub132ps => (false, OpcodeMap::_0F38, 0x9A),
+                AvxOpcode::Vfmsub213ps => (false, OpcodeMap::_0F38, 0xAA),
+                AvxOpcode::Vfnmsub132ps => (false, OpcodeMap::_0F38, 0x9E),
+                AvxOpcode::Vfnmsub213ps => (false, OpcodeMap::_0F38, 0xAE),
+                AvxOpcode::Vfmsub132pd => (true, OpcodeMap::_0F38, 0x9A),
+                AvxOpcode::Vfmsub213pd => (true, OpcodeMap::_0F38, 0xAA),
+                AvxOpcode::Vfnmsub132pd => (true, OpcodeMap::_0F38, 0x9E),
+                AvxOpcode::Vfnmsub213pd => (true, OpcodeMap::_0F38, 0xAE),
                 AvxOpcode::Vblendvps => (false, OpcodeMap::_0F3A, 0x4A),
                 AvxOpcode::Vblendvpd => (false, OpcodeMap::_0F3A, 0x4B),
                 AvxOpcode::Vpblendvb => (false, OpcodeMap::_0F3A, 0x4C),
@@ -3167,7 +3270,7 @@ pub(crate) fn emit(
                 SseOpcode::Movmskps => (LegacyPrefixes::None, 0x0F50, true),
                 SseOpcode::Movmskpd => (LegacyPrefixes::_66, 0x0F50, true),
                 SseOpcode::Pmovmskb => (LegacyPrefixes::_66, 0x0FD7, true),
-                _ => panic!("unexpected opcode {:?}", op),
+                _ => panic!("unexpected opcode {op:?}"),
             };
             let rex = RexFlags::from(*dst_size);
             let (src, dst) = if dst_first { (dst, src) } else { (src, dst) };
@@ -3186,7 +3289,7 @@ pub(crate) fn emit(
                 SseOpcode::Pextrw => (LegacyPrefixes::_66, 0x0FC5, 2, OS::Size32, true),
                 SseOpcode::Pextrd => (LegacyPrefixes::_66, 0x0F3A16, 3, OS::Size32, false),
                 SseOpcode::Pextrq => (LegacyPrefixes::_66, 0x0F3A16, 3, OS::Size64, false),
-                _ => panic!("unexpected opcode {:?}", op),
+                _ => panic!("unexpected opcode {op:?}"),
             };
             let rex = RexFlags::from(dst_size);
             let (src, dst) = if dst_first { (dst, src) } else { (src, dst) };
@@ -3208,7 +3311,7 @@ pub(crate) fn emit(
                 // Movd and movq use the same opcode; the presence of the REX prefix (set below)
                 // actually determines which is used.
                 SseOpcode::Movd | SseOpcode::Movq => (LegacyPrefixes::_66, 0x0F6E),
-                _ => panic!("unexpected opcode {:?}", op),
+                _ => panic!("unexpected opcode {op:?}"),
             };
             let rex = RexFlags::from(*src_size);
             match src_e {
@@ -3260,7 +3363,7 @@ pub(crate) fn emit(
             let (prefix, opcode) = match op {
                 SseOpcode::Cvtsi2ss => (LegacyPrefixes::_F3, 0x0F2A),
                 SseOpcode::Cvtsi2sd => (LegacyPrefixes::_F2, 0x0F2A),
-                _ => panic!("unexpected opcode {:?}", op),
+                _ => panic!("unexpected opcode {op:?}"),
             };
             let rex = RexFlags::from(*src2_size);
             match src2 {
@@ -3386,7 +3489,7 @@ pub(crate) fn emit(
             let inst = Inst::shift_r(
                 OperandSize::Size64,
                 ShiftKind::ShiftRightLogical,
-                Imm8Gpr::new(Imm8Reg::Imm8 { imm: 1 }).unwrap(),
+                Imm8Gpr::unwrap_new(Imm8Reg::Imm8 { imm: 1 }),
                 tmp_gpr1.to_reg(),
                 tmp_gpr1,
             );
@@ -3566,7 +3669,7 @@ pub(crate) fn emit(
                 let output_bits = dst_size.to_bits();
                 match *src_size {
                     OperandSize::Size32 => {
-                        let cst = Ieee32::pow2(output_bits - 1).neg().bits();
+                        let cst = (-Ieee32::pow2(output_bits - 1)).bits();
                         let inst = Inst::imm(OperandSize::Size32, cst as u64, tmp_gpr);
                         inst.emit(sink, info, state);
                     }
@@ -3577,7 +3680,7 @@ pub(crate) fn emit(
                             no_overflow_cc = CC::NBE; // >
                             Ieee64::fcvt_to_sint_negative_overflow(output_bits)
                         } else {
-                            Ieee64::pow2(output_bits - 1).neg()
+                            -Ieee64::pow2(output_bits - 1)
                         };
                         let inst = Inst::imm(OperandSize::Size64, cst.bits(), tmp_gpr);
                         inst.emit(sink, info, state);
@@ -4245,11 +4348,11 @@ pub(crate) fn emit(
 ///   arguments).
 ///
 /// * Move the return address into its stack slot.
-fn emit_return_call_common_sequence(
+fn emit_return_call_common_sequence<T>(
     sink: &mut MachBuffer<Inst>,
     info: &EmitInfo,
     state: &mut EmitState,
-    call_info: &ReturnCallInfo,
+    call_info: &ReturnCallInfo<T>,
 ) {
     assert!(
         info.flags.preserve_frame_pointers(),

@@ -236,6 +236,7 @@ fn variant_derive() -> Result<()> {
 fn enum_derive() -> Result<()> {
     #[derive(ComponentType, Lift, Lower, PartialEq, Eq, Debug, Copy, Clone)]
     #[component(enum)]
+    #[repr(u8)]
     enum Foo {
         #[component(name = "foo-bar-baz")]
         A,
@@ -299,6 +300,7 @@ fn enum_derive() -> Result<()> {
     #[add_variants(257)]
     #[derive(ComponentType, Lift, Lower, PartialEq, Eq, Debug, Copy, Clone)]
     #[component(enum)]
+    #[repr(u16)]
     enum Many {}
 
     let component = Component::new(
@@ -307,7 +309,7 @@ fn enum_derive() -> Result<()> {
             &format!(
                 "(enum {})",
                 (0..257)
-                    .map(|index| format!(r#""V{}""#, index))
+                    .map(|index| format!(r#""V{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -330,6 +332,7 @@ fn enum_derive() -> Result<()> {
     // #[add_variants(65537)]
     // #[derive(ComponentType, Lift, Lower, PartialEq, Eq, Debug, Copy, Clone)]
     // #[component(enum)]
+    // #[repr(u32)]
     // enum ManyMore {}
 
     Ok(())
@@ -453,7 +456,7 @@ fn flags() -> Result<()> {
             &format!(
                 r#"(flags {})"#,
                 (0..8)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -502,7 +505,7 @@ fn flags() -> Result<()> {
             &format!(
                 "(flags {})",
                 (0..9)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -550,7 +553,7 @@ fn flags() -> Result<()> {
             &format!(
                 r#"(flags {})"#,
                 (0..16)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -589,7 +592,7 @@ fn flags() -> Result<()> {
             &format!(
                 "(flags {})",
                 (0..17)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -637,7 +640,7 @@ fn flags() -> Result<()> {
             &format!(
                 r#"(flags {})"#,
                 (0..32)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -676,7 +679,7 @@ fn flags() -> Result<()> {
             &format!(
                 "(flags {})",
                 (0..33)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
@@ -709,7 +712,7 @@ fn flags() -> Result<()> {
             &format!(
                 "(flags {})",
                 (0..65)
-                    .map(|index| format!(r#""F{}""#, index))
+                    .map(|index| format!(r#""F{index}""#))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),

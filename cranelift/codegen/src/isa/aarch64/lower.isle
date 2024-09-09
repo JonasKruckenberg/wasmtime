@@ -19,10 +19,10 @@
 (rule (lower (has_type ty (iconst (u64_from_imm64 n))))
       (imm ty (ImmExtend.Zero) n))
 
-;;;; Rules for `null` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Rules for `f16const` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(rule (lower (has_type ty (null)))
-      (imm ty (ImmExtend.Zero) 0))
+(rule (lower (f16const (u16_from_ieee16 n)))
+      (constant_f16 n))
 
 ;;;; Rules for `f32const` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -33,6 +33,11 @@
 
 (rule (lower (f64const (u64_from_ieee64 n)))
       (constant_f64 n))
+
+;;;; Rules for `f128const` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(rule (lower (has_type $F128 (f128const (u128_from_constant n))))
+      (constant_f128 n))
 
 ;;;; Rules for `nop` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -525,15 +530,22 @@
 (decl pure get_fneg_value (IsFneg) Value)
 (rule (get_fneg_value (IsFneg.Result _ v)) v)
 
-(decl fmadd_series (Type u64 Value Value Value) InstOutput)
-(rule 0 (fmadd_series (ty_scalar_float ty) 0 x y z) (fpu_rrrr (FPUOp3.MAdd) (scalar_size ty) x y z))
-(rule 0 (fmadd_series (ty_scalar_float ty) 1 x y z) (fpu_rrrr (FPUOp3.MSub) (scalar_size ty) x y z))
+(decl fmadd_series (Type u64 u64 Value Value Value) InstOutput)
+;; MAdd: + x * y + z
+(rule 0 (fmadd_series (ty_scalar_float ty) 0 0 x y z) (fpu_rrrr (FPUOp3.MAdd) (scalar_size ty) x y z))
+;; MSub: - x * y + z
+(rule 0 (fmadd_series (ty_scalar_float ty) 1 0 x y z) (fpu_rrrr (FPUOp3.MSub) (scalar_size ty) x y z))
+;; NMAdd: - x * y - z
+(rule 0 (fmadd_series (ty_scalar_float ty) 1 1 x y z) (fpu_rrrr (FPUOp3.NMAdd) (scalar_size ty) x y z))
+;; NMSub: + x * y - z
+(rule 0 (fmadd_series (ty_scalar_float ty) 0 1 x y z) (fpu_rrrr (FPUOp3.NMSub) (scalar_size ty) x y z))
 
-(rule (lower (has_type (ty_scalar_float ty) (fma x_src y_src z)))
+(rule (lower (has_type (ty_scalar_float ty) (fma x_src y_src z_src)))
   (let
       ((x_res IsFneg (is_fneg x_src))
-       (y_res IsFneg (is_fneg y_src)))
-      (fmadd_series ty (u64_xor (is_fneg_neg x_res) (is_fneg_neg y_res)) (get_fneg_value x_res) (get_fneg_value y_res) z)))
+       (y_res IsFneg (is_fneg y_src))
+       (z_res IsFneg (is_fneg z_src)))
+      (fmadd_series ty (u64_xor (is_fneg_neg x_res) (is_fneg_neg y_res)) (is_fneg_neg z_res) (get_fneg_value x_res) (get_fneg_value y_res) (get_fneg_value z_res))))
 
 ;; Delegate vector-based lowerings to helpers below
 (rule 1 (lower (has_type ty @ (multi_lane _ _) (fma x y z)))
@@ -807,6 +819,26 @@
            (dst_hi Reg (madd $I64 x_hi y_lo dst_hi2))
            (dst_lo Reg (madd $I64 x_lo y_lo (zero_reg))))
         (value_regs dst_lo dst_hi)))
+
+;; Special cases where the upper bits are sign-or-zero extended of the lower bits
+;; so the calculation here is much simpler with just a `umulh` or `smulh`
+;; instead of the additions above as well.
+(rule (lower (has_type $I128 (imul (uextend x) (uextend y))))
+      (let (
+          (x Reg (put_in_reg_zext64 x))
+          (y Reg (put_in_reg_zext64 y))
+        )
+        (value_regs
+          (madd $I64 x y (zero_reg))
+          (umulh $I64 x y))))
+(rule (lower (has_type $I128 (imul (sextend x) (sextend y))))
+      (let (
+          (x Reg (put_in_reg_sext64 x))
+          (y Reg (put_in_reg_sext64 y))
+        )
+        (value_regs
+          (madd $I64 x y (zero_reg))
+          (smulh $I64 x y))))
 
 ;; Case for i8x16, i16x8, and i32x4.
 (rule -2 (lower (has_type (ty_vec128 ty @ (not_i64x2)) (imul x y)))
@@ -2252,18 +2284,6 @@
 (rule (lower (fence))
       (side_effect (aarch64_fence)))
 
-;;;; Rules for `IsNull` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(rule (lower (is_null x @ (value_type ty)))
-      (with_flags (cmp_imm (operand_size ty) x (u8_into_imm12 0))
-                  (materialize_bool_result (Cond.Eq))))
-
-;;;; Rules for `IsInvalid` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(rule (lower (is_invalid x @ (value_type ty)))
-      (with_flags (cmn_imm (operand_size ty) x (u8_into_imm12 1))
-                  (materialize_bool_result (Cond.Eq))))
-
 ;;;; Rules for `Debugtrap` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (rule (lower (debugtrap))
@@ -2327,14 +2347,17 @@
        (has_type $I64 (load flags address offset)))
       (aarch64_uload64 (amode $I64 address offset) flags))
 (rule (lower
-       (has_type $R64 (load flags address offset)))
-      (aarch64_uload64 (amode $I64 address offset) flags))
+       (has_type $F16 (load flags address offset)))
+      (aarch64_fpuload16 (amode $F16 address offset) flags))
 (rule (lower
        (has_type $F32 (load flags address offset)))
       (aarch64_fpuload32 (amode $F32 address offset) flags))
 (rule (lower
        (has_type $F64 (load flags address offset)))
       (aarch64_fpuload64 (amode $F64 address offset) flags))
+(rule (lower
+       (has_type $F128 (load flags address offset)))
+      (aarch64_fpuload128 (amode $F128 address offset) flags))
 (rule (lower
        (has_type $I128 (load flags address offset)))
       (aarch64_loadp64 (pair_amode address offset) flags))
@@ -2429,10 +2452,6 @@
        (store flags value @ (value_type $I64) address offset))
       (side_effect
        (aarch64_store64 (amode $I64 address offset) flags value)))
-(rule (lower
-       (store flags value @ (value_type $R64) address offset))
-      (side_effect
-       (aarch64_store64 (amode $I64 address offset) flags value)))
 
 (rule (lower
        (istore8 flags value address offset))
@@ -2448,6 +2467,10 @@
        (aarch64_store32 (amode $I32 address offset) flags value)))
 
 (rule (lower
+       (store flags value @ (value_type $F16) address offset))
+      (side_effect
+       (aarch64_fpustore16 (amode $F16 address offset) flags value)))
+(rule (lower
        (store flags value @ (value_type $F32) address offset))
       (side_effect
        (aarch64_fpustore32 (amode $F32 address offset) flags value)))
@@ -2455,6 +2478,10 @@
        (store flags value @ (value_type $F64) address offset))
       (side_effect
        (aarch64_fpustore64 (amode $F64 address offset) flags value)))
+(rule (lower
+       (store flags value @ (value_type $F128) address offset))
+      (side_effect
+       (aarch64_fpustore128 (amode $F128 address offset) flags value)))
 
 (rule (lower
        (store flags value @ (value_type $I128) address offset))
@@ -2491,8 +2518,16 @@
 ;;; Rules for `bitcast` ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ; SIMD&FP <=> SIMD&FP
-(rule 5 (lower (has_type (ty_float_or_vec _) (bitcast _ x @ (value_type (ty_float_or_vec _)))))
+(rule 7 (lower (has_type (ty_float_or_vec _) (bitcast _ x @ (value_type (ty_float_or_vec _)))))
       x)
+
+; I128 => SIMD&FP
+(rule 6 (lower (has_type (ty_float_or_vec _) (bitcast _ x @ (value_type $I128))))
+      (mov_to_vec (mov_to_fpu (value_regs_get x 0) (ScalarSize.Size64)) (value_regs_get x 1) 1 (VectorSize.Size64x2)))
+
+; SIMD&FP => I128
+(rule 5 (lower (has_type $I128 (bitcast _ x @ (value_type (ty_float_or_vec _)))))
+      (value_regs (mov_from_vec x 0 (ScalarSize.Size64)) (mov_from_vec x 1 (ScalarSize.Size64))))
 
 ; GPR => SIMD&FP
 (rule 4 (lower (has_type (ty_float_or_vec _) (bitcast _ x @ (value_type in_ty))))
@@ -2503,22 +2538,6 @@
 (rule 3 (lower (has_type out_ty (bitcast _ x @ (value_type (fits_in_64 (ty_float_or_vec _))))))
       (if (ty_int_ref_scalar_64 out_ty))
       (mov_from_vec x 0 (scalar_size out_ty)))
-
-;; Bitcasts between `r{32,64}` and `i{32,64}` need to be a copy to avoid
-;; conflicting regalloc constraints on reference type values that both need to
-;; be in some register but also some safepoint stack slot at the same time.
-(rule 2 (lower (has_type dst_ty (bitcast _ x @ (value_type src_ty))))
-      (if (ty_int_ref_scalar_64 src_ty))
-      (if (ty_int_ref_scalar_64 dst_ty))
-      (if-let $true (is_ref_type src_ty))
-      (if-let $false (is_ref_type dst_ty))
-      (copy_reg dst_ty x))
-(rule 2 (lower (has_type dst_ty (bitcast _ x @ (value_type src_ty))))
-      (if (ty_int_ref_scalar_64 src_ty))
-      (if (ty_int_ref_scalar_64 dst_ty))
-      (if-let $false (is_ref_type src_ty))
-      (if-let $true (is_ref_type dst_ty))
-      (copy_reg src_ty x))
 
 ; GPR <=> GPR
 (rule 1 (lower (has_type out_ty (bitcast _ x @ (value_type in_ty))))

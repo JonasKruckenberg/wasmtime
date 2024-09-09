@@ -84,7 +84,7 @@ fn handle_module(
 ) -> Result<()> {
     let buffer = read_to_string(&path)?;
     let test_file = parse_test(&buffer, ParseOptions::default())
-        .with_context(|| format!("failed to parse {}", name))?;
+        .with_context(|| format!("failed to parse {name}"))?;
 
     // If we have an isa from the command-line, use that. Otherwise if the
     // file contains a unique isa, use that.
@@ -134,7 +134,6 @@ fn handle_module(
                 options.print,
                 result.buffer.relocs(),
                 result.buffer.traps(),
-                result.buffer.stack_maps(),
             )?;
         }
     }

@@ -63,6 +63,7 @@ pub mod bindings {
         // terms of raw pointers.
         skip: ["run", "get-environment", "poll"],
         generate_all,
+        disable_custom_section_link_helpers: true,
     });
 
     #[cfg(feature = "reactor")]
@@ -80,6 +81,7 @@ pub mod bindings {
         // terms of raw pointers.
         skip: ["get-environment", "poll"],
         generate_all,
+        disable_custom_section_link_helpers: true,
     });
 
     #[cfg(feature = "proxy")]
@@ -89,19 +91,21 @@ pub mod bindings {
             package wasmtime:adapter;
 
             world adapter {
-                import wasi:clocks/wall-clock@0.2.0;
-                import wasi:clocks/monotonic-clock@0.2.0;
-                import wasi:random/random@0.2.0;
-                import wasi:cli/stdout@0.2.0;
-                import wasi:cli/stderr@0.2.0;
-                import wasi:cli/stdin@0.2.0;
+                import wasi:clocks/wall-clock@0.2.1;
+                import wasi:clocks/monotonic-clock@0.2.1;
+                import wasi:random/random@0.2.1;
+                import wasi:cli/stdout@0.2.1;
+                import wasi:cli/stderr@0.2.1;
+                import wasi:cli/stdin@0.2.1;
             }
         "#,
+        world: "wasmtime:adapter/adapter",
         std_feature,
         raw_strings,
         runtime_path: "crate::bindings::wit_bindgen_rt_shim",
         skip: ["poll"],
         generate_all,
+        disable_custom_section_link_helpers: true,
     });
 
     pub mod wit_bindgen_rt_shim {
@@ -111,7 +115,7 @@ pub mod bindings {
     }
 }
 
-#[export_name = "wasi:cli/run@0.2.0#run"]
+#[export_name = "wasi:cli/run@0.2.1#run"]
 #[cfg(feature = "command")]
 pub unsafe extern "C" fn run() -> u32 {
     #[link(wasm_import_module = "__main_module__")]
@@ -453,7 +457,7 @@ impl BumpAlloc {
 }
 
 #[cfg(not(feature = "proxy"))]
-#[link(wasm_import_module = "wasi:cli/environment@0.2.0")]
+#[link(wasm_import_module = "wasi:cli/environment@0.2.1")]
 extern "C" {
     #[link_name = "get-arguments"]
     fn wasi_cli_get_arguments(rval: *mut WasmStrList);
@@ -2152,7 +2156,7 @@ pub unsafe extern "C" fn poll_oneoff(
             });
         }
 
-        #[link(wasm_import_module = "wasi:io/poll@0.2.0")]
+        #[link(wasm_import_module = "wasi:io/poll@0.2.1")]
         #[allow(improper_ctypes)] // FIXME(bytecodealliance/wit-bindgen#684)
         extern "C" {
             #[link_name = "poll"]

@@ -3,7 +3,7 @@
 use anyhow::{bail, Result};
 use std::fs::File;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use tempfile::{NamedTempFile, TempDir};
 
@@ -21,13 +21,10 @@ pub fn run_wasmtime_for_output(args: &[&str], stdin: Option<&Path>) -> Result<Ou
 /// Get the Wasmtime CLI as a [Command].
 pub fn get_wasmtime_command() -> Result<Command> {
     // Figure out the Wasmtime binary from the current executable.
+    let bin = get_wasmtime_path()?;
     let runner = std::env::vars()
         .filter(|(k, _v)| k.starts_with("CARGO_TARGET") && k.ends_with("RUNNER"))
         .next();
-    let mut me = std::env::current_exe()?;
-    me.pop(); // chop off the file name
-    me.pop(); // chop off `deps`
-    me.push("wasmtime");
 
     // If we're running tests with a "runner" then we might be doing something
     // like cross-emulation, so spin up the emulator rather than the tests
@@ -38,10 +35,10 @@ pub fn get_wasmtime_command() -> Result<Command> {
         for arg in parts {
             cmd.arg(arg);
         }
-        cmd.arg(&me);
+        cmd.arg(&bin);
         cmd
     } else {
-        Command::new(&me)
+        Command::new(&bin)
     };
 
     // Ignore this if it's specified in the environment to allow tests to run in
@@ -49,6 +46,14 @@ pub fn get_wasmtime_command() -> Result<Command> {
     cmd.env_remove("WASMTIME_NEW_CLI");
 
     Ok(cmd)
+}
+
+fn get_wasmtime_path() -> Result<PathBuf> {
+    let mut path = std::env::current_exe()?;
+    path.pop(); // chop off the file name
+    path.pop(); // chop off `deps`
+    path.push("wasmtime");
+    Ok(path)
 }
 
 // Run the wasmtime CLI with the provided args and, if it succeeds, return
@@ -221,8 +226,7 @@ fn timeout_in_start() -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("wasm trap: interrupt"),
-        "bad stderr: {}",
-        stderr
+        "bad stderr: {stderr}"
     );
     Ok(())
 }
@@ -244,8 +248,7 @@ fn timeout_in_invoke() -> Result<()> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("wasm trap: interrupt"),
-        "bad stderr: {}",
-        stderr
+        "bad stderr: {stderr}"
     );
     Ok(())
 }
@@ -1347,7 +1350,7 @@ mod test_programs {
         )?;
         println!("{}", String::from_utf8_lossy(&output.stderr));
         let stdout = String::from_utf8_lossy(&output.stdout);
-        println!("{}", stdout);
+        println!("{stdout}");
         assert!(stdout.starts_with("Called _start\n"));
         assert!(stdout.ends_with("Done\n"));
         assert!(output.status.success());
@@ -1442,6 +1445,28 @@ mod test_programs {
     fn cli_sleep() -> Result<()> {
         run_wasmtime(&["run", CLI_SLEEP])?;
         run_wasmtime(&["run", CLI_SLEEP_COMPONENT])?;
+        Ok(())
+    }
+
+    #[test]
+    fn cli_sleep_forever() -> Result<()> {
+        for timeout in [
+            // Tests still pass when we race with going to sleep.
+            "-Wtimeout=1ns",
+            // Tests pass when we wait till the Wasm has (likely) gone to sleep.
+            "-Wtimeout=250ms",
+        ] {
+            let e = run_wasmtime(&["run", timeout, CLI_SLEEP_FOREVER]).unwrap_err();
+            let e = e.to_string();
+            println!("Got error: {e}");
+            assert!(e.contains("interrupt"));
+
+            let e = run_wasmtime(&["run", timeout, CLI_SLEEP_FOREVER_COMPONENT]).unwrap_err();
+            let e = e.to_string();
+            println!("Got error: {e}");
+            assert!(e.contains("interrupt"));
+        }
+
         Ok(())
     }
 
@@ -1814,6 +1839,111 @@ stderr [1] :: after empty
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn cli_serve_authority_and_scheme() -> Result<()> {
+        let server = WasmtimeServe::new(CLI_SERVE_AUTHORITY_AND_SCHEME_COMPONENT, |cmd| {
+            cmd.arg("-Scli");
+        })?;
+
+        let resp = server
+            .send_request(
+                hyper::Request::builder()
+                    .uri("/")
+                    .header("Host", "localhost")
+                    .body(String::new())
+                    .context("failed to make request")?,
+            )
+            .await?;
+        assert!(resp.status().is_success());
+
+        let resp = server
+            .send_request(
+                hyper::Request::builder()
+                    .method("CONNECT")
+                    .uri("http://localhost/")
+                    .body(String::new())
+                    .context("failed to make request")?,
+            )
+            .await?;
+        assert!(resp.status().is_success());
+
+        Ok(())
+    }
+
+    #[test]
+    fn cli_argv0() -> Result<()> {
+        run_wasmtime(&["run", "--argv0=a", CLI_ARGV0, "a"])?;
+        run_wasmtime(&["run", "--argv0=b", CLI_ARGV0_COMPONENT, "b"])?;
+        run_wasmtime(&["run", "--argv0=foo.wasm", CLI_ARGV0, "foo.wasm"])?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cli_serve_runtime_config() -> Result<()> {
+        let server = WasmtimeServe::new(CLI_SERVE_RUNTIME_CONFIG_COMPONENT, |cmd| {
+            cmd.arg("-Scli");
+            cmd.arg("-Sruntime-config");
+            cmd.arg("-Sruntime-config-var=hello=world");
+        })?;
+
+        let resp = server
+            .send_request(
+                hyper::Request::builder()
+                    .uri("http://localhost/")
+                    .body(String::new())
+                    .context("failed to make request")?,
+            )
+            .await?;
+
+        assert!(resp.status().is_success());
+        assert_eq!(resp.body(), "world");
+        Ok(())
+    }
+
+    #[test]
+    fn cli_runtime_config() -> Result<()> {
+        run_wasmtime(&[
+            "run",
+            "-Sruntime-config",
+            "-Sruntime-config-var=hello=world",
+            RUNTIME_CONFIG_GET_COMPONENT,
+        ])?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cli_serve_keyvalue() -> Result<()> {
+        let server = WasmtimeServe::new(CLI_SERVE_KEYVALUE_COMPONENT, |cmd| {
+            cmd.arg("-Scli");
+            cmd.arg("-Skeyvalue");
+            cmd.arg("-Skeyvalue-in-memory-data=hello=world");
+        })?;
+
+        let resp = server
+            .send_request(
+                hyper::Request::builder()
+                    .uri("http://localhost/")
+                    .body(String::new())
+                    .context("failed to make request")?,
+            )
+            .await?;
+
+        assert!(resp.status().is_success());
+        assert_eq!(resp.body(), "world");
+        Ok(())
+    }
+
+    #[test]
+    fn cli_keyvalue() -> Result<()> {
+        run_wasmtime(&[
+            "run",
+            "-Skeyvalue",
+            "-Skeyvalue-in-memory-data=atomics_key=5",
+            KEYVALUE_MAIN_COMPONENT,
+        ])?;
+        Ok(())
+    }
 }
 
 #[test]
@@ -1821,4 +1951,44 @@ fn settings_command() -> Result<()> {
     let output = run_wasmtime(&["settings"])?;
     assert!(output.contains("Cranelift settings for target"));
     Ok(())
+}
+
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn profile_with_vtune() -> Result<()> {
+    if !is_vtune_available() {
+        println!("> `vtune` is not available on the system path; skipping test");
+        return Ok(());
+    }
+
+    let mut bin = Command::new("vtune");
+    bin.args(&[
+        // Configure VTune...
+        "-verbose",
+        "-collect",
+        "hotspots",
+        "-user-data-dir",
+        &std::env::temp_dir().to_string_lossy(),
+        // ...then run Wasmtime with profiling enabled:
+        &get_wasmtime_path()?.to_string_lossy(),
+        "--profile=vtune",
+        "tests/all/cli_tests/simple.wat",
+    ]);
+
+    println!("> executing: {bin:?}");
+    let output = bin.output()?;
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    println!("> stdout:\n{stdout}");
+    assert!(stdout.contains("CPU Time"));
+    println!("> stderr:\n{stderr}");
+    assert!(!stderr.contains("Error"));
+    Ok(())
+}
+
+#[cfg(target_arch = "x86_64")]
+fn is_vtune_available() -> bool {
+    Command::new("vtune").arg("-version").output().is_ok()
 }

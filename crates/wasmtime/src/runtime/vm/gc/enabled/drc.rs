@@ -42,10 +42,12 @@
 //! <https://openresearch-repository.anu.edu.au/bitstream/1885/42030/2/hon-thesis.pdf>
 
 use super::free_list::FreeList;
+use super::{VMArrayRef, VMGcObjectDataMut, VMStructRef};
 use crate::prelude::*;
 use crate::runtime::vm::{
-    ExternRefHostDataId, ExternRefHostDataTable, GarbageCollection, GcHeap, GcHeapObject,
-    GcProgress, GcRootsIter, GcRuntime, Mmap, TypedGcRef, VMExternRef, VMGcHeader, VMGcRef,
+    ExternRefHostDataId, ExternRefHostDataTable, GarbageCollection, GcArrayLayout, GcHeap,
+    GcHeapObject, GcProgress, GcRootsIter, GcRuntime, GcStructLayout, Mmap, TypedGcRef,
+    VMExternRef, VMGcHeader, VMGcRef,
 };
 use core::ops::{Deref, DerefMut};
 use core::{
@@ -57,7 +59,7 @@ use core::{
     ptr::{self, NonNull},
 };
 use hashbrown::HashSet;
-use wasmtime_environ::VMGcKind;
+use wasmtime_environ::{VMGcKind, VMSharedTypeIndex, WasmStorageType, WasmValType};
 
 /// The deferred reference-counting (DRC) collector.
 ///
@@ -68,10 +70,90 @@ use wasmtime_environ::VMGcKind;
 /// compaction.
 pub struct DrcCollector;
 
+/// Align `offset` up to `bytes`, updating `max_align` if `align` is the
+/// new maximum alignment, and returning the aligned offset.
+fn align_up(offset: &mut u32, max_align: &mut u32, align: u32) -> u32 {
+    debug_assert!(max_align.is_power_of_two());
+    debug_assert!(align.is_power_of_two());
+    *offset = offset.checked_add(align - 1).unwrap() & !(align - 1);
+    *max_align = core::cmp::max(*max_align, align);
+    *offset
+}
+
+/// Define a new field of size and alignment `bytes`, updating the object's
+/// total `size` and `align` as necessary. The offset of the new field is
+/// returned.
+fn field(size: &mut u32, align: &mut u32, bytes: u32) -> u32 {
+    let offset = align_up(size, align, bytes);
+    *size += bytes;
+    offset
+}
+
+fn size_of_wasm_ty(ty: &WasmStorageType) -> u32 {
+    match ty {
+        WasmStorageType::I8 => 1,
+        WasmStorageType::I16 => 2,
+        WasmStorageType::Val(ty) => match ty {
+            WasmValType::I32 | WasmValType::F32 | WasmValType::Ref(_) => 4,
+            WasmValType::I64 | WasmValType::F64 => 8,
+            WasmValType::V128 => 16,
+        },
+    }
+}
+
 unsafe impl GcRuntime for DrcCollector {
     fn new_gc_heap(&self) -> Result<Box<dyn GcHeap>> {
         let heap = DrcHeap::new()?;
         Ok(Box::new(heap) as _)
+    }
+
+    fn array_layout(&self, ty: &wasmtime_environ::WasmArrayType) -> GcArrayLayout {
+        let mut size = VMDrcHeader::HEADER_SIZE;
+        let mut align = VMDrcHeader::HEADER_ALIGN;
+        let length_field_offset = field(&mut size, &mut align, 4);
+        debug_assert_eq!(
+            length_field_offset,
+            u32::try_from(core::mem::offset_of!(VMDrcArrayHeader, length)).unwrap(),
+        );
+        let elem_size = size_of_wasm_ty(&ty.0.element_type);
+        let elems_offset = align_up(&mut size, &mut align, elem_size);
+        GcArrayLayout {
+            size,
+            align,
+            length_field_offset,
+            elems_offset,
+            elem_size,
+        }
+    }
+
+    fn struct_layout(&self, ty: &wasmtime_environ::WasmStructType) -> GcStructLayout {
+        // Process each field, aligning it to its natural alignment.
+        //
+        // We don't try and do any fancy field reordering to minimize padding
+        // (yet?) because (a) the toolchain probably already did that and (b)
+        // we're just doing the simple thing first. We can come back and improve
+        // things here if we find that (a) isn't actually holding true in
+        // practice.
+        let mut size = VMDrcHeader::HEADER_SIZE;
+        let mut align = VMDrcHeader::HEADER_ALIGN;
+        let fields = ty
+            .fields
+            .iter()
+            .map(|f| {
+                let field_size = size_of_wasm_ty(&f.element_type);
+                field(&mut size, &mut align, field_size)
+            })
+            .collect();
+
+        // Ensure that the final size is a multiple of the alignment, for
+        // simplicity.
+        align_up(&mut size, &mut 16, align);
+
+        GcStructLayout {
+            size,
+            align,
+            fields,
+        }
     }
 }
 
@@ -113,6 +195,37 @@ impl DrcHeap {
         let ptr = self.heap.as_mut_ptr();
         let len = self.heap.len();
         unsafe { core::slice::from_raw_parts_mut(ptr, len) }
+    }
+
+    /// Allocate a blank GC object.
+    ///
+    /// The given layout must include the `VMDrcHeader`.
+    ///
+    /// The resulting GC reference has its header initialized, but everything
+    /// else uninitialized.
+    fn alloc(&mut self, mut header: VMGcHeader, layout: Layout) -> Result<Option<VMGcRef>> {
+        let gc_ref = match self.free_list.alloc(layout)? {
+            None => return Ok(None),
+            Some(index) => VMGcRef::from_heap_index(index).unwrap(),
+        };
+
+        debug_assert_eq!(header.reserved_u26(), 0);
+        header.set_reserved_u26(u32::try_from(layout.size()).unwrap());
+
+        *self.index_mut(drc_ref(&gc_ref)) = VMDrcHeader {
+            header,
+            ref_count: UnsafeCell::new(1),
+        };
+        log::trace!("increment {gc_ref:#p} ref count -> 1");
+        Ok(Some(gc_ref))
+    }
+
+    fn dealloc(&mut self, gc_ref: VMGcRef) {
+        let drc_ref = drc_ref(&gc_ref);
+        let size = self.index(drc_ref).object_size();
+        let layout = FreeList::layout(size);
+        self.free_list
+            .dealloc(gc_ref.as_heap_index().unwrap(), layout);
     }
 
     /// Index into this heap and get a shared reference to the `T` that `gc_ref`
@@ -218,18 +331,12 @@ impl DrcHeap {
                 host_data_table.dealloc(host_data_id);
             }
 
-            // Deallocate this GC object.
-            let layout = self.layout(gc_ref);
-            self.free_list
-                .dealloc(gc_ref.as_heap_index().unwrap(), layout);
-        }
-    }
+            // TODO: `dec_ref_and_maybe_dealloc` each `VMGcRef` inside this
+            // object.
 
-    /// Get the layout of the GC object referenced by `gc_ref`.
-    fn layout(&self, gc_ref: &VMGcRef) -> Layout {
-        assert!(VMGcRef::ONLY_EXTERN_REF_AND_I31);
-        assert!(!gc_ref.is_i31());
-        Layout::new::<VMDrcExternRef>()
+            // Deallocate this GC object.
+            self.dealloc(gc_ref.unchecked_copy());
+        }
     }
 
     fn trace(&mut self, roots: &mut GcRootsIter<'_>) {
@@ -268,7 +375,7 @@ impl DrcHeap {
                 gc_ref.is_i31() || activations_table_set.contains(&gc_ref),
                 "every on-stack gc_ref inside a Wasm frame should \
                  have an entry in the VMGcRefActivationsTable; \
-                 {gc_ref:?} is not in the table",
+                 {gc_ref:#p} is not in the table",
             );
             if gc_ref.is_i31() {
                 continue;
@@ -300,10 +407,8 @@ impl DrcHeap {
             .iter_mut()
             .take(num_filled)
             .map(|slot| {
-                let r64 = *slot.get_mut();
-                VMGcRef::from_r64(r64)
-                    .expect("valid r64")
-                    .expect("non-null")
+                let raw = *slot.get_mut();
+                VMGcRef::from_raw_u32(raw).expect("non-null")
             })
     }
 
@@ -331,10 +436,8 @@ impl DrcHeap {
         // borrows.
         let mut alloc = mem::take(&mut self.activations_table.alloc);
         for slot in alloc.chunk.iter_mut().take(num_filled) {
-            let r64 = mem::take(slot.get_mut());
-            let gc_ref = VMGcRef::from_r64(r64)
-                .expect("valid r64")
-                .expect("non-null");
+            let raw = mem::take(slot.get_mut());
+            let gc_ref = VMGcRef::from_raw_u32(raw).expect("non-null");
             f(self, gc_ref);
             *slot.get_mut() = 0;
         }
@@ -458,6 +561,42 @@ unsafe impl GcHeapObject for VMDrcHeader {
     }
 }
 
+const _: () = {
+    assert!((VMDrcHeader::HEADER_SIZE as usize) == core::mem::size_of::<VMDrcHeader>());
+    assert!((VMDrcHeader::HEADER_ALIGN as usize) == core::mem::align_of::<VMDrcHeader>());
+};
+
+impl VMDrcHeader {
+    /// The size of `VMDrcHeader` on *all* architectures.
+    const HEADER_SIZE: u32 = VMGcHeader::HEADER_SIZE + 8;
+
+    /// The alignment of `VMDrcHeader` on *all* architectures.
+    const HEADER_ALIGN: u32 = 8;
+
+    /// The size of this header's object.
+    ///
+    /// This is stored in the inner `VMGcHeader`'s reserved bits.
+    fn object_size(&self) -> usize {
+        let size = self.header.reserved_u26();
+        usize::try_from(size).unwrap()
+    }
+}
+
+/// The common header for all arrays in the DRC collector.
+#[repr(C)]
+struct VMDrcArrayHeader {
+    header: VMDrcHeader,
+    length: u32,
+}
+
+unsafe impl GcHeapObject for VMDrcArrayHeader {
+    #[inline]
+    fn is(header: &VMGcHeader) -> bool {
+        header.kind() == VMGcKind::ArrayRef
+    }
+}
+
+/// The representation of an `externref` in the DRC collector.
 #[repr(C)]
 struct VMDrcExternRef {
     header: VMDrcHeader,
@@ -528,24 +667,84 @@ unsafe impl GcHeap for DrcHeap {
     }
 
     fn alloc_externref(&mut self, host_data: ExternRefHostDataId) -> Result<Option<VMExternRef>> {
-        let gc_ref = match self.free_list.alloc(Layout::new::<VMDrcExternRef>())? {
+        let gc_ref = match self.alloc(VMGcHeader::externref(), Layout::new::<VMDrcExternRef>())? {
             None => return Ok(None),
-            Some(index) => VMGcRef::from_heap_index(index).unwrap(),
+            Some(gc_ref) => gc_ref,
         };
-        *self.index_mut(gc_ref.as_typed_unchecked()) = VMDrcExternRef {
-            header: VMDrcHeader {
-                header: VMGcHeader::externref(),
-                ref_count: UnsafeCell::new(1),
-            },
-            host_data,
-        };
-        log::trace!("increment {gc_ref:#p} ref count -> 1");
+        self.index_mut::<VMDrcExternRef>(gc_ref.as_typed_unchecked())
+            .host_data = host_data;
         Ok(Some(gc_ref.into_externref_unchecked()))
     }
 
     fn externref_host_data(&self, externref: &VMExternRef) -> ExternRefHostDataId {
         let typed_ref = externref_to_drc(externref);
         self.index(typed_ref).host_data
+    }
+
+    fn alloc_uninit_struct(
+        &mut self,
+        ty: VMSharedTypeIndex,
+        layout: &GcStructLayout,
+    ) -> Result<Option<VMStructRef>> {
+        let layout = Layout::from_size_align(
+            usize::try_from(layout.size).unwrap(),
+            usize::try_from(layout.align).unwrap(),
+        )
+        .unwrap();
+        let gc_ref = match self.alloc(
+            VMGcHeader::from_kind_and_index(VMGcKind::StructRef, ty),
+            layout,
+        )? {
+            None => return Ok(None),
+            Some(gc_ref) => gc_ref,
+        };
+        Ok(Some(gc_ref.into_structref_unchecked()))
+    }
+
+    fn dealloc_uninit_struct(&mut self, structref: VMStructRef) {
+        self.dealloc(structref.into());
+    }
+
+    fn gc_object_data(&mut self, gc_ref: &VMGcRef) -> VMGcObjectDataMut<'_> {
+        let start = gc_ref.as_heap_index().unwrap().get();
+        let start = usize::try_from(start).unwrap();
+        let size = self
+            .index::<VMDrcHeader>(gc_ref.as_typed_unchecked())
+            .object_size();
+        let end = start + size;
+        let data = &mut self.heap_slice_mut()[start..end];
+        VMGcObjectDataMut::new(data)
+    }
+
+    fn alloc_uninit_array(
+        &mut self,
+        ty: VMSharedTypeIndex,
+        length: u32,
+        layout: &GcArrayLayout,
+    ) -> Result<Option<VMArrayRef>> {
+        let size = usize::try_from(layout.size_for_len(length)).unwrap();
+        let align = usize::try_from(layout.align).unwrap();
+        let layout = Layout::from_size_align(size, align).unwrap();
+        let gc_ref = match self.alloc(
+            VMGcHeader::from_kind_and_index(VMGcKind::ArrayRef, ty),
+            layout,
+        )? {
+            None => return Ok(None),
+            Some(gc_ref) => gc_ref,
+        };
+        self.index_mut::<VMDrcArrayHeader>(gc_ref.as_typed_unchecked())
+            .length = length;
+        Ok(Some(gc_ref.into_arrayref_unchecked()))
+    }
+
+    fn dealloc_uninit_array(&mut self, arrayref: VMArrayRef) {
+        self.dealloc(arrayref.into())
+    }
+
+    fn array_len(&self, arrayref: &VMArrayRef) -> u32 {
+        debug_assert!(arrayref.as_gc_ref().is_typed::<VMDrcArrayHeader>(self));
+        self.index::<VMDrcArrayHeader>(arrayref.as_gc_ref().as_typed_unchecked())
+            .length
     }
 
     fn gc<'a>(
@@ -628,7 +827,7 @@ impl<'a> GarbageCollection<'a> for DrcCollection<'a> {
 /// The type of `VMGcRefActivationsTable`'s bump region's elements.
 ///
 /// These are written to by Wasm.
-type TableElem = UnsafeCell<u64>;
+type TableElem = UnsafeCell<u32>;
 
 /// A table that over-approximizes the set of `VMGcRef`s that any Wasm
 /// activation on this thread is currently using.
@@ -794,7 +993,7 @@ impl VMGcRefActivationsTable {
                 0,
                 "slots >= the `next` bump finger are always `None`"
             );
-            ptr::write(next.as_ptr(), UnsafeCell::new(gc_ref.into_r64()));
+            ptr::write(next.as_ptr(), UnsafeCell::new(gc_ref.as_raw_u32()));
 
             let next = NonNull::new_unchecked(next.as_ptr().add(1));
             debug_assert!(next <= self.alloc.end);
@@ -833,7 +1032,7 @@ impl VMGcRefActivationsTable {
         // filled-in slots.
         let num_filled = self.num_filled_in_bump_chunk();
         for slot in self.alloc.chunk.iter().take(num_filled) {
-            if let Some(elem) = VMGcRef::from_r64(unsafe { *slot.get() }).expect("valid r64") {
+            if let Some(elem) = VMGcRef::from_raw_u32(unsafe { *slot.get() }) {
                 f(&elem);
             }
         }
