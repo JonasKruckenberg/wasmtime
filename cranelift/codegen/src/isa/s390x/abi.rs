@@ -145,9 +145,9 @@ use crate::machinst::*;
 use crate::settings;
 use crate::{CodegenError, CodegenResult};
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicBool, Ordering};
 use regalloc2::{MachineEnv, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use std::sync::OnceLock;
 
 // We use a generic implementation that factors out ABI commonalities.
 
@@ -829,16 +829,23 @@ impl ABIMachineSpec for S390xMachineDeps {
     }
 
     fn get_machine_env(_flags: &settings::Flags, call_conv: isa::CallConv) -> &MachineEnv {
+        static INIT: AtomicBool = AtomicBool::new(false);
+        static mut STATE: Option<MachineEnv> = None;
+
         match call_conv {
             isa::CallConv::Tail => {
-                static TAIL_MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
-                TAIL_MACHINE_ENV.get_or_init(tail_create_machine_env)
+                if !INIT.swap(true, Ordering::SeqCst) {
+                    unsafe { STATE = Some(tail_create_machine_env()) }
+                }
             }
             _ => {
-                static SYSV_MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
-                SYSV_MACHINE_ENV.get_or_init(sysv_create_machine_env)
+                if !INIT.swap(true, Ordering::SeqCst) {
+                    unsafe { STATE = Some(sysv_create_machine_env()) }
+                }
             }
         }
+
+        unsafe { &STATE.as_ref().unwrap_unchecked() }
     }
 
     fn get_regs_clobbered_by_call(call_conv_of_callee: isa::CallConv) -> PRegSet {

@@ -18,10 +18,9 @@ use crate::CodegenError;
 use crate::CodegenResult;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicBool, Ordering};
 use regalloc2::{MachineEnv, PReg, PRegSet};
-
 use smallvec::{smallvec, SmallVec};
-use std::sync::OnceLock;
 
 /// Support for the Riscv64 ABI from the callee side (within a function body).
 pub(crate) type Riscv64Callee = Callee<Riscv64MachineDeps>;
@@ -642,8 +641,14 @@ impl ABIMachineSpec for Riscv64MachineDeps {
     }
 
     fn get_machine_env(_flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
-        static MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
-        MACHINE_ENV.get_or_init(create_reg_enviroment)
+        static INIT: AtomicBool = AtomicBool::new(false);
+        static mut STATE: Option<MachineEnv> = None;
+
+        if !INIT.swap(true, Ordering::SeqCst) {
+            unsafe { STATE = Some(create_reg_enviroment()) }
+        }
+
+        unsafe { &STATE.as_ref().unwrap_unchecked() }
     }
 
     fn get_regs_clobbered_by_call(_call_conv_of_callee: isa::CallConv) -> PRegSet {

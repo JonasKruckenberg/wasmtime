@@ -10,10 +10,10 @@ use crate::settings;
 use crate::{CodegenError, CodegenResult};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicBool, Ordering};
 use args::*;
 use regalloc2::{MachineEnv, PReg, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use std::sync::OnceLock;
 
 /// This is the limit for the size of argument and return-value areas on the
 /// stack. We place a reasonable limit here to avoid integer overflow issues
@@ -906,13 +906,14 @@ impl ABIMachineSpec for X64ABIMachineSpec {
     }
 
     fn get_machine_env(flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
-        if flags.enable_pinned_reg() {
-            static MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
-            MACHINE_ENV.get_or_init(|| create_reg_env_systemv(true))
-        } else {
-            static MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
-            MACHINE_ENV.get_or_init(|| create_reg_env_systemv(false))
+        static INIT: AtomicBool = AtomicBool::new(false);
+        static mut STATE: Option<MachineEnv> = None;
+
+        if !INIT.swap(true, Ordering::SeqCst) {
+            unsafe { STATE = Some(create_reg_env_systemv(flags.enable_pinned_reg())) }
         }
+
+        unsafe { &STATE.as_ref().unwrap_unchecked() }
     }
 
     fn get_regs_clobbered_by_call(call_conv_of_callee: isa::CallConv) -> PRegSet {
