@@ -2,9 +2,9 @@
 //!
 //! This modules provides facilities for timing the execution of individual compilation passes.
 
-use core::fmt;
-use core::any::Any;
 use alloc::boxed::Box;
+use core::any::Any;
+use core::fmt;
 
 // Each pass that can be timed is predefined with the `define_passes!` macro. Each pass has a
 // snake_case name and a plain text description used when printing out the timing report.
@@ -117,14 +117,14 @@ pub use enabled::*;
 
 #[cfg(feature = "timing")]
 mod enabled {
-    use std::fmt;
     use super::{DefaultProfiler, Pass, Profiler, DESCRIPTIONS, NUM_PASSES};
     use std::any::Any;
     use std::boxed::Box;
     use std::cell::{Cell, RefCell};
+    use std::fmt;
     use std::mem;
-    use std::time::Instant;
     use std::time::Duration;
+    use std::time::Instant;
 
     // Information about passes in a single thread.
     thread_local! {
@@ -224,7 +224,6 @@ mod enabled {
         PASS_TIME.with(|rc| mem::take(&mut *rc.borrow_mut()))
     }
 
-
     // Information about passes in a single thread.
     thread_local! {
         static CURRENT_PASS: Cell<Pass> = const { Cell::new(Pass::None) };
@@ -279,8 +278,8 @@ mod enabled {
 #[cfg(not(feature = "timing"))]
 mod disabled {
     use super::{DefaultProfiler, Pass, Profiler};
-    use core::any::Any;
     use alloc::boxed::Box;
+    use core::any::Any;
 
     impl Profiler for DefaultProfiler {
         fn start_pass(&self, _pass: Pass) -> Box<dyn Any> {

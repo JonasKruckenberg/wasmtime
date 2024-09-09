@@ -4,8 +4,8 @@
 //! container that has a concept of scopes that can be entered and exited, such that
 //! values inserted while inside a scope aren't visible outside the scope.
 
-use core::hash::Hash;
 use crate::fx::FxHashMap;
+use core::hash::Hash;
 use smallvec::{smallvec, SmallVec};
 
 struct Val<V> {
@@ -19,7 +19,12 @@ pub struct OccupiedEntry<'a, K: 'a, V: 'a> {
     #[cfg(feature = "std")]
     entry: crate::hash_map::OccupiedEntry<'a, K, Val<V>>,
     #[cfg(not(feature = "std"))]
-    entry: crate::hash_map::OccupiedEntry<'a, K, Val<V>, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>,
+    entry: crate::hash_map::OccupiedEntry<
+        'a,
+        K,
+        Val<V>,
+        core::hash::BuildHasherDefault<rustc_hash::FxHasher>,
+    >,
 }
 
 impl<'a, K, V> OccupiedEntry<'a, K, V> {
@@ -42,14 +47,31 @@ enum InsertLoc<'a, K: 'a, V: 'a> {
     #[cfg(feature = "std")]
     Vacant(crate::hash_map::VacantEntry<'a, K, Val<V>>),
     #[cfg(not(feature = "std"))]
-    Vacant(crate::hash_map::VacantEntry<'a, K, Val<V>, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>),
+    Vacant(
+        crate::hash_map::VacantEntry<
+            'a,
+            K,
+            Val<V>,
+            core::hash::BuildHasherDefault<rustc_hash::FxHasher>,
+        >,
+    ),
     #[cfg(feature = "std")]
     Occupied(crate::hash_map::OccupiedEntry<'a, K, Val<V>>),
     #[cfg(not(feature = "std"))]
-    Occupied(crate::hash_map::OccupiedEntry<'a, K, Val<V>, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>),
+    Occupied(
+        crate::hash_map::OccupiedEntry<
+            'a,
+            K,
+            Val<V>,
+            core::hash::BuildHasherDefault<rustc_hash::FxHasher>,
+        >,
+    ),
 }
 
-impl<'a, K, V> VacantEntry<'a, K, V> where K: Hash {
+impl<'a, K, V> VacantEntry<'a, K, V>
+where
+    K: Hash,
+{
     /// Sets the value of the entry with the `VacantEntry`'s key.
     pub fn insert(self, value: V) {
         let val = Val {

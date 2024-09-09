@@ -70,6 +70,7 @@ mod constant_hash;
 mod context;
 mod ctxhash;
 mod egraph;
+mod fx;
 mod inst_predicates;
 mod isle_prelude;
 mod iterators;
@@ -83,7 +84,6 @@ mod scoped_hash_map;
 mod unionfind;
 mod unreachable_code;
 mod value_label;
-mod fx;
 
 #[cfg(feature = "souper-harvest")]
 mod souper_harvest;

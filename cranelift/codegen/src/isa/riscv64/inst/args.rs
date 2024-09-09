@@ -348,7 +348,7 @@ impl FliConstant {
             (_, f) if f == 2.0f64.powi(-8) => Self::new(4),
             #[cfg(feature = "std")]
             (_, f) if f == 2.0f64.powi(-7) => Self::new(5),
-            
+
             #[cfg(feature = "core")]
             (_, f) if f == libm::pow(2.0, -16.0) => Self::new(2),
             #[cfg(feature = "core")]
@@ -357,7 +357,7 @@ impl FliConstant {
             (_, f) if f == libm::pow(2.0, -8.0) => Self::new(4),
             #[cfg(feature = "core")]
             (_, f) if f == libm::pow(2.0, -7.0) => Self::new(5),
-            
+
             (_, f) if f == 0.0625 => Self::new(6),
             (_, f) if f == 0.125 => Self::new(7),
             (_, f) if f == 0.25 => Self::new(8),

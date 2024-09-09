@@ -99,19 +99,19 @@
 //! ABI. See each platform's `abi.rs` implementation for details.
 
 use crate::entity::SecondaryMap;
+use crate::fx::FxHashMap;
 use crate::ir::types::*;
 use crate::ir::{ArgumentExtension, ArgumentPurpose, Signature};
 use crate::isa::TargetIsa;
 use crate::settings::ProbestackStrategy;
 use crate::CodegenError;
+use crate::HashMap;
 use crate::{ir, isa};
 use crate::{machinst::*, trace};
-use regalloc2::{MachineEnv, PReg, PRegSet};
-use crate::fx::FxHashMap;
-use smallvec::smallvec;
-use crate::HashMap;
 use core::marker::PhantomData;
 use core::mem;
+use regalloc2::{MachineEnv, PReg, PRegSet};
+use smallvec::smallvec;
 
 /// A small vector of instructions (with some reasonable size); appropriate for
 /// a small fixed sequence implementing one operation.

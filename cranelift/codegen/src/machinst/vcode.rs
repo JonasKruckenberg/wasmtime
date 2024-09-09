@@ -17,6 +17,7 @@
 //! See the main module comment in `mod.rs` for more details on the VCode-based
 //! backend pipeline.
 
+use crate::fx::FxHashMap;
 use crate::ir::pcc::*;
 use crate::ir::{self, types, Constant, ConstantData, ValueLabel};
 use crate::machinst::*;
@@ -29,13 +30,12 @@ use regalloc2::{
     Edit, Function as RegallocFunction, InstOrEdit, InstRange, MachineEnv, Operand,
     OperandConstraint, OperandKind, PRegSet, RegClass,
 };
-use crate::fx::FxHashMap;
 
-use core::mem::take;
-use cranelift_entity::{entity_impl, Keys};
 use crate::hash_map::Entry;
 use crate::HashMap;
 use core::fmt;
+use core::mem::take;
+use cranelift_entity::{entity_impl, Keys};
 
 /// Index referring to an instruction in VCode.
 pub type InsnIndex = regalloc2::Inst;
@@ -1158,13 +1158,13 @@ impl<I: VCodeInst> VCode<I> {
                 let slot = alloc.as_stack().unwrap();
                 let slot_offset = self.abi.get_spillslot_offset(slot);
                 let slot_base_to_caller_sp_offset = self.abi.slot_base_to_caller_sp_offset();
-                
+
                 #[cfg(feature = "unwind")]
                 let caller_sp_to_cfa_offset =
                     crate::isa::unwind::systemv::caller_sp_to_cfa_offset();
                 #[cfg(not(feature = "unwind"))]
                 let caller_sp_to_cfa_offset = 0; // TODO is this right?
-                
+
                 // NOTE: this is a negative offset because it's relative to the caller's SP
                 let cfa_to_sp_offset =
                     -((slot_base_to_caller_sp_offset + caller_sp_to_cfa_offset) as i64);

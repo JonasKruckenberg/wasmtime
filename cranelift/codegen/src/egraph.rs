@@ -5,6 +5,7 @@ use crate::ctxhash::{CtxEq, CtxHash, CtxHashMap};
 use crate::cursor::{Cursor, CursorPosition, FuncCursor};
 use crate::dominator_tree::{DominatorTree, DominatorTreePreorder};
 use crate::egraph::elaborate::Elaborator;
+use crate::fx::FxHashSet;
 use crate::inst_predicates::{is_mergeable_for_egraph, is_pure_for_egraph};
 use crate::ir::pcc::Fact;
 use crate::ir::{
@@ -18,12 +19,11 @@ use crate::settings::Flags;
 use crate::trace;
 use crate::unionfind::UnionFind;
 use core::cmp::Ordering;
+use core::hash::Hasher;
 use cranelift_control::ControlPlane;
 use cranelift_entity::packed_option::ReservedValue;
 use cranelift_entity::SecondaryMap;
-use crate::fx::FxHashSet;
 use smallvec::SmallVec;
-use core::hash::Hasher;
 
 mod cost;
 mod elaborate;

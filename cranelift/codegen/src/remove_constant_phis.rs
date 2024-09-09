@@ -1,13 +1,13 @@
 //! A Constant-Phi-Node removal pass.
 
 use crate::dominator_tree::DominatorTree;
+use crate::fx::{FxHashMap, FxHashSet};
 use crate::ir;
 use crate::ir::Function;
 use crate::ir::{Block, BlockCall, Inst, Value};
 use crate::timing;
 use bumpalo::Bump;
 use cranelift_entity::SecondaryMap;
-use crate::fx::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 // A note on notation.  For the sake of clarity, this file uses the phrase
@@ -228,8 +228,7 @@ pub fn do_remove_constant_phis(func: &mut Function, domtree: &mut DominatorTree)
     // Phase 1 of 3: for each block, make a summary containing all relevant
     // info.  The solver will iterate over the summaries, rather than having
     // to inspect each instruction in each block.
-    let bump =
-        Bump::with_capacity(domtree.cfg_postorder().len() * 4 * size_of::<Value>());
+    let bump = Bump::with_capacity(domtree.cfg_postorder().len() * 4 * size_of::<Value>());
     let mut summaries =
         SecondaryMap::<Block, BlockSummary>::with_capacity(domtree.cfg_postorder().len());
 

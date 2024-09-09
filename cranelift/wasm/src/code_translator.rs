@@ -3656,7 +3656,7 @@ fn bitcast_arguments<'a>(
         .filter(|(i, _)| param_predicate(*i))
         .map(|(_, param)| param.value_type);
 
-    // like Iterator::zip but panics if one iterator ends before the other. 
+    // like Iterator::zip but panics if one iterator ends before the other.
     // The `param_predicate` is required to select exactly as many
     // elements of `params` as there are elements in `arguments`.
     let pairs = ZipEq {
@@ -3702,7 +3702,6 @@ impl<A, IA: Iterator<Item = A>, B, IB: Iterator<Item = B>> Iterator for ZipEq<A,
         }
     }
 }
-
 
 /// A helper for bitcasting a sequence of return values for the function currently being built. If
 /// a value is a vector type that does not match its expected type, this will modify the value in
