@@ -210,6 +210,7 @@ impl fmt::Display for UseVariableError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for UseVariableError {}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -218,6 +219,7 @@ pub enum DeclareVariableError {
     DeclaredMultipleTimes(Variable),
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for DeclareVariableError {}
 
 impl fmt::Display for DeclareVariableError {
@@ -1097,8 +1099,8 @@ impl<'a> FunctionBuilder<'a> {
         left: Value,
         right: Value,
         size: u64,
-        left_align: std::num::NonZeroU8,
-        right_align: std::num::NonZeroU8,
+        left_align: core::num::NonZeroU8,
+        right_align: core::num::NonZeroU8,
         flags: MemFlags,
     ) -> Value {
         use IntCC::*;
