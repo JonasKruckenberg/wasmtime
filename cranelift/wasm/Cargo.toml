@@ -22,7 +22,6 @@ cranelift-entity = { workspace = true }
 cranelift-frontend = { workspace = true }
 wasmtime-types = { workspace = true }
 hashbrown = { workspace = true, optional = true }
-itertools = { version = "0.12.0", default-features = false }
 log = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_derive = { workspace = true, optional = true }

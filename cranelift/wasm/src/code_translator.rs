@@ -90,7 +90,6 @@ use cranelift_codegen::ir::{
 };
 use cranelift_codegen::packed_option::ReservedValue;
 use cranelift_frontend::{FunctionBuilder, Variable};
-use itertools::Itertools;
 use smallvec::SmallVec;
 use std::vec::Vec;
 use wasmparser::{FuncValidator, MemArg, Operator, WasmModuleResources};
@@ -3657,10 +3656,13 @@ fn bitcast_arguments<'a>(
         .filter(|(i, _)| param_predicate(*i))
         .map(|(_, param)| param.value_type);
 
-    // zip_eq, from the itertools::Itertools trait, is like Iterator::zip but panics if one
-    // iterator ends before the other. The `param_predicate` is required to select exactly as many
+    // like Iterator::zip but panics if one iterator ends before the other. 
+    // The `param_predicate` is required to select exactly as many
     // elements of `params` as there are elements in `arguments`.
-    let pairs = filtered_param_types.zip_eq(arguments.iter_mut());
+    let pairs = ZipEq {
+        a: filtered_param_types,
+        b: arguments.iter_mut(),
+    };
 
     // The arguments which need to be bitcasted are those which have some vector type but the type
     // expected by the parameter is not the same vector type as that of the provided argument.
@@ -3683,6 +3685,24 @@ fn bitcast_arguments<'a>(
         })
         .collect()
 }
+
+struct ZipEq<A, IA: Iterator<Item = A>, B, IB: Iterator<Item = B>> {
+    a: IA,
+    b: IB,
+}
+
+impl<A, IA: Iterator<Item = A>, B, IB: Iterator<Item = B>> Iterator for ZipEq<A, IA, B, IB> {
+    type Item = (A, B);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match (self.a.next(), self.b.next()) {
+            (Some(a), Some(b)) => Some((a, b)),
+            (None, None) => None,
+            _ => panic!("iterators are different in length"),
+        }
+    }
+}
+
 
 /// A helper for bitcasting a sequence of return values for the function currently being built. If
 /// a value is a vector type that does not match its expected type, this will modify the value in
