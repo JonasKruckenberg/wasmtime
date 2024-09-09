@@ -309,7 +309,7 @@ impl InstructionData {
         match self {
             Self::Jump {
                 ref destination, ..
-            } => std::slice::from_ref(destination),
+            } => core::slice::from_ref(destination),
             Self::Brif { blocks, .. } => blocks.as_slice(),
             Self::BranchTable { table, .. } => jump_tables.get(*table).unwrap().all_branches(),
             _ => {
@@ -330,7 +330,7 @@ impl InstructionData {
             Self::Jump {
                 ref mut destination,
                 ..
-            } => std::slice::from_mut(destination),
+            } => core::slice::from_mut(destination),
             Self::Brif { blocks, .. } => blocks.as_mut_slice(),
             Self::BranchTable { table, .. } => {
                 jump_tables.get_mut(*table).unwrap().all_branches_mut()

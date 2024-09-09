@@ -183,11 +183,11 @@ use crate::{timing, VCodeConstantData};
 use cranelift_control::ControlPlane;
 use cranelift_entity::{entity_impl, PrimaryMap};
 use smallvec::SmallVec;
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
-use std::mem;
-use std::string::String;
-use std::vec::Vec;
+use core::cmp::Ordering;
+use alloc::collections::BinaryHeap;
+use core::mem;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
@@ -422,7 +422,7 @@ pub struct OpenPatchRegion(usize);
 /// the [`PatchRegion::patch`] function can be used to get a mutable buffer to the instruction
 /// bytes, and the constants uses can be updated directly.
 pub struct PatchRegion {
-    range: std::ops::Range<usize>,
+    range: core::ops::Range<usize>,
 }
 
 impl PatchRegion {
@@ -1694,7 +1694,7 @@ impl<T: CompilePhase> MachBufferFinalized<T> {
     /// Return the code in this mach buffer as a hex string for testing purposes.
     pub fn stringify_code_bytes(&self) -> String {
         // This is pretty lame, but whatever ..
-        use std::fmt::Write;
+        use core::fmt::Write;
         let mut s = String::with_capacity(self.data.len() * 2);
         for b in &self.data {
             write!(&mut s, "{b:02X}").unwrap();

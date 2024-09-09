@@ -109,9 +109,9 @@ use crate::{machinst::*, trace};
 use regalloc2::{MachineEnv, PReg, PRegSet};
 use crate::fx::FxHashMap;
 use smallvec::smallvec;
-use std::marker::PhantomData;
-use std::mem;
 use crate::HashMap;
+use core::marker::PhantomData;
+use core::mem;
 
 /// A small vector of instructions (with some reasonable size); appropriate for
 /// a small fixed sequence implementing one operation.
@@ -834,10 +834,10 @@ impl SigSet {
         sig: &ir::Signature,
         flags: &settings::Flags,
     ) -> CodegenResult<SigData> {
-        use std::borrow::Cow;
+        use alloc::borrow::Cow;
 
         let returns = if let Some(sret) = missing_struct_return(sig) {
-            Cow::from_iter(std::iter::once(&sret).chain(&sig.returns).copied())
+            Cow::from_iter(core::iter::once(&sret).chain(&sig.returns).copied())
         } else {
             Cow::from(sig.returns.as_slice())
         };
@@ -948,7 +948,7 @@ impl SigSet {
 
 // NB: we do _not_ implement `IndexMut` because these signatures are
 // deduplicated and shared!
-impl std::ops::Index<Sig> for SigSet {
+impl core::ops::Index<Sig> for SigSet {
     type Output = SigData;
 
     fn index(&self, sig: Sig) -> &Self::Output {
@@ -1143,7 +1143,7 @@ impl<M: ABIMachineSpec> Callee<M> {
             // Always at least machine-word-align slots, but also
             // satisfy the user's requested alignment.
             debug_assert!(data.align_shift < 32);
-            let align = std::cmp::max(M::word_bytes(), 1u32 << data.align_shift);
+            let align = core::cmp::max(M::word_bytes(), 1u32 << data.align_shift);
             let mask = align - 1;
             sized_stack_offset = checked_round_up(sized_stack_offset, mask)
                 .ok_or(CodegenError::ImplLimitExceeded)?;
@@ -1693,7 +1693,7 @@ impl<M: ABIMachineSpec> Callee<M> {
             // establishes live-ranges for in-register arguments and
             // constrains them at the start of the function to the
             // locations defined by the ABI.
-            Some(M::gen_args(std::mem::take(&mut self.reg_args)))
+            Some(M::gen_args(mem::take(&mut self.reg_args)))
         } else {
             None
         }

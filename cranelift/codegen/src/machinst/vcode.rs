@@ -33,9 +33,9 @@ use crate::fx::FxHashMap;
 
 use core::mem::take;
 use cranelift_entity::{entity_impl, Keys};
-use std::fmt;
 use crate::hash_map::Entry;
 use crate::HashMap;
+use core::fmt;
 
 /// Index referring to an instruction in VCode.
 pub type InsnIndex = regalloc2::Inst;
@@ -752,7 +752,7 @@ impl<I: VCodeInst> VCode<I> {
         let mut cur_srcloc = None;
         let mut last_offset = None;
         let mut inst_offsets = vec![];
-        let mut state = I::State::new(&self.abi, std::mem::take(ctrl_plane));
+        let mut state = I::State::new(&self.abi, take(ctrl_plane));
 
         let mut disasm = String::new();
 
@@ -1251,7 +1251,7 @@ impl<I: VCodeInst> VCode<I> {
     }
 }
 
-impl<I: VCodeInst> std::ops::Index<InsnIndex> for VCode<I> {
+impl<I: VCodeInst> core::ops::Index<InsnIndex> for VCode<I> {
     type Output = I;
     fn index(&self, idx: InsnIndex) -> &Self::Output {
         &self.insts[idx.index()]

@@ -50,7 +50,9 @@ use crate::flowgraph;
 use crate::ir::{self, Function, Type};
 #[cfg(feature = "unwind")]
 use crate::isa::unwind::{systemv::RegisterMappingError, UnwindInfoKind};
-use crate::machinst::{CompiledCode, CompiledCodeStencil, TextSectionBuilder};
+#[cfg(feature = "unwind")]
+use crate::machinst::CompiledCode;
+use crate::machinst::{CompiledCodeStencil, TextSectionBuilder};
 use crate::settings;
 use crate::settings::Configurable;
 use crate::settings::SetResult;
@@ -140,6 +142,7 @@ pub enum LookupError {
 
 // This is manually implementing Error and Display instead of using thiserror to reduce the amount
 // of dependencies used by Cranelift.
+#[cfg(feature = "std")]
 impl std::error::Error for LookupError {}
 
 impl fmt::Display for LookupError {
