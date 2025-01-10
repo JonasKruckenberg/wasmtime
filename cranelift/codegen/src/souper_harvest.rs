@@ -25,14 +25,14 @@
 //! candidate.
 
 use crate::ir;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::sync::mpsc;
+#[cfg(not(feature = "std"))]
+use hashbrown::{HashMap, HashSet};
 use souper_ir::ast;
 #[cfg(feature = "std")]
 use std::collections::{HashMap, HashSet};
-#[cfg(not(feature = "std"))]
-use hashbrown::{HashMap, HashSet};
-use alloc::string::String;
-use core::sync::mpsc;
-use alloc::vec::Vec;
 
 /// Harvest Souper left-hand side candidates from the given function.
 ///

@@ -24,9 +24,9 @@ use crate::{
     isa::riscv64::inst::*,
     machinst::{ArgPair, InstOutput, IsTailCall},
 };
-use regalloc2::PReg;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use regalloc2::PReg;
 
 type BoxCallInfo = Box<CallInfo<ExternalName>>;
 type BoxCallIndInfo = Box<CallInfo<Reg>>;

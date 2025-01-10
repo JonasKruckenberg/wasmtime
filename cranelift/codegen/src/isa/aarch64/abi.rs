@@ -12,15 +12,15 @@ use crate::isa::winch;
 use crate::machinst::*;
 use crate::settings;
 use crate::CodegenResult;
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use regalloc2::{MachineEnv, PReg, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use alloc::borrow::ToOwned;
-#[cfg(feature = "std")]
-use std::sync::OnceLock;
 #[cfg(feature = "core")]
 use spin::once::Once;
+#[cfg(feature = "std")]
+use std::sync::OnceLock;
 
 // We use a generic implementation that factors out AArch64 and x64 ABI commonalities, because
 // these ABIs are very similar.

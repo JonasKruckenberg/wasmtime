@@ -144,14 +144,14 @@ use crate::isa::unwind::UnwindInst;
 use crate::machinst::*;
 use crate::settings;
 use crate::CodegenResult;
+use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
 use regalloc2::{MachineEnv, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use alloc::borrow::ToOwned;
-#[cfg(feature = "std")]
-use std::sync::OnceLock;
 #[cfg(feature = "core")]
 use spin::once::Once;
+#[cfg(feature = "std")]
+use std::sync::OnceLock;
 
 // We use a generic implementation that factors out ABI commonalities.
 

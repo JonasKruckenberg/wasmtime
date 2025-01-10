@@ -10,16 +10,16 @@ use crate::machinst::abi::*;
 use crate::machinst::*;
 use crate::settings;
 use crate::CodegenResult;
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use args::*;
 use regalloc2::{MachineEnv, PReg, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use alloc::borrow::ToOwned;
-#[cfg(feature = "std")]
-use std::sync::OnceLock;
 #[cfg(feature = "core")]
 use spin::once::Once;
+#[cfg(feature = "std")]
+use std::sync::OnceLock;
 
 /// Support for the x64 ABI from the callee side (within a function body).
 pub(crate) type X64Callee = Callee<X64ABIMachineSpec>;

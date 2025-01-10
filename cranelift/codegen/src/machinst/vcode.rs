@@ -17,6 +17,7 @@
 //! See the main module comment in `mod.rs` for more details on the VCode-based
 //! backend pipeline.
 
+use crate::fx::FxHashMap;
 use crate::ir::pcc::*;
 use crate::ir::{self, types, Constant, ConstantData, ValueLabel};
 use crate::machinst::*;
@@ -29,13 +30,12 @@ use regalloc2::{
     Edit, Function as RegallocFunction, InstOrEdit, InstRange, MachineEnv, Operand,
     OperandConstraint, OperandKind, PRegSet, RegClass,
 };
-use crate::fx::FxHashMap;
 
-use core::mem::take;
-use cranelift_entity::{entity_impl, Keys};
 use crate::hash_map::Entry;
 use crate::HashMap;
 use core::fmt;
+use core::mem::take;
+use cranelift_entity::{entity_impl, Keys};
 
 /// Index referring to an instruction in VCode.
 pub type InsnIndex = regalloc2::Inst;

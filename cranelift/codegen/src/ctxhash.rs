@@ -4,8 +4,8 @@
 //! node-internal data references some other storage (e.g., offsets into
 //! an array or pool of shared data).
 
-use hashbrown::hash_table::HashTable;
 use core::hash::{Hash, Hasher};
+use hashbrown::hash_table::HashTable;
 
 /// Trait that allows for equality comparison given some external
 /// context.
@@ -92,9 +92,7 @@ impl<K, V> CtxHashMap<K, V> {
         match self.raw.find_mut(hash as u64, |bucket| {
             hash == bucket.hash && ctx.ctx_eq(&bucket.k, &k)
         }) {
-            Some(bucket) => {
-                Some(core::mem::replace(&mut bucket.v, v))
-            }
+            Some(bucket) => Some(core::mem::replace(&mut bucket.v, v)),
             None => {
                 let data = BucketData { hash, k, v };
                 self.raw
@@ -114,9 +112,7 @@ impl<K, V> CtxHashMap<K, V> {
             .find(hash as u64, |bucket| {
                 hash == bucket.hash && ctx.ctx_eq(&bucket.k, k)
             })
-            .map(|bucket| {
-                &bucket.v
-            })
+            .map(|bucket| &bucket.v)
     }
 }
 
