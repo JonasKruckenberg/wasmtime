@@ -32,7 +32,7 @@ use crate::{
 };
 use core::u32;
 use regalloc2::PReg;
-use core::boxed::Box;
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 type BoxCallInfo = Box<CallInfo<ExternalName>>;

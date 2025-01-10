@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 use args::*;
 use regalloc2::{MachineEnv, PReg, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use core::borrow::ToOwned;
+use alloc::borrow::ToOwned;
 use core::sync::OnceLock;
 
 /// Support for the x64 ABI from the callee side (within a function body).

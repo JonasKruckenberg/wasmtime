@@ -13,7 +13,7 @@ use core::marker::PhantomData;
 use cranelift_bitset::ScalarBitSet;
 use regalloc2::{MachineEnv, PReg, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use core::borrow::ToOwned;
+use alloc::borrow::ToOwned;
 use core::sync::OnceLock;
 
 /// Support for the Pulley ABI from the callee side (within a function body).

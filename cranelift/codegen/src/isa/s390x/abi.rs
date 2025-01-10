@@ -147,7 +147,7 @@ use crate::CodegenResult;
 use alloc::vec::Vec;
 use regalloc2::{MachineEnv, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use core::borrow::ToOwned;
+use alloc::borrow::ToOwned;
 use core::sync::OnceLock;
 
 // We use a generic implementation that factors out ABI commonalities.

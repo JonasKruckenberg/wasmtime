@@ -26,11 +26,11 @@ use crate::{
         VCodeConstant, VCodeConstantData,
     },
 };
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::cell::Cell;
 use regalloc2::PReg;
 use smallvec::smallvec;
-use core::boxed::Box;
-use core::cell::Cell;
-use alloc::vec::Vec;
 
 type BoxCallInfo = Box<CallInfo<ExternalName>>;
 type BoxCallIndInfo = Box<CallInfo<Reg>>;
