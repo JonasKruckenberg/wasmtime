@@ -21,7 +21,10 @@ use regalloc2::{MachineEnv, PReg, PRegSet};
 
 use smallvec::{smallvec, SmallVec};
 use alloc::borrow::ToOwned;
-use core::sync::OnceLock;
+#[cfg(feature = "std")]
+use std::sync::OnceLock;
+#[cfg(feature = "core")]
+use spin::once::Once;
 
 /// Support for the Riscv64 ABI from the callee side (within a function body).
 pub(crate) type Riscv64Callee = Callee<Riscv64MachineDeps>;
@@ -632,9 +635,16 @@ impl ABIMachineSpec for Riscv64MachineDeps {
         }
     }
 
+    #[cfg(feature = "std")]
     fn get_machine_env(_flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
         static MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
         MACHINE_ENV.get_or_init(create_reg_environment)
+    }
+
+    #[cfg(feature = "core")]
+    fn get_machine_env(_flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
+        static MACHINE_ENV: Once<MachineEnv> = Once::new();
+        MACHINE_ENV.call_once(create_reg_environment)
     }
 
     fn get_regs_clobbered_by_call(_call_conv_of_callee: isa::CallConv) -> PRegSet {

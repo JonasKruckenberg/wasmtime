@@ -148,7 +148,10 @@ use alloc::vec::Vec;
 use regalloc2::{MachineEnv, PRegSet};
 use smallvec::{smallvec, SmallVec};
 use alloc::borrow::ToOwned;
-use core::sync::OnceLock;
+#[cfg(feature = "std")]
+use std::sync::OnceLock;
+#[cfg(feature = "core")]
+use spin::once::Once;
 
 // We use a generic implementation that factors out ABI commonalities.
 
@@ -879,6 +882,7 @@ impl ABIMachineSpec for S390xMachineDeps {
         }
     }
 
+    #[cfg(feature = "std")]
     fn get_machine_env(_flags: &settings::Flags, call_conv: isa::CallConv) -> &MachineEnv {
         match call_conv {
             isa::CallConv::Tail => {
@@ -888,6 +892,20 @@ impl ABIMachineSpec for S390xMachineDeps {
             _ => {
                 static SYSV_MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
                 SYSV_MACHINE_ENV.get_or_init(sysv_create_machine_env)
+            }
+        }
+    }
+
+    #[cfg(feature = "core")]
+    fn get_machine_env(_flags: &settings::Flags, call_conv: isa::CallConv) -> &MachineEnv {
+        match call_conv {
+            isa::CallConv::Tail => {
+                static TAIL_MACHINE_ENV: Once<MachineEnv> = Once::new();
+                TAIL_MACHINE_ENV.call_once(tail_create_machine_env)
+            }
+            _ => {
+                static SYSV_MACHINE_ENV: Once<MachineEnv> = Once::new();
+                SYSV_MACHINE_ENV.call_once(sysv_create_machine_env)
             }
         }
     }
