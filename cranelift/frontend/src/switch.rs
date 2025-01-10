@@ -1,5 +1,6 @@
 use super::HashMap;
 use crate::frontend::FunctionBuilder;
+use alloc::vec;
 use alloc::vec::Vec;
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::*;
@@ -553,7 +554,7 @@ block4:
             let val = builder.ins().iconst(typ, 1);
             switch.emit(&mut builder, val, default_block);
 
-            for &block in case_blocks.iter().chain(std::iter::once(&default_block)) {
+            for &block in case_blocks.iter().chain(core::iter::once(&default_block)) {
                 builder.seal_block(block);
                 builder.switch_to_block(block);
                 builder.ins().return_(&[]);
