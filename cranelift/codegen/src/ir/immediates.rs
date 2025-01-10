@@ -682,29 +682,72 @@ macro_rules! ieee_float {
 
             $(
                 /// Returns the square root of `self`.
+                #[cfg(feature = "std")]
                 pub fn sqrt(self) -> Self {
                     Self::with_float(self.$as_float().sqrt())
                 }
 
+                /// Returns the square root of `self`.
+                #[cfg(feature = "core")]
+                pub fn sqrt(self) -> Self {
+                    Self::with_float(libm::Libm::<$float_ty>::sqrt(self.$as_float()))
+                }
+
                 /// Returns the smallest integer greater than or equal to `self`.
+                #[cfg(feature = "std")]
                 pub fn ceil(self) -> Self {
                     Self::with_float(self.$as_float().ceil())
                 }
 
+                /// Returns the smallest integer greater than or equal to `self`.
+                #[cfg(feature = "core")]
+                pub fn ceil(self) -> Self {
+                    Self::with_float(libm::Libm::<$float_ty>::ceil(self.$as_float()))
+                }
+
                 /// Returns the largest integer less than or equal to `self`.
+                #[cfg(feature = "std")]
                 pub fn floor(self) -> Self {
                     Self::with_float(self.$as_float().floor())
                 }
 
+                /// Returns the largest integer less than or equal to `self`.
+                #[cfg(feature = "core")]
+                pub fn floor(self) -> Self {
+                    Self::with_float(libm::Libm::<$float_ty>::floor(self.$as_float()))
+                }
+
                 /// Returns the integer part of `self`. This means that non-integer numbers are always truncated towards zero.
+                #[cfg(feature = "std")]
                 pub fn trunc(self) -> Self {
                     Self::with_float(self.$as_float().trunc())
                 }
 
+                /// Returns the integer part of `self`. This means that non-integer numbers are always truncated towards zero.
+                #[cfg(feature = "core")]
+                pub fn trunc(self) -> Self {
+                    Self::with_float(libm::Libm::<$float_ty>::trunc(self.$as_float()))
+                }
+
                 /// Returns the nearest integer to `self`. Rounds half-way cases to the number
                 /// with an even least significant digit.
+                #[cfg(feature = "std")]
                 pub fn round_ties_even(self) -> Self {
                     Self::with_float(self.$as_float().round_ties_even())
+                }
+
+                /// Returns the nearest integer to `self`. Rounds half-way cases to the number
+                /// with an even least significant digit.
+                #[cfg(feature = "core")]
+                pub fn round_ties_even(self) -> Self {
+                    let toint: $float_ty = 1.0 / $float_ty::EPSILON;
+
+                    let e = self.bits() >> 23 & 0xff;
+                    if e >= 0x7f + 23 {
+                        self
+                    } else {
+                        Self::with_float(self.abs().$as_float() + toint - toint).copysign(self)
+                    }
                 }
             )?
         }
