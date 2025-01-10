@@ -25,7 +25,7 @@ use alloc::vec::Vec;
 use cranelift_control::ControlPlane;
 use crate::fx::{FxHashMap, FxHashSet};
 use smallvec::{smallvec, SmallVec};
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use super::{VCodeBuildDirection, VRegAllocator};
 

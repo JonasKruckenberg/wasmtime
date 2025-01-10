@@ -6,4 +6,4 @@ pub type FxHashMap<K, V> =
 crate::HashMap<K, V, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>;
 
 #[cfg(not(feature = "std"))]
-pub type FxHashSet<V> = crate::HashSet<V, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>;
+pub type FxHashSet<V> = hashbrown::HashSet<V, core::hash::BuildHasherDefault<rustc_hash::FxHasher>>;

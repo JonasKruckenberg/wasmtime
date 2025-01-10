@@ -26,10 +26,13 @@
 
 use crate::ir;
 use souper_ir::ast;
+#[cfg(feature = "std")]
 use std::collections::{HashMap, HashSet};
-use std::string::String;
-use std::sync::mpsc;
-use std::vec::Vec;
+#[cfg(not(feature = "std"))]
+use hashbrown::{HashMap, HashSet};
+use alloc::string::String;
+use core::sync::mpsc;
+use alloc::vec::Vec;
 
 /// Harvest Souper left-hand side candidates from the given function.
 ///

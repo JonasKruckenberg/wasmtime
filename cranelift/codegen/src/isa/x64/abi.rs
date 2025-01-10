@@ -15,8 +15,8 @@ use alloc::vec::Vec;
 use args::*;
 use regalloc2::{MachineEnv, PReg, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use std::borrow::ToOwned;
-use std::sync::OnceLock;
+use core::borrow::ToOwned;
+use core::sync::OnceLock;
 
 /// Support for the x64 ABI from the callee side (within a function body).
 pub(crate) type X64Callee = Callee<X64ABIMachineSpec>;
@@ -353,7 +353,7 @@ impl ABIMachineSpec for X64ABIMachineSpec {
                     {
                         size
                     } else {
-                        let size = std::cmp::max(size, 8);
+                        let size = core::cmp::max(size, 8);
 
                         // Align.
                         debug_assert!(size.is_power_of_two());
