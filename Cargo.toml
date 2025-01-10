@@ -254,7 +254,8 @@ test-programs-artifacts = { path = 'crates/test-programs/artifacts' }
 pulley-interpreter = { path = 'pulley', version = "=30.0.0" }
 pulley-interpreter-fuzz = { path = 'pulley/fuzz' }
 
-cranelift-codegen = { path = "cranelift/codegen", version = "0.117.0", default-features = false, features = ["std", "unwind"] }
+#features = ["std", "unwind"]
+cranelift-codegen = { path = "cranelift/codegen", version = "0.117.0", default-features = false }
 cranelift-frontend = { path = "cranelift/frontend", version = "0.117.0" }
 cranelift-entity = { path = "cranelift/entity", version = "0.117.0" }
 cranelift-native = { path = "cranelift/native", version = "0.117.0" }
@@ -267,7 +268,7 @@ cranelift-jit = { path = "cranelift/jit", version = "0.117.0" }
 cranelift-fuzzgen = { path = "cranelift/fuzzgen" }
 cranelift-bforest = { path = "cranelift/bforest", version = "0.117.0" }
 cranelift-bitset = { path = "cranelift/bitset", version = "0.117.0" }
-cranelift-control = { path = "cranelift/control", version = "0.117.0" }
+cranelift-control = { path = "cranelift/control", version = "0.117.0", default-features = false }
 cranelift = { path = "cranelift/umbrella", version = "0.117.0" }
 
 winch-codegen = { path = "winch/codegen", version = "=30.0.0" }
@@ -277,7 +278,7 @@ byte-array-literals = { path = "crates/wasi-preview1-component-adapter/byte-arra
 
 # Bytecode Alliance maintained dependencies:
 # ---------------------------
-regalloc2 = "0.11.1"
+regalloc2 = { version = "0.11.1", default-features = false }
 
 # cap-std family:
 target-lexicon = "0.13.0"
@@ -365,7 +366,7 @@ url = "2.3.1"
 humantime = "2.0.0"
 postcard = { version = "1.0.8", default-features = false, features = ['alloc'] }
 criterion = { version = "0.5.0", default-features = false, features = ["html_reports", "rayon"] }
-rustc-hash = "2.0.0"
+rustc-hash = { version = "2.0.0", default-features = false }
 libtest-mimic = "0.7.0"
 semver = { version = "1.0.17", default-features = false }
 ittapi = "0.4.0"

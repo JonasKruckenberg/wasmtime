@@ -28,5 +28,5 @@ cranelift-codegen = { workspace = true, features = ['x86'] }
 
 [features]
 default = ["std"]
-std = ["cranelift-codegen/std"]
+std = ["cranelift-codegen/std", "cranelift-codegen/unwind"]
 core = ["hashbrown", "cranelift-codegen/core"]

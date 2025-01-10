@@ -17,7 +17,7 @@ target-lexicon = { workspace = true }
 wasmtime-environ = { workspace = true }
 anyhow = { workspace = true }
 object = { workspace = true, features = ['std'] }
-cranelift-codegen = { workspace = true }
+cranelift-codegen = { workspace = true, features = ["std", "unwind"] }
 wasmtime-cranelift = { workspace = true }
 wasmparser = { workspace = true }
 gimli = { workspace = true, features = ['std'] }
