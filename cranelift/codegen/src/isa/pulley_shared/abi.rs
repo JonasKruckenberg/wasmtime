@@ -529,8 +529,7 @@ where
 
     #[cfg(feature = "std")]
     fn get_machine_env(_flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
-        static MACHINE_ENV: OnceLock<MachineEnv> = OnceLock::new();
-        MACHINE_ENV.get_or_init(create_reg_environment)
+        &DEFAULT_MACHINE_ENV
     }
 
     #[cfg(feature = "core")]
@@ -923,31 +922,33 @@ const DEFAULT_CLOBBERS: PRegSet = PRegSet::empty()
     .with(pv_reg(30))
     .with(pv_reg(31));
 
-fn create_reg_environment() -> MachineEnv {
-    // Prefer caller-saved registers over callee-saved registers, because that
-    // way we don't need to emit code to save and restore them if we don't
-    // mutate them.
+static DEFAULT_MACHINE_ENV: MachineEnv = { todo!() };
 
-    let preferred_regs_by_class: [Vec<PReg>; 3] = {
-        let x_registers: Vec<PReg> = (0..16).map(|x| px_reg(x)).collect();
-        let f_registers: Vec<PReg> = (0..16).map(|x| pf_reg(x)).collect();
-        let v_registers: Vec<PReg> = (0..32).map(|x| pv_reg(x)).collect();
-        [x_registers, f_registers, v_registers]
-    };
-
-    let non_preferred_regs_by_class: [Vec<PReg>; 3] = {
-        let x_registers: Vec<PReg> = (16..XReg::SPECIAL_START)
-            .map(|x| px_reg(x.into()))
-            .collect();
-        let f_registers: Vec<PReg> = (16..32).map(|x| pf_reg(x)).collect();
-        let v_registers: Vec<PReg> = vec![];
-        [x_registers, f_registers, v_registers]
-    };
-
-    MachineEnv {
-        preferred_regs_by_class,
-        non_preferred_regs_by_class,
-        fixed_stack_slots: vec![],
-        scratch_by_class: [None, None, None],
-    }
-}
+// fn create_reg_environment() -> MachineEnv {
+//     // Prefer caller-saved registers over callee-saved registers, because that
+//     // way we don't need to emit code to save and restore them if we don't
+//     // mutate them.
+//
+//     let preferred_regs_by_class: [Vec<PReg>; 3] = {
+//         let x_registers: Vec<PReg> = (0..16).map(|x| px_reg(x)).collect();
+//         let f_registers: Vec<PReg> = (0..16).map(|x| pf_reg(x)).collect();
+//         let v_registers: Vec<PReg> = (0..32).map(|x| pv_reg(x)).collect();
+//         [x_registers, f_registers, v_registers]
+//     };
+//
+//     let non_preferred_regs_by_class: [Vec<PReg>; 3] = {
+//         let x_registers: Vec<PReg> = (16..XReg::SPECIAL_START)
+//             .map(|x| px_reg(x.into()))
+//             .collect();
+//         let f_registers: Vec<PReg> = (16..32).map(|x| pf_reg(x)).collect();
+//         let v_registers: Vec<PReg> = vec![];
+//         [x_registers, f_registers, v_registers]
+//     };
+//
+//     MachineEnv {
+//         preferred_regs_by_class,
+//         non_preferred_regs_by_class,
+//         fixed_stack_slots: vec![],
+//         scratch_by_class: [None, None, None],
+//     }
+// }
