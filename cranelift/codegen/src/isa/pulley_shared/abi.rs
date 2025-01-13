@@ -8,12 +8,12 @@ use crate::{
     machinst::*,
     settings, CodegenResult,
 };
-use alloc::borrow::ToOwned;
 use alloc::{boxed::Box, vec::Vec};
 use core::marker::PhantomData;
 use cranelift_bitset::ScalarBitSet;
 use regalloc2::{MachineEnv, PRegSet};
 use smallvec::{smallvec, SmallVec};
+use std::borrow::ToOwned;
 
 /// Support for the Pulley ABI from the callee side (within a function body).
 pub(crate) type PulleyCallee<P> = Callee<PulleyMachineDeps<P>>;
