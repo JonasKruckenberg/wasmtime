@@ -16,7 +16,6 @@ use crate::isa::unwind::UnwindInst;
 use crate::settings;
 use crate::CodegenResult;
 use alloc::borrow::ToOwned;
-use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use regalloc2::{MachineEnv, PRegSet};

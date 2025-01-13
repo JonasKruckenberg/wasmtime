@@ -1112,23 +1112,11 @@ impl ABIMachineSpec for AArch64MachineDeps {
         }
     }
 
-    #[cfg(feature = "std")]
     fn get_machine_env(flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
         if flags.enable_pinned_reg() {
             &PINNED_MACHINE_ENV
         } else {
             &DEFAULT_MACHINE_ENV
-        }
-    }
-
-    #[cfg(feature = "core")]
-    fn get_machine_env(flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
-        if flags.enable_pinned_reg() {
-            static MACHINE_ENV: Once<MachineEnv> = Once::new();
-            MACHINE_ENV.call_once(|| create_reg_env(true))
-        } else {
-            static MACHINE_ENV: Once<MachineEnv> = Once::new();
-            MACHINE_ENV.call_once(|| create_reg_env(false))
         }
     }
 
