@@ -523,15 +523,8 @@ where
         }
     }
 
-    #[cfg(feature = "std")]
     fn get_machine_env(_flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
         &DEFAULT_MACHINE_ENV
-    }
-
-    #[cfg(feature = "core")]
-    fn get_machine_env(_flags: &settings::Flags, _call_conv: isa::CallConv) -> &MachineEnv {
-        static MACHINE_ENV: Once<MachineEnv> = Once::new();
-        MACHINE_ENV.call_once(create_reg_environment)
     }
 
     fn get_regs_clobbered_by_call(_call_conv_of_callee: isa::CallConv) -> PRegSet {
@@ -995,7 +988,7 @@ static DEFAULT_MACHINE_ENV: MachineEnv = {
                 pv_reg(29),
                 pv_reg(30),
                 pv_reg(31),
-            ],
+            ]
         ],
         non_preferred_regs_by_class: [
             &[
@@ -1032,7 +1025,7 @@ static DEFAULT_MACHINE_ENV: MachineEnv = {
                 pf_reg(30),
                 pf_reg(31),
             ],
-            &[],
+            &[]
         ],
         scratch_by_class: [None, None, None],
         fixed_stack_slots: &[],
