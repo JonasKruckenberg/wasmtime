@@ -564,3 +564,6 @@ opt-level = 's'
 inherits = "release"
 codegen-units = 1
 lto = true
+
+[patch.crates-io]
+regalloc2 = { path = "/Users/jonaskruckenberg/Documents/GitHub/regalloc2" }
