@@ -2623,6 +2623,7 @@ dependencies = [
 [[package]]
 name = "regalloc2"
 version = "0.11.1"
+source = "git+https://github.com/JonasKruckenberg/regalloc2?branch=jonas/refactor/static-machine-env#305811667665047d750521973be4b3b7a6a7d312"
 dependencies = [
  "allocator-api2",
  "bumpalo",
