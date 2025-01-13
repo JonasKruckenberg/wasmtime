@@ -754,7 +754,6 @@ dependencies = [
  "similar",
  "smallvec",
  "souper-ir",
- "spin",
  "target-lexicon",
 ]
 
