@@ -988,7 +988,7 @@ static DEFAULT_MACHINE_ENV: MachineEnv = {
                 pv_reg(29),
                 pv_reg(30),
                 pv_reg(31),
-            ]
+            ],
         ],
         non_preferred_regs_by_class: [
             &[
@@ -1025,7 +1025,7 @@ static DEFAULT_MACHINE_ENV: MachineEnv = {
                 pf_reg(30),
                 pf_reg(31),
             ],
-            &[]
+            &[],
         ],
         scratch_by_class: [None, None, None],
         fixed_stack_slots: &[],

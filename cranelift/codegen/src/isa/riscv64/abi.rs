@@ -16,11 +16,11 @@ use crate::isa::unwind::UnwindInst;
 use crate::settings;
 use crate::CodegenResult;
 use alloc::borrow::ToOwned;
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use regalloc2::{MachineEnv, PRegSet};
 use smallvec::{smallvec, SmallVec};
-use alloc::borrow::ToOwned;
 
 /// Support for the Riscv64 ABI from the callee side (within a function body).
 pub(crate) type Riscv64Callee = Callee<Riscv64MachineDeps>;
