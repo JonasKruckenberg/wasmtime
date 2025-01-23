@@ -235,6 +235,10 @@ where
     fn has_x86_pmaddubsw_lowering(&self) -> bool {
         false
     }
+
+    fn default_argument_extension(&self) -> ir::ArgumentExtension {
+        ir::ArgumentExtension::None
+    }
 }
 
 /// Create a new Pulley ISA builder.
