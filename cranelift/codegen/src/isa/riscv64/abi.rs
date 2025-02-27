@@ -337,10 +337,15 @@ impl ABIMachineSpec for Riscv64MachineDeps {
         let mut insts = SmallVec::new();
 
         if frame_layout.setup_area_size > 0 {
-            // add  sp,sp,-16    ;; alloc stack space for fp.
+            // mv   fp,sp        ;; set fp to sp.
+            // add  sp,sp,-16    ;; alloc stack space for ra & fp.
             // sd   ra,8(sp)     ;; save ra.
             // sd   fp,0(sp)     ;; store old fp.
-            // mv   fp,sp        ;; set fp to sp.
+            insts.push(Inst::Mov {
+                rd: writable_fp_reg(),
+                rm: stack_reg(),
+                ty: I64,
+            });
             insts.extend(Self::gen_sp_reg_adjust(-16));
             insts.push(Inst::gen_store(
                 AMode::SPOffset(8),
@@ -362,11 +367,6 @@ impl ABIMachineSpec for Riscv64MachineDeps {
                     },
                 });
             }
-            insts.push(Inst::Mov {
-                rd: writable_fp_reg(),
-                rm: stack_reg(),
-                ty: I64,
-            });
         }
 
         insts
@@ -439,6 +439,7 @@ impl ABIMachineSpec for Riscv64MachineDeps {
         let incoming_args_diff = frame_layout.tail_args_size - frame_layout.incoming_args_size;
         if incoming_args_diff > 0 {
             // Decrement SP by the amount of additional incoming argument space we need
+            insts.push(Inst::gen_move(writable_fp_reg(), stack_reg(), I64));
             insts.extend(Self::gen_sp_reg_adjust(-(incoming_args_diff as i32)));
 
             if setup_frame {
@@ -462,9 +463,6 @@ impl ABIMachineSpec for Riscv64MachineDeps {
                     I64,
                     MemFlags::trusted(),
                 ));
-
-                // Finally, sync the frame pointer with SP
-                insts.push(Inst::gen_move(writable_fp_reg(), stack_reg(), I64));
             }
         }
 
